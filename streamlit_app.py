@@ -7,6 +7,51 @@ import os
 import uuid
 from PIL import Image
 
+# JavaScript for geolocation
+LOCATION_JS = """
+<script>
+function getLocation() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(showPosition, showError);
+    } else {
+        alert("Geolocation is not supported by this browser.");
+    }
+}
+
+function showPosition(position) {
+    const lat = position.coords.latitude;
+    const lng = position.coords.longitude;
+    const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+    
+    // Update both location inputs if they exist
+    const salesInput = window.parent.document.getElementById('location_input_sales');
+    const attendanceInput = window.parent.document.getElementById('location_input');
+    
+    if (salesInput) salesInput.value = googleMapsLink;
+    if (attendanceInput) attendanceInput.value = googleMapsLink;
+    
+    alert("Location captured: " + googleMapsLink);
+}
+
+function showError(error) {
+    switch(error.code) {
+        case error.PERMISSION_DENIED:
+            alert("User denied the request for Geolocation.");
+            break;
+        case error.POSITION_UNAVAILABLE:
+            alert("Location information is unavailable.");
+            break;
+        case error.TIMEOUT:
+            alert("The request to get user location timed out.");
+            break;
+        case error.UNKNOWN_ERROR:
+            alert("An unknown error occurred.");
+            break;
+    }
+}
+</script>
+"""
+
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -14,7 +59,7 @@ hide_streamlit_style = """
     .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
     header {visibility: hidden;}
     </style>
-"""
+""" + LOCATION_JS
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 hide_footer_style = """
@@ -74,7 +119,8 @@ SALES_SHEET_COLUMNS = [
     "Amount Paid",
     "Payment Receipt Path",
     "Employee Selfie Path",
-    "Invoice PDF Path"
+    "Invoice PDF Path",
+    "Location"  # Added location field
 ]
 
 VISIT_SHEET_COLUMNS = [
@@ -94,7 +140,8 @@ VISIT_SHEET_COLUMNS = [
     "Visit Purpose",
     "Visit Notes",
     "Visit Selfie Path",
-    "Visit Status"
+    "Visit Status",
+    "Location"  # Added location field
 ]
 
 ATTENDANCE_SHEET_COLUMNS = [
@@ -209,7 +256,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
                     discount_category, employee_name, overall_discount, amount_discount, 
                     payment_status, amount_paid, employee_selfie_path, payment_receipt_path, invoice_number,
                     transaction_type, distributor_firm_name="", distributor_id="", distributor_contact_person="",
-                    distributor_contact_number="", distributor_email="", distributor_territory=""):
+                    distributor_contact_number="", distributor_email="", distributor_territory="", location=""):
     pdf = PDF()
     pdf.alias_nb_pages()
     pdf.add_page()
@@ -440,7 +487,8 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
             "Amount Paid": amount_paid if payment_status in ["paid", "partial paid"] else 0,
             "Payment Receipt Path": payment_receipt_path if payment_status in ["paid", "partial paid"] else "",
             "Employee Selfie Path": employee_selfie_path,
-            "Invoice PDF Path": f"invoices/{invoice_number}.pdf"
+            "Invoice PDF Path": f"invoices/{invoice_number}.pdf",
+            "Location": location  # Added location to sales data
         })
 
     # Save the PDF
@@ -454,7 +502,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     return pdf, pdf_path
 
 def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, outlet_state, outlet_city, 
-                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time):
+                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time, location=""):
     visit_id = generate_visit_id()
     visit_date = datetime.now().strftime("%d-%m-%Y")
     
@@ -477,7 +525,8 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, out
         "Visit Purpose": visit_purpose,
         "Visit Notes": visit_notes,
         "Visit Selfie Path": visit_selfie_path,
-        "Visit Status": "completed"
+        "Visit Status": "completed",
+        "Location": location  # Added location to visit data
     }
     
     visit_df = pd.DataFrame([visit_data])
@@ -603,6 +652,17 @@ def main():
 def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
+    
+    # Location section at the top
+    st.subheader("Location Verification")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        sales_location = st.text_input("Enter your current location (Google Maps link or address)", 
+                                     key="location_input_sales")
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.button("Get Current Location", on_click=None, key="get_location_sales", 
+                 help="Click to automatically capture your current location")
     
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
@@ -779,7 +839,8 @@ def sales_page():
                     payment_status, amount_paid, employee_selfie_path, 
                     payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
-                    distributor_contact_number, distributor_email, distributor_territory
+                    distributor_contact_number, distributor_email, distributor_territory,
+                    sales_location  # Pass location to invoice generation
                 )
                 
                 with open(pdf_path, "rb") as f:
@@ -822,7 +883,7 @@ def sales_page():
                     filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
                 
                 if not filtered_data.empty:
-                    st.dataframe(filtered_data[['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 'Quantity', 'Grand Total']])
+                    st.dataframe(filtered_data[['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 'Quantity', 'Grand Total', 'Location']])
                     
                     csv = filtered_data.to_csv(index=False).encode('utf-8')
                     st.download_button(
@@ -840,6 +901,17 @@ def sales_page():
 def visit_page():
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
+
+    # Location section at the top
+    st.subheader("Location Verification")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        visit_location = st.text_input("Enter your current location (Google Maps link or address)", 
+                                     key="location_input_visit")
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.button("Get Current Location", on_click=None, key="get_location_visit", 
+                 help="Click to automatically capture your current location")
 
     st.subheader("Outlet Details")
     outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="visit_outlet_option")
@@ -892,7 +964,8 @@ def visit_page():
             visit_id = record_visit(
                 selected_employee, outlet_name, outlet_contact, outlet_address,
                 outlet_state, outlet_city, visit_purpose, visit_notes, 
-                visit_selfie_path, entry_datetime, exit_datetime
+                visit_selfie_path, entry_datetime, exit_datetime,
+                visit_location  # Pass location to visit recording
             )
             
             st.success(f"Visit {visit_id} recorded successfully!")
@@ -912,9 +985,15 @@ def attendance_page():
     
     if status == "Present":
         st.subheader("Location Verification")
-        live_location = st.text_input("Enter your current location (Google Maps link or address)", 
-                                    help="Please share your live location for verification",
-                                    key="location_input")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            live_location = st.text_input("Enter your current location (Google Maps link or address)", 
+                                        help="Please share your live location for verification",
+                                        key="location_input")
+        with col2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.button("Get Current Location", on_click=None, key="get_location", 
+                     help="Click to automatically capture your current location")
         
         if st.button("Mark Attendance", key="mark_attendance_button"):
             if not live_location:
@@ -938,8 +1017,8 @@ def attendance_page():
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
         leave_reason = st.text_area("Reason for Leave", 
-                                   placeholder="Please provide details about your leave",
-                                   key="leave_reason")
+                                 placeholder="Please provide details about your leave",
+                                 key="leave_reason")
         
         if st.button("Submit Leave Request", key="submit_leave_button"):
             if not leave_reason:
