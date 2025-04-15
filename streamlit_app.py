@@ -7,46 +7,50 @@ import os
 import uuid
 from PIL import Image
 
-# JavaScript for geolocation
+# Updated JavaScript for geolocation
 LOCATION_JS = """
 <script>
-function getLocation() {
+function getLocation(callback) {
     if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(showPosition, showError);
+        navigator.geolocation.getCurrentPosition(
+            function(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+                callback(googleMapsLink);
+            },
+            function(error) {
+                let errorMessage = "Error getting location: ";
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMessage += "User denied the request for Geolocation.";
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMessage += "Location information is unavailable.";
+                        break;
+                    case error.TIMEOUT:
+                        errorMessage += "The request to get user location timed out.";
+                        break;
+                    case error.UNKNOWN_ERROR:
+                        errorMessage += "An unknown error occurred.";
+                        break;
+                }
+                callback(null, errorMessage);
+            }
+        );
     } else {
-        alert("Geolocation is not supported by this browser.");
+        callback(null, "Geolocation is not supported by this browser.");
     }
 }
 
-function showPosition(position) {
-    const lat = position.coords.latitude;
-    const lng = position.coords.longitude;
-    const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
-    
-    // Update both location inputs if they exist
-    const salesInput = window.parent.document.getElementById('location_input_sales');
-    const attendanceInput = window.parent.document.getElementById('location_input');
-    
-    if (salesInput) salesInput.value = googleMapsLink;
-    if (attendanceInput) attendanceInput.value = googleMapsLink;
-    
-    alert("Location captured: " + googleMapsLink);
-}
-
-function showError(error) {
-    switch(error.code) {
-        case error.PERMISSION_DENIED:
-            alert("User denied the request for Geolocation.");
-            break;
-        case error.POSITION_UNAVAILABLE:
-            alert("Location information is unavailable.");
-            break;
-        case error.TIMEOUT:
-            alert("The request to get user location timed out.");
-            break;
-        case error.UNKNOWN_ERROR:
-            alert("An unknown error occurred.");
-            break;
+// Function to update the location input field
+function updateLocationInput(inputId, location) {
+    const inputElement = window.parent.document.getElementById(inputId);
+    if (inputElement) {
+        inputElement.value = location;
+        // Trigger change event to ensure Streamlit detects the change
+        const event = new Event('input', { bubbles: true });
+        inputElement.dispatchEvent(event);
     }
 }
 </script>
@@ -120,7 +124,7 @@ SALES_SHEET_COLUMNS = [
     "Payment Receipt Path",
     "Employee Selfie Path",
     "Invoice PDF Path",
-    "Location"  # Added location field
+    "Location"
 ]
 
 VISIT_SHEET_COLUMNS = [
@@ -141,7 +145,7 @@ VISIT_SHEET_COLUMNS = [
     "Visit Notes",
     "Visit Selfie Path",
     "Visit Status",
-    "Location"  # Added location field
+    "Location"
 ]
 
 ATTENDANCE_SHEET_COLUMNS = [
@@ -488,7 +492,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
             "Payment Receipt Path": payment_receipt_path if payment_status in ["paid", "partial paid"] else "",
             "Employee Selfie Path": employee_selfie_path,
             "Invoice PDF Path": f"invoices/{invoice_number}.pdf",
-            "Location": location  # Added location to sales data
+            "Location": location
         })
 
     # Save the PDF
@@ -526,7 +530,7 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, out
         "Visit Notes": visit_notes,
         "Visit Selfie Path": visit_selfie_path,
         "Visit Status": "completed",
-        "Location": location  # Added location to visit data
+        "Location": location
     }
     
     visit_df = pd.DataFrame([visit_data])
@@ -661,7 +665,24 @@ def sales_page():
                                      key="location_input_sales")
     with col2:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.button("Get Current Location", on_click=None, key="get_location_sales", 
+        st.button("Get Current Location", 
+                 on_click=lambda: st.markdown(
+                     """
+                     <script>
+                     getLocation(function(location, error) {
+                         if (location) {
+                             updateLocationInput('location_input_sales', location);
+                             // Show success message
+                             window.parent.document.dispatchEvent(new Event('locationCaptured'));
+                         } else {
+                             alert(error || "Failed to get location");
+                         }
+                     });
+                     </script>
+                     """,
+                     unsafe_allow_html=True
+                 ),
+                 key="get_location_sales",
                  help="Click to automatically capture your current location")
     
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
@@ -840,7 +861,7 @@ def sales_page():
                     payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
                     distributor_contact_number, distributor_email, distributor_territory,
-                    sales_location  # Pass location to invoice generation
+                    sales_location
                 )
                 
                 with open(pdf_path, "rb") as f:
@@ -910,7 +931,24 @@ def visit_page():
                                      key="location_input_visit")
     with col2:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.button("Get Current Location", on_click=None, key="get_location_visit", 
+        st.button("Get Current Location", 
+                 on_click=lambda: st.markdown(
+                     """
+                     <script>
+                     getLocation(function(location, error) {
+                         if (location) {
+                             updateLocationInput('location_input_visit', location);
+                             // Show success message
+                             window.parent.document.dispatchEvent(new Event('locationCaptured'));
+                         } else {
+                             alert(error || "Failed to get location");
+                         }
+                     });
+                     </script>
+                     """,
+                     unsafe_allow_html=True
+                 ),
+                 key="get_location_visit",
                  help="Click to automatically capture your current location")
 
     st.subheader("Outlet Details")
@@ -965,7 +1003,7 @@ def visit_page():
                 selected_employee, outlet_name, outlet_contact, outlet_address,
                 outlet_state, outlet_city, visit_purpose, visit_notes, 
                 visit_selfie_path, entry_datetime, exit_datetime,
-                visit_location  # Pass location to visit recording
+                visit_location
             )
             
             st.success(f"Visit {visit_id} recorded successfully!")
@@ -992,7 +1030,24 @@ def attendance_page():
                                         key="location_input")
         with col2:
             st.markdown("<br>", unsafe_allow_html=True)
-            st.button("Get Current Location", on_click=None, key="get_location", 
+            st.button("Get Current Location", 
+                     on_click=lambda: st.markdown(
+                         """
+                         <script>
+                         getLocation(function(location, error) {
+                             if (location) {
+                                 updateLocationInput('location_input', location);
+                                 // Show success message
+                                 window.parent.document.dispatchEvent(new Event('locationCaptured'));
+                             } else {
+                                 alert(error || "Failed to get location");
+                             }
+                         });
+                         </script>
+                         """,
+                         unsafe_allow_html=True
+                     ),
+                     key="get_location",
                      help="Click to automatically capture your current location")
         
         if st.button("Mark Attendance", key="mark_attendance_button"):
