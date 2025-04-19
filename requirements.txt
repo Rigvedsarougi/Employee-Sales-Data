@@ -8,4 +8,3 @@ fpdf
 pandas
 PyPDF2
 pdfplumber
-googleapiclient
