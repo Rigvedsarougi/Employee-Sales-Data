@@ -257,8 +257,7 @@ def log_attendance_to_gsheet(conn, attendance_data):
         return False, str(e)
 
 def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, product_discounts,
-                    discount_category, employee_name, overall_discount, amount_discount, 
-                    payment_status, amount_paid, employee_selfie_path, payment_receipt_path, invoice_number,
+                    discount_category, employee_name, payment_status, amount_paid, employee_selfie_path, payment_receipt_path, invoice_number,
                     transaction_type, distributor_firm_name="", distributor_id="", distributor_contact_person="",
                     distributor_contact_number="", distributor_email="", distributor_territory="", location=""):
     pdf = PDF()
@@ -306,9 +305,9 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     pdf.cell(10, 10, "S.No", border=1, align='C', fill=True)
     pdf.cell(70, 10, "Product Name", border=1, align='C', fill=True)
     pdf.cell(20, 10, "HSN/SAC", border=1, align='C', fill=True)
-    pdf.cell(20, 10, "GST Rate", border=1, align='C', fill=True)
     pdf.cell(20, 10, "Qty", border=1, align='C', fill=True)
     pdf.cell(25, 10, "Rate (INR)", border=1, align='C', fill=True)
+    pdf.cell(25, 10, "Discount (%)", border=1, align='C', fill=True)
     pdf.cell(25, 10, "Amount (INR)", border=1, align='C', fill=True)
     pdf.ln()
 
@@ -335,27 +334,17 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
         pdf.cell(10, 8, str(idx + 1), border=1)
         pdf.cell(70, 8, product, border=1)
         pdf.cell(20, 8, "3304", border=1, align='C')
-        pdf.cell(20, 8, "18%", border=1, align='C')
         pdf.cell(20, 8, str(quantity), border=1, align='C')
-        pdf.cell(25, 8, f"{discounted_unit_price:.2f}", border=1, align='R')
+        pdf.cell(25, 8, f"{unit_price:.2f}", border=1, align='R')
+        pdf.cell(25, 8, f"{prod_discount:.2f}%", border=1, align='R')
         pdf.cell(25, 8, f"{item_total:.2f}", border=1, align='R')
         pdf.ln()
 
-    # Apply overall percentage discount
-    if overall_discount > 0:
-        discount_amount = subtotal * (overall_discount / 100)
-        discounted_subtotal = subtotal - discount_amount
-    else:
-        discounted_subtotal = subtotal
-    
-    # Apply amount discount
-    taxable_amount = max(discounted_subtotal - amount_discount, 0)
-    
     # Calculate taxes
-    tax_amount = taxable_amount * tax_rate
+    tax_amount = subtotal * tax_rate
     cgst_amount = tax_amount / 2
     sgst_amount = tax_amount / 2
-    grand_total = taxable_amount + tax_amount
+    grand_total = subtotal + tax_amount
 
     # Display totals
     pdf.ln(10)
@@ -364,18 +353,8 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     pdf.cell(30, 10, f"{subtotal:.2f}", border=1, align='R')
     pdf.ln()
     
-    if overall_discount > 0:
-        pdf.cell(160, 10, f"Discount ({overall_discount}%)", border=0, align='R')
-        pdf.cell(30, 10, f"-{discount_amount:.2f}", border=1, align='R')
-        pdf.ln()
-    
-    if amount_discount > 0:
-        pdf.cell(160, 10, "Amount Discount", border=0, align='R')
-        pdf.cell(30, 10, f"-{amount_discount:.2f}", border=1, align='R')
-        pdf.ln()
-    
     pdf.cell(160, 10, "Taxable Amount", border=0, align='R')
-    pdf.cell(30, 10, f"{taxable_amount:.2f}", border=1, align='R')
+    pdf.cell(30, 10, f"{subtotal:.2f}", border=1, align='R')
     pdf.ln()
     
     pdf.cell(160, 10, "CGST (9%)", border=0, align='R')
@@ -450,10 +429,6 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
         discounted_unit_price = unit_price * (1 - prod_discount/100)
         item_total = discounted_unit_price * quantity
         
-        # Then apply overall discount if any
-        item_taxable = item_total * (1 - overall_discount / 100) - (amount_discount * (item_total / subtotal))
-        item_tax = item_taxable * tax_rate
-        
         sales_data.append({
             "Invoice Number": invoice_number,
             "Invoice Date": current_date,
@@ -482,11 +457,9 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
             "Discounted Unit Price": discounted_unit_price,
             "Total Price": item_total,
             "GST Rate": "18%",
-            "CGST Amount": item_tax / 2,
-            "SGST Amount": item_tax / 2,
-            "Grand Total": item_taxable + item_tax,
-            "Overall Discount (%)": overall_discount,
-            "Amount Discount (INR)": amount_discount * (item_total / subtotal),
+            "CGST Amount": (item_total * tax_rate) / 2,
+            "SGST Amount": (item_total * tax_rate) / 2,
+            "Grand Total": item_total + (item_total * tax_rate),
             "Payment Status": payment_status,
             "Amount Paid": amount_paid if payment_status in ["paid", "partial paid"] else 0,
             "Payment Receipt Path": payment_receipt_path if payment_status in ["paid", "partial paid"] else "",
@@ -757,31 +730,21 @@ def sales_page():
             st.markdown("---")
             st.markdown(f"**Subtotal: ₹{subtotal:.2f}**")
             
-            st.subheader("Additional Discounts")
-            col1, col2 = st.columns(2)
-            with col1:
-                overall_discount = st.number_input("Overall Discount (%)", min_value=0.0, max_value=100.0, 
-                                                 value=0.0, step=0.1, key="percent_discount")
-            with col2:
-                amount_discount = st.number_input("Amount Discount (INR)", min_value=0.0, value=0.0, 
-                                                step=1.0, key="amount_discount")
             
             discount_amount = subtotal * (overall_discount / 100)
             discounted_subtotal = subtotal - discount_amount - amount_discount
             tax_rate = 0.18
             tax_amount = discounted_subtotal * tax_rate
             grand_total = discounted_subtotal + tax_amount
-            
+
+            # In the sales_page() function, replace the final amount calculation with:
             st.markdown("---")
             st.markdown("### Final Amount Calculation")
             st.markdown(f"Subtotal: ₹{subtotal:.2f}")
-            if overall_discount > 0:
-                st.markdown(f"Overall Discount ({overall_discount}%): -₹{discount_amount:.2f}")
-            if amount_discount > 0:
-                st.markdown(f"Amount Discount: -₹{amount_discount:.2f}")
-            st.markdown(f"Taxable Amount: ₹{discounted_subtotal:.2f}")
+            tax_amount = subtotal * 0.18
             st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
-            st.markdown(f"**Grand Total: ₹{grand_total:.2f}**")
+            st.markdown(f"**Grand Total: ₹{subtotal + tax_amount:.2f}**")
+            
 
         st.subheader("Payment Details")
         payment_status = st.selectbox("Payment Status", ["pending", "paid", "partial paid"], key="payment_status")
@@ -852,12 +815,11 @@ def sales_page():
                 
                 employee_selfie_path = save_uploaded_file(employee_selfie, "employee_selfies") if employee_selfie else None
                 payment_receipt_path = save_uploaded_file(payment_receipt, "payment_receipts") if payment_receipt else None
-                
+
                 pdf, pdf_path = generate_invoice(
                     customer_name, gst_number, contact_number, address, state, city,
                     selected_products, quantities, product_discounts, discount_category, 
-                    selected_employee, overall_discount, amount_discount,
-                    payment_status, amount_paid, employee_selfie_path, 
+                    selected_employee, payment_status, amount_paid, employee_selfie_path, 
                     payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
                     distributor_contact_number, distributor_email, distributor_territory,
