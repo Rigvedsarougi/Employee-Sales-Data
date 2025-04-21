@@ -6,9 +6,7 @@ from datetime import datetime, time
 import os
 import uuid
 from PIL import Image
-from googleapiclient.errors import HttpError
 
-# Hide Streamlit style elements
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -28,53 +26,97 @@ hide_footer_style = """
         content: '';
         display: none;
     }
-    .css-15tx938.e8zbici2 {
+    .css-15tx938.e8zbici2 {  /* This class targets the footer in some Streamlit builds */
         display: none !important;
     }
     </style>
 """
-st.markdown(hide_footer_style, unsafe_allow_html=True)
 
-# Display Title
+st.markdown(hide_footer_style, unsafe_allow_html=True)
+# Display Title and Description
 st.title("Biolume: Management System")
 
 # Constants
 SALES_SHEET_COLUMNS = [
-    "Invoice Number", "Invoice Date", "Employee Name", "Employee Code", "Designation",
-    "Discount Category", "Transaction Type", "Outlet Name", "Outlet Contact", "Outlet Address",
-    "Outlet State", "Outlet City", "Distributor Firm Name", "Distributor ID", "Distributor Contact Person",
-    "Distributor Contact Number", "Distributor Email", "Distributor Territory", "Product ID",
-    "Product Name", "Product Category", "Quantity", "Unit Price", "Total Price", "GST Rate",
-    "CGST Amount", "SGST Amount", "Grand Total", "Overall Discount (%)", "Amount Discount (INR)",
-    "Discounted Price", "Payment Status", "Amount Paid", "Payment Receipt Path",
-    "Employee Selfie Path", "Invoice PDF Path"
+    "Invoice Number",
+    "Invoice Date",
+    "Employee Name",
+    "Employee Code",
+    "Designation",
+    "Discount Category",
+    "Transaction Type",
+    "Outlet Name",
+    "Outlet Contact",
+    "Outlet Address",
+    "Outlet State",
+    "Outlet City",
+    "Distributor Firm Name",
+    "Distributor ID",
+    "Distributor Contact Person",
+    "Distributor Contact Number",
+    "Distributor Email",
+    "Distributor Territory",
+    "Product ID",
+    "Product Name",
+    "Product Category",
+    "Quantity",
+    "Unit Price",
+    "Total Price",
+    "GST Rate",
+    "CGST Amount",
+    "SGST Amount",
+    "Grand Total",
+    "Overall Discount (%)",
+    "Amount Discount (INR)",
+    "Discounted Price",
+    "Payment Status",
+    "Amount Paid",
+    "Payment Receipt Path",
+    "Employee Selfie Path",
+    "Invoice PDF Path"
 ]
 
 VISIT_SHEET_COLUMNS = [
-    "Visit ID", "Employee Name", "Employee Code", "Designation", "Outlet Name",
-    "Outlet Contact", "Outlet Address", "Outlet State", "Outlet City", "Visit Date",
-    "Entry Time", "Exit Time", "Visit Duration (minutes)", "Visit Purpose", "Visit Notes",
-    "Visit Selfie Path", "Visit Status"
+    "Visit ID",
+    "Employee Name",
+    "Employee Code",
+    "Designation",
+    "Outlet Name",
+    "Outlet Contact",
+    "Outlet Address",
+    "Outlet State",
+    "Outlet City",
+    "Visit Date",
+    "Entry Time",
+    "Exit Time",
+    "Visit Duration (minutes)",
+    "Visit Purpose",
+    "Visit Notes",
+    "Visit Selfie Path",
+    "Visit Status"
 ]
 
 ATTENDANCE_SHEET_COLUMNS = [
-    "Attendance ID", "Employee Name", "Employee Code", "Designation", "Date",
-    "Status", "Location Link", "Leave Reason", "Check-in Time", "Check-in Date Time"
+    "Attendance ID",
+    "Employee Name",
+    "Employee Code",
+    "Designation",
+    "Date",
+    "Status",
+    "Location Link",
+    "Leave Reason",
+    "Check-in Time",
+    "Check-in Date Time"
 ]
 
-# Establish Google Sheets connection
+# Establishing a Google Sheets connection
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Load data
-@st.cache_data
-def load_data():
-    Products = pd.read_csv('Invoice - Products.csv')
-    Outlet = pd.read_csv('Invoice - Outlet.csv')
-    Person = pd.read_csv('Invoice - Person.csv')
-    Distributors = pd.read_csv('Invoice - Distributors.csv')
-    return Products, Outlet, Person, Distributors
-
-Products, Outlet, Person, Distributors = load_data()
+Products = pd.read_csv('Invoice - Products.csv')
+Outlet = pd.read_csv('Invoice - Outlet.csv')
+Person = pd.read_csv('Invoice - Person.csv')
+Distributors = pd.read_csv('Invoice - Distributors.csv')
 
 # Company Details
 company_name = "BIOLUME SKIN SCIENCE PRIVATE LIMITED"
@@ -103,10 +145,12 @@ class PDF(FPDF):
     def header(self):
         if company_logo:
             self.image(company_logo, 10, 8, 33)
+        
         self.set_font('Arial', 'B', 16)
         self.cell(0, 10, company_name, ln=True, align='C')
         self.set_font('Arial', '', 10)
         self.multi_cell(0, 5, company_address, align='C')
+        
         self.set_font('Arial', 'B', 14)
         self.cell(0, 10, 'Proforma Invoice', ln=True, align='C')
         self.line(10, 50, 200, 50)
@@ -130,58 +174,40 @@ def save_uploaded_file(uploaded_file, folder):
         return file_path
     return None
 
-def validate_data_before_write(df, expected_columns):
-    if not all(col in df.columns for col in expected_columns):
-        missing = set(expected_columns) - set(df.columns)
-        raise ValueError(f"Missing columns: {missing}")
-    if df.empty:
-        raise ValueError("Empty DataFrame provided")
-    return True
-
-def backup_sheet(conn, worksheet_name):
-    try:
-        data = conn.read(worksheet=worksheet_name, ttl=1)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_name = f"{worksheet_name}_backup_{timestamp}"
-        conn.create(worksheet=backup_name, data=data)
-        return True
-    except Exception as e:
-        st.error(f"Backup failed: {e}")
-        return False
-
-def safe_append_to_sheet(conn, worksheet_name, new_data, expected_columns):
-    try:
-        validate_data_before_write(new_data, expected_columns)
-        conn.create(worksheet=worksheet_name, data=new_data)
-        return True, None
-    except Exception as e:
-        return False, str(e)
-
-def safe_update_sheet(conn, worksheet_name, new_data, expected_columns):
-    try:
-        validate_data_before_write(new_data, expected_columns)
-        if not backup_sheet(conn, worksheet_name):
-            return False, "Backup failed before update"
-        
-        existing_data = conn.read(worksheet=worksheet_name, usecols=list(range(len(expected_columns))), ttl=5)
-        existing_data = existing_data.dropna(how='all')
-        
-        updated_data = pd.concat([existing_data, new_data], ignore_index=True)
-        updated_data = updated_data.drop_duplicates()
-        
-        conn.update(worksheet=worksheet_name, data=updated_data)
-        return True, None
-    except Exception as e:
-        return False, str(e)
-
 def log_sales_to_gsheet(conn, sales_data):
-    return safe_append_to_sheet(conn, "Sales", sales_data, SALES_SHEET_COLUMNS)
+    try:
+        existing_sales_data = conn.read(worksheet="Sales", usecols=list(range(len(SALES_SHEET_COLUMNS))), ttl=5)
+        existing_sales_data = existing_sales_data.dropna(how="all")
+        updated_sales_data = pd.concat([existing_sales_data, sales_data], ignore_index=True)
+        conn.update(worksheet="Sales", data=updated_sales_data)
+        st.success("Sales data successfully logged to Google Sheets!")
+    except Exception as e:
+        st.error(f"Error logging sales data: {e}")
 
 def log_visit_to_gsheet(conn, visit_data):
-    return safe_append_to_sheet(conn, "Visits", visit_data, VISIT_SHEET_COLUMNS)
+    try:
+        existing_visit_data = conn.read(worksheet="Visits", usecols=list(range(len(VISIT_SHEET_COLUMNS))), ttl=5)
+        existing_visit_data = existing_visit_data.dropna(how="all")
+        updated_visit_data = pd.concat([existing_visit_data, visit_data], ignore_index=True)
+        conn.update(worksheet="Visits", data=updated_visit_data)
+        st.success("Visit data successfully logged to Google Sheets!")
+    except Exception as e:
+        st.error(f"Error logging visit data: {e}")
 
 def log_attendance_to_gsheet(conn, attendance_data):
-    return safe_append_to_sheet(conn, "Attendance", attendance_data, ATTENDANCE_SHEET_COLUMNS)
+    try:
+        # Read existing data
+        existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how="all")
+        
+        # Combine with new data
+        updated_data = pd.concat([existing_data, attendance_data], ignore_index=True)
+        
+        # Update the sheet
+        conn.update(worksheet="Attendance", data=updated_data)
+        return True, None
+    except Exception as e:
+        return False, str(e)
 
 def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, 
                     discount_category, employee_name, overall_discount, amount_discount, 
@@ -244,10 +270,16 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     sales_data = []
     tax_rate = 0.18  # 18% GST
     
+    # Calculate subtotal before any discounts
     subtotal = 0
     for idx, (product, quantity) in enumerate(zip(selected_products, quantities)):
         product_data = Products[Products['Product Name'] == product].iloc[0]
-        unit_price = float(product_data[discount_category] if discount_category in product_data else float(product_data['Price']))
+        
+        if discount_category in product_data:
+            unit_price = float(product_data[discount_category])
+        else:
+            unit_price = float(product_data['Price'])
+        
         item_total = unit_price * quantity
         subtotal += item_total
         
@@ -260,10 +292,17 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
         pdf.cell(25, 8, f"{item_total:.2f}", border=1, align='R')
         pdf.ln()
 
-    # Apply discounts and calculate taxes
-    discount_amount = subtotal * (overall_discount / 100) if overall_discount > 0 else 0
-    discounted_subtotal = subtotal - discount_amount
+    # Apply percentage discount
+    if overall_discount > 0:
+        discount_amount = subtotal * (overall_discount / 100)
+        discounted_subtotal = subtotal - discount_amount
+    else:
+        discounted_subtotal = subtotal
+    
+    # Apply amount discount
     taxable_amount = max(discounted_subtotal - amount_discount, 0)
+    
+    # Calculate taxes
     tax_amount = taxable_amount * tax_rate
     cgst_amount = tax_amount / 2
     sgst_amount = tax_amount / 2
@@ -271,7 +310,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
 
     # Display totals
     pdf.ln(10)
-    pdf.set_font('Arial', 'B', 10)
+    pdf.set_font("Arial", 'B', 10)
     pdf.cell(160, 10, "Subtotal", border=0, align='R')
     pdf.cell(30, 10, f"{subtotal:.2f}", border=1, align='R')
     pdf.ln()
@@ -352,7 +391,12 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     # Prepare sales data for logging
     for idx, (product, quantity) in enumerate(zip(selected_products, quantities)):
         product_data = Products[Products['Product Name'] == product].iloc[0]
-        unit_price = float(product_data[discount_category] if discount_category in product_data else float(product_data['Price']))
+        
+        if discount_category in product_data:
+            unit_price = float(product_data[discount_category])
+        else:
+            unit_price = float(product_data['Price'])
+            
         item_total = unit_price * quantity
         item_taxable = item_total * (1 - overall_discount / 100) - (amount_discount * (item_total / subtotal))
         item_tax = item_taxable * tax_rate
@@ -402,18 +446,15 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     
     # Log sales data to Google Sheets
     sales_df = pd.DataFrame(sales_data)
-    success, error = log_sales_to_gsheet(conn, sales_df)
-    
-    if not success:
-        st.error(f"Failed to log sales data: {error}")
-        return None, None
-    
+    log_sales_to_gsheet(conn, sales_df)
+
     return pdf, pdf_path
 
 def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, outlet_state, outlet_city, 
                  visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time):
     visit_id = generate_visit_id()
     visit_date = datetime.now().strftime("%d-%m-%Y")
+    
     duration = (exit_time - entry_time).total_seconds() / 60
     
     visit_data = {
@@ -437,24 +478,23 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, out
     }
     
     visit_df = pd.DataFrame([visit_data])
-    success, error = log_visit_to_gsheet(conn, visit_df)
-    
-    if not success:
-        st.error(f"Failed to log visit: {error}")
-        return None
+    log_visit_to_gsheet(conn, visit_df)
     
     return visit_id
 
 def record_attendance(employee_name, status, location_link="", leave_reason=""):
     try:
+        # Get employee details
         employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
         designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
         current_date = datetime.now().strftime("%d-%m-%Y")
         current_datetime = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
         check_in_time = datetime.now().strftime("%H:%M:%S")
         
+        # Generate attendance ID
         attendance_id = generate_attendance_id()
         
+        # Create attendance record
         attendance_data = {
             "Attendance ID": attendance_id,
             "Employee Name": employee_name,
@@ -468,7 +508,10 @@ def record_attendance(employee_name, status, location_link="", leave_reason=""):
             "Check-in Date Time": current_datetime
         }
         
+        # Convert to DataFrame
         attendance_df = pd.DataFrame([attendance_data])
+        
+        # Log to Google Sheets
         success, error = log_attendance_to_gsheet(conn, attendance_df)
         
         if success:
@@ -481,6 +524,7 @@ def record_attendance(employee_name, status, location_link="", leave_reason=""):
 
 def check_existing_attendance(employee_name):
     try:
+        # Read existing attendance data
         existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
         existing_data = existing_data.dropna(how="all")
         
@@ -490,6 +534,7 @@ def check_existing_attendance(employee_name):
         current_date = datetime.now().strftime("%d-%m-%Y")
         employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
         
+        # Check if attendance exists for today
         existing_records = existing_data[
             (existing_data['Employee Code'] == employee_code) & 
             (existing_data['Date'] == current_date)
@@ -508,6 +553,7 @@ def authenticate_employee(employee_name, passkey):
     except:
         return False
 
+# Add this function to create a consistent back button
 def add_back_button():
     st.markdown("""
     <style>
@@ -525,6 +571,7 @@ def add_back_button():
         st.session_state.selected_mode = None
         st.rerun()
 
+# Modify the main function to include the back button
 def main():
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
@@ -550,6 +597,7 @@ def main():
             else:
                 st.error("Invalid Employee Code. Please try again.")
     else:
+        # Add back button to all authenticated pages
         add_back_button()
         
         if st.session_state.selected_mode == "Sales":
@@ -563,6 +611,7 @@ def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
     
+    # Add tabs for new sale and sales history
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
@@ -580,6 +629,7 @@ def sales_page():
 
         quantities = []
         if selected_products:
+            # Display product prices based on discount category
             st.markdown("### Product Prices")
             price_cols = st.columns(3)
             with price_cols[0]:
@@ -592,7 +642,11 @@ def sales_page():
             subtotal = 0
             for product in selected_products:
                 product_data = Products[Products['Product Name'] == product].iloc[0]
-                unit_price = float(product_data[discount_category] if discount_category in product_data else float(product_data['Price']))
+                
+                if discount_category in product_data:
+                    unit_price = float(product_data[discount_category])
+                else:
+                    unit_price = float(product_data['Price'])
                 
                 cols = st.columns(3)
                 with cols[0]:
@@ -606,9 +660,11 @@ def sales_page():
                 
                 subtotal += unit_price * qty
             
+            # Display subtotal
             st.markdown("---")
             st.markdown(f"**Subtotal: ₹{subtotal:.2f}**")
             
+            # Discount section
             st.subheader("Discount Options")
             col1, col2 = st.columns(2)
             with col1:
@@ -618,12 +674,14 @@ def sales_page():
                 amount_discount = st.number_input("Amount Discount (INR)", min_value=0.0, value=0.0, 
                                                 step=1.0, key="amount_discount")
             
+            # Calculate final amount
             discount_amount = subtotal * (overall_discount / 100)
             discounted_subtotal = subtotal - discount_amount - amount_discount
-            tax_rate = 0.18
+            tax_rate = 0.18  # 18% GST
             tax_amount = discounted_subtotal * tax_rate
             grand_total = discounted_subtotal + tax_amount
             
+            # Display final amount breakdown
             st.markdown("---")
             st.markdown("### Final Amount Calculation")
             st.markdown(f"Subtotal: ₹{subtotal:.2f}")
@@ -635,6 +693,7 @@ def sales_page():
             st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
             st.markdown(f"**Grand Total: ₹{grand_total:.2f}**")
 
+        # Rest of your existing code for payment details, distributor details, etc...
         st.subheader("Payment Details")
         payment_status = st.selectbox("Payment Status", ["pending", "paid", "partial paid"], key="payment_status")
 
@@ -715,17 +774,16 @@ def sales_page():
                     distributor_contact_number, distributor_email, distributor_territory
                 )
                 
-                if pdf and pdf_path:
-                    with open(pdf_path, "rb") as f:
-                        st.download_button(
-                            "Download Invoice", 
-                            f, 
-                            file_name=f"{invoice_number}.pdf",
-                            mime="application/pdf",
-                            key=f"download_{invoice_number}"
-                        )
-                    
-                    st.success(f"Invoice {invoice_number} generated successfully!")
+                with open(pdf_path, "rb") as f:
+                    st.download_button(
+                        "Download Invoice", 
+                        f, 
+                        file_name=f"{invoice_number}.pdf",
+                        mime="application/pdf",
+                        key=f"download_{invoice_number}"
+                    )
+                
+                st.success(f"Invoice {invoice_number} generated successfully!")
             else:
                 st.error("Please fill all required fields and select products.")
     
@@ -744,9 +802,11 @@ def sales_page():
                 sales_data = conn.read(worksheet="Sales", usecols=list(range(len(SALES_SHEET_COLUMNS))), ttl=5)
                 sales_data = sales_data.dropna(how="all")
                 
+                # Filter by employee first
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
                 filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
                 
+                # Apply additional filters if provided
                 if invoice_number_search:
                     filtered_data = filtered_data[filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False)]
                 if invoice_date_search:
@@ -758,6 +818,7 @@ def sales_page():
                 if not filtered_data.empty:
                     st.dataframe(filtered_data[['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 'Quantity', 'Grand Total']])
                     
+                    # Option to download as CSV
                     csv = filtered_data.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         "Download as CSV",
@@ -813,6 +874,7 @@ def visit_page():
         if outlet_name:
             today = datetime.now().date()
             
+            # Set default times if user didn't select
             if entry_time is None:
                 entry_time = datetime.now().time()
             if exit_time is None:
@@ -829,8 +891,7 @@ def visit_page():
                 visit_selfie_path, entry_datetime, exit_datetime
             )
             
-            if visit_id:
-                st.success(f"Visit {visit_id} recorded successfully!")
+            st.success(f"Visit {visit_id} recorded successfully!")
         else:
             st.error("Please fill all required fields.")
 
@@ -838,6 +899,7 @@ def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
     
+    # Check if attendance already marked for today
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
