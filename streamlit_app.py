@@ -727,15 +727,6 @@ def sales_page():
                 item_total = unit_price * (1 - prod_discount/100) * qty
                 subtotal += item_total
             
-            st.markdown("---")
-            st.markdown(f"**Subtotal: ₹{subtotal:.2f}**")
-            
-            
-            discount_amount = subtotal * (overall_discount / 100)
-            discounted_subtotal = subtotal - discount_amount - amount_discount
-            tax_rate = 0.18
-            tax_amount = discounted_subtotal * tax_rate
-            grand_total = discounted_subtotal + tax_amount
 
             # In the sales_page() function, replace the final amount calculation with:
             st.markdown("---")
