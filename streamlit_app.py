@@ -627,21 +627,23 @@ def sales_page():
         selected_products = st.multiselect("Select Products", product_names, key="product_selection")
 
         quantities = []
-        discounts = []  # To store product-wise discounts
+        product_discounts = []
         if selected_products:
-            # Display product prices based on discount category
-            st.markdown("### Product Details")
-            price_cols = st.columns(5)
-            with price_cols[0]:
+            # Display product prices and discount options in a table-like format
+            st.markdown("### Product Pricing & Discounts")
+            
+            # Create header
+            cols = st.columns([4, 2, 2, 2, 2])
+            with cols[0]:
                 st.markdown("**Product**")
-            with price_cols[1]:
+            with cols[1]:
                 st.markdown("**Price (INR)**")
-            with price_cols[2]:
-                st.markdown("**Discount (INR)**")
-            with price_cols[3]:
+            with cols[2]:
                 st.markdown("**Quantity**")
-            with price_cols[4]:
-                st.markdown("**Amount**")
+            with cols[3]:
+                st.markdown("**Discount %**")
+            with cols[4]:
+                st.markdown("**Subtotal**")
             
             subtotal = 0
             for product in selected_products:
@@ -652,47 +654,35 @@ def sales_page():
                 else:
                     unit_price = float(product_data['Price'])
                 
-                cols = st.columns(5)
+                cols = st.columns([4, 2, 2, 2, 2])
                 with cols[0]:
                     st.text(product)
                 with cols[1]:
                     st.text(f"₹{unit_price:.2f}")
                 with cols[2]:
-                    discount = st.number_input(f"Discount for {product}", 
-                                            min_value=0.0, 
-                                            max_value=unit_price, 
-                                            value=0.0,
-                                            step=1.0,
-                                            key=f"discount_{product}", 
-                                            label_visibility="collapsed")
-                    discounts.append(discount)
-                with cols[3]:
-                    qty = st.number_input(f"Qty for {product}", 
-                                        min_value=1, 
-                                        value=1, 
-                                        step=1, 
-                                        key=f"qty_{product}", 
-                                        label_visibility="collapsed")
+                    qty = st.number_input(f"Qty for {product}", min_value=1, value=1, step=1, 
+                                        key=f"qty_{product}", label_visibility="collapsed")
                     quantities.append(qty)
+                with cols[3]:
+                    discount = st.number_input(f"Discount % for {product}", min_value=0.0, max_value=100.0, 
+                                             value=0.0, step=1.0, key=f"discount_{product}", 
+                                             label_visibility="collapsed")
+                    product_discounts.append(discount)
                 with cols[4]:
-                    item_total = (unit_price - discount) * qty
+                    item_total = unit_price * qty * (1 - discount/100)
                     st.text(f"₹{item_total:.2f}")
-                
-                subtotal += item_total
+                    subtotal += item_total
             
             # Calculate taxes
             tax_rate = 0.18  # 18% GST
             tax_amount = subtotal * tax_rate
-            cgst_amount = tax_amount / 2
-            sgst_amount = tax_amount / 2
             grand_total = subtotal + tax_amount
             
             # Display final amount breakdown
             st.markdown("---")
             st.markdown("### Final Amount Calculation")
             st.markdown(f"Subtotal: ₹{subtotal:.2f}")
-            st.markdown(f"CGST (9%): ₹{cgst_amount:.2f}")
-            st.markdown(f"SGST (9%): ₹{sgst_amount:.2f}")
+            st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
             st.markdown(f"**Grand Total: ₹{grand_total:.2f}**")
 
         st.subheader("Payment Details")
@@ -751,8 +741,7 @@ def sales_page():
             state = outlet_details['State']
             city = outlet_details['City']
             
-            # Display outlet details like distributor details
-            st.text_input("Outlet Name", value=customer_name, disabled=True, key="outlet_name_display")
+            # Display outlet details in a similar way to distributor details
             st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
             st.text_input("Contact Number", value=contact_number, disabled=True, key="outlet_contact_display")
             st.text_area("Address", value=address, disabled=True, key="outlet_address_display")
@@ -773,13 +762,14 @@ def sales_page():
                 employee_selfie_path = save_uploaded_file(employee_selfie, "employee_selfies") if employee_selfie else None
                 payment_receipt_path = save_uploaded_file(payment_receipt, "payment_receipts") if payment_receipt else None
                 
-                # Calculate overall discount for logging (sum of all product discounts)
-                total_discount = sum(discount * qty for discount, qty in zip(discounts, quantities))
+                # Calculate overall discount for logging (average of product discounts)
+                overall_discount = sum(product_discounts) / len(product_discounts) if product_discounts else 0
+                amount_discount = 0  # We removed this field from the UI
                 
                 pdf, pdf_path = generate_invoice(
                     customer_name, gst_number, contact_number, address, state, city,
                     selected_products, quantities, discount_category, 
-                    selected_employee, 0, total_discount,  # Using 0 for percentage discount, total_discount for amount
+                    selected_employee, overall_discount, amount_discount,
                     payment_status, amount_paid, employee_selfie_path, 
                     payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
