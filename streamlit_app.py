@@ -631,13 +631,15 @@ def sales_page():
         if selected_products:
             # Display product prices based on discount category
             st.markdown("### Product Prices")
-            price_cols = st.columns(3)
+            price_cols = st.columns(4)
             with price_cols[0]:
                 st.markdown("**Product**")
             with price_cols[1]:
-                st.markdown("**Price (INR)**")
+                st.markdown(f"**Price ({discount_category})**")
             with price_cols[2]:
                 st.markdown("**Quantity**")
+            with price_cols[3]:
+                st.markdown("**Total**")
             
             subtotal = 0
             for product in selected_products:
@@ -648,7 +650,7 @@ def sales_page():
                 else:
                     unit_price = float(product_data['Price'])
                 
-                cols = st.columns(3)
+                cols = st.columns(4)
                 with cols[0]:
                     st.text(product)
                 with cols[1]:
@@ -657,43 +659,26 @@ def sales_page():
                     qty = st.number_input(f"Qty for {product}", min_value=1, value=1, step=1, 
                                         key=f"qty_{product}", label_visibility="collapsed")
                     quantities.append(qty)
-                
-                subtotal += unit_price * qty
+                with cols[3]:
+                    item_total = unit_price * qty
+                    st.text(f"₹{item_total:.2f}")
+                    subtotal += item_total
             
-            # Display subtotal
-            st.markdown("---")
-            st.markdown(f"**Subtotal: ₹{subtotal:.2f}**")
-            
-            # Discount section
-            st.subheader("Discount Options")
-            col1, col2 = st.columns(2)
-            with col1:
-                overall_discount = st.number_input("Percentage Discount (%)", min_value=0.0, max_value=100.0, 
-                                                 value=0.0, step=0.1, key="percent_discount")
-            with col2:
-                amount_discount = st.number_input("Amount Discount (INR)", min_value=0.0, value=0.0, 
-                                                step=1.0, key="amount_discount")
-            
-            # Calculate final amount
-            discount_amount = subtotal * (overall_discount / 100)
-            discounted_subtotal = subtotal - discount_amount - amount_discount
+            # Calculate taxes and grand total
             tax_rate = 0.18  # 18% GST
-            tax_amount = discounted_subtotal * tax_rate
-            grand_total = discounted_subtotal + tax_amount
+            tax_amount = subtotal * tax_rate
+            cgst_amount = tax_amount / 2
+            sgst_amount = tax_amount / 2
+            grand_total = subtotal + tax_amount
             
             # Display final amount breakdown
             st.markdown("---")
             st.markdown("### Final Amount Calculation")
             st.markdown(f"Subtotal: ₹{subtotal:.2f}")
-            if overall_discount > 0:
-                st.markdown(f"Percentage Discount ({overall_discount}%): -₹{discount_amount:.2f}")
-            if amount_discount > 0:
-                st.markdown(f"Amount Discount: -₹{amount_discount:.2f}")
-            st.markdown(f"Taxable Amount: ₹{discounted_subtotal:.2f}")
-            st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
+            st.markdown(f"CGST (9%): ₹{cgst_amount:.2f}")
+            st.markdown(f"SGST (9%): ₹{sgst_amount:.2f}")
             st.markdown(f"**Grand Total: ₹{grand_total:.2f}**")
 
-        # Rest of your existing code for payment details, distributor details, etc...
         st.subheader("Payment Details")
         payment_status = st.selectbox("Payment Status", ["pending", "paid", "partial paid"], key="payment_status")
 
@@ -764,10 +749,11 @@ def sales_page():
                 employee_selfie_path = save_uploaded_file(employee_selfie, "employee_selfies") if employee_selfie else None
                 payment_receipt_path = save_uploaded_file(payment_receipt, "payment_receipts") if payment_receipt else None
                 
+                # Set overall_discount and amount_discount to 0 since we're using product-wise discounts
                 pdf, pdf_path = generate_invoice(
                     customer_name, gst_number, contact_number, address, state, city,
                     selected_products, quantities, discount_category, 
-                    selected_employee, overall_discount, amount_discount,
+                    selected_employee, 0, 0,  # No overall or amount discounts
                     payment_status, amount_paid, employee_selfie_path, 
                     payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
