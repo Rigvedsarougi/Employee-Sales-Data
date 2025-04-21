@@ -7,6 +7,55 @@ import os
 import uuid
 from PIL import Image
 
+# Updated JavaScript for geolocation
+LOCATION_JS = """
+<script>
+function getLocation(callback) {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            function(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+                callback(googleMapsLink);
+            },
+            function(error) {
+                let errorMessage = "Error getting location: ";
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMessage += "User denied the request for Geolocation.";
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMessage += "Location information is unavailable.";
+                        break;
+                    case error.TIMEOUT:
+                        errorMessage += "The request to get user location timed out.";
+                        break;
+                    case error.UNKNOWN_ERROR:
+                        errorMessage += "An unknown error occurred.";
+                        break;
+                }
+                callback(null, errorMessage);
+            }
+        );
+    } else {
+        callback(null, "Geolocation is not supported by this browser.");
+    }
+}
+
+// Function to update the location input field
+function updateLocationInput(inputId, location) {
+    const inputElement = window.parent.document.getElementById(inputId);
+    if (inputElement) {
+        inputElement.value = location;
+        // Trigger change event to ensure Streamlit detects the change
+        const event = new Event('input', { bubbles: true });
+        inputElement.dispatchEvent(event);
+    }
+}
+</script>
+"""
+
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -14,7 +63,7 @@ hide_streamlit_style = """
     .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
     header {visibility: hidden;}
     </style>
-"""
+""" + LOCATION_JS
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 hide_footer_style = """
@@ -61,6 +110,8 @@ SALES_SHEET_COLUMNS = [
     "Product Category",
     "Quantity",
     "Unit Price",
+    "Product Discount (%)",
+    "Discounted Unit Price",
     "Total Price",
     "GST Rate",
     "CGST Amount",
@@ -68,12 +119,12 @@ SALES_SHEET_COLUMNS = [
     "Grand Total",
     "Overall Discount (%)",
     "Amount Discount (INR)",
-    "Discounted Price",
     "Payment Status",
     "Amount Paid",
     "Payment Receipt Path",
     "Employee Selfie Path",
-    "Invoice PDF Path"
+    "Invoice PDF Path",
+    "Location"
 ]
 
 VISIT_SHEET_COLUMNS = [
@@ -93,7 +144,8 @@ VISIT_SHEET_COLUMNS = [
     "Visit Purpose",
     "Visit Notes",
     "Visit Selfie Path",
-    "Visit Status"
+    "Visit Status",
+    "Location"
 ]
 
 ATTENDANCE_SHEET_COLUMNS = [
@@ -196,24 +248,19 @@ def log_visit_to_gsheet(conn, visit_data):
 
 def log_attendance_to_gsheet(conn, attendance_data):
     try:
-        # Read existing data
         existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
         existing_data = existing_data.dropna(how="all")
-        
-        # Combine with new data
         updated_data = pd.concat([existing_data, attendance_data], ignore_index=True)
-        
-        # Update the sheet
         conn.update(worksheet="Attendance", data=updated_data)
         return True, None
     except Exception as e:
         return False, str(e)
 
-def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, 
+def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, product_discounts,
                     discount_category, employee_name, overall_discount, amount_discount, 
                     payment_status, amount_paid, employee_selfie_path, payment_receipt_path, invoice_number,
                     transaction_type, distributor_firm_name="", distributor_id="", distributor_contact_person="",
-                    distributor_contact_number="", distributor_email="", distributor_territory=""):
+                    distributor_contact_number="", distributor_email="", distributor_territory="", location=""):
     pdf = PDF()
     pdf.alias_nb_pages()
     pdf.add_page()
@@ -270,9 +317,9 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     sales_data = []
     tax_rate = 0.18  # 18% GST
     
-    # Calculate subtotal before any discounts
+    # Calculate subtotal with product discounts
     subtotal = 0
-    for idx, (product, quantity) in enumerate(zip(selected_products, quantities)):
+    for idx, (product, quantity, prod_discount) in enumerate(zip(selected_products, quantities, product_discounts)):
         product_data = Products[Products['Product Name'] == product].iloc[0]
         
         if discount_category in product_data:
@@ -280,7 +327,9 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
         else:
             unit_price = float(product_data['Price'])
         
-        item_total = unit_price * quantity
+        # Apply product discount
+        discounted_unit_price = unit_price * (1 - prod_discount/100)
+        item_total = discounted_unit_price * quantity
         subtotal += item_total
         
         pdf.cell(10, 8, str(idx + 1), border=1)
@@ -288,11 +337,11 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
         pdf.cell(20, 8, "3304", border=1, align='C')
         pdf.cell(20, 8, "18%", border=1, align='C')
         pdf.cell(20, 8, str(quantity), border=1, align='C')
-        pdf.cell(25, 8, f"{unit_price:.2f}", border=1, align='R')
+        pdf.cell(25, 8, f"{discounted_unit_price:.2f}", border=1, align='R')
         pdf.cell(25, 8, f"{item_total:.2f}", border=1, align='R')
         pdf.ln()
 
-    # Apply percentage discount
+    # Apply overall percentage discount
     if overall_discount > 0:
         discount_amount = subtotal * (overall_discount / 100)
         discounted_subtotal = subtotal - discount_amount
@@ -310,7 +359,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
 
     # Display totals
     pdf.ln(10)
-    pdf.set_font("Arial", 'B', 10)
+    pdf.set_font('Arial', 'B', 10)
     pdf.cell(160, 10, "Subtotal", border=0, align='R')
     pdf.cell(30, 10, f"{subtotal:.2f}", border=1, align='R')
     pdf.ln()
@@ -389,7 +438,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
             st.error(f"Error adding payment receipt: {e}")
 
     # Prepare sales data for logging
-    for idx, (product, quantity) in enumerate(zip(selected_products, quantities)):
+    for idx, (product, quantity, prod_discount) in enumerate(zip(selected_products, quantities, product_discounts)):
         product_data = Products[Products['Product Name'] == product].iloc[0]
         
         if discount_category in product_data:
@@ -397,7 +446,11 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
         else:
             unit_price = float(product_data['Price'])
             
-        item_total = unit_price * quantity
+        # Apply product discount
+        discounted_unit_price = unit_price * (1 - prod_discount/100)
+        item_total = discounted_unit_price * quantity
+        
+        # Then apply overall discount if any
         item_taxable = item_total * (1 - overall_discount / 100) - (amount_discount * (item_total / subtotal))
         item_tax = item_taxable * tax_rate
         
@@ -425,6 +478,8 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
             "Product Category": product_data['Product Category'],
             "Quantity": quantity,
             "Unit Price": unit_price,
+            "Product Discount (%)": prod_discount,
+            "Discounted Unit Price": discounted_unit_price,
             "Total Price": item_total,
             "GST Rate": "18%",
             "CGST Amount": item_tax / 2,
@@ -432,12 +487,12 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
             "Grand Total": item_taxable + item_tax,
             "Overall Discount (%)": overall_discount,
             "Amount Discount (INR)": amount_discount * (item_total / subtotal),
-            "Discounted Price": unit_price * (1 - overall_discount / 100),
             "Payment Status": payment_status,
             "Amount Paid": amount_paid if payment_status in ["paid", "partial paid"] else 0,
             "Payment Receipt Path": payment_receipt_path if payment_status in ["paid", "partial paid"] else "",
             "Employee Selfie Path": employee_selfie_path,
-            "Invoice PDF Path": f"invoices/{invoice_number}.pdf"
+            "Invoice PDF Path": f"invoices/{invoice_number}.pdf",
+            "Location": location
         })
 
     # Save the PDF
@@ -451,7 +506,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     return pdf, pdf_path
 
 def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, outlet_state, outlet_city, 
-                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time):
+                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time, location=""):
     visit_id = generate_visit_id()
     visit_date = datetime.now().strftime("%d-%m-%Y")
     
@@ -474,7 +529,8 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, out
         "Visit Purpose": visit_purpose,
         "Visit Notes": visit_notes,
         "Visit Selfie Path": visit_selfie_path,
-        "Visit Status": "completed"
+        "Visit Status": "completed",
+        "Location": location
     }
     
     visit_df = pd.DataFrame([visit_data])
@@ -484,17 +540,14 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, out
 
 def record_attendance(employee_name, status, location_link="", leave_reason=""):
     try:
-        # Get employee details
         employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
         designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
         current_date = datetime.now().strftime("%d-%m-%Y")
         current_datetime = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
         check_in_time = datetime.now().strftime("%H:%M:%S")
         
-        # Generate attendance ID
         attendance_id = generate_attendance_id()
         
-        # Create attendance record
         attendance_data = {
             "Attendance ID": attendance_id,
             "Employee Name": employee_name,
@@ -508,10 +561,8 @@ def record_attendance(employee_name, status, location_link="", leave_reason=""):
             "Check-in Date Time": current_datetime
         }
         
-        # Convert to DataFrame
         attendance_df = pd.DataFrame([attendance_data])
         
-        # Log to Google Sheets
         success, error = log_attendance_to_gsheet(conn, attendance_df)
         
         if success:
@@ -524,7 +575,6 @@ def record_attendance(employee_name, status, location_link="", leave_reason=""):
 
 def check_existing_attendance(employee_name):
     try:
-        # Read existing attendance data
         existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
         existing_data = existing_data.dropna(how="all")
         
@@ -534,7 +584,6 @@ def check_existing_attendance(employee_name):
         current_date = datetime.now().strftime("%d-%m-%Y")
         employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
         
-        # Check if attendance exists for today
         existing_records = existing_data[
             (existing_data['Employee Code'] == employee_code) & 
             (existing_data['Date'] == current_date)
@@ -553,7 +602,6 @@ def authenticate_employee(employee_name, passkey):
     except:
         return False
 
-# Add this function to create a consistent back button
 def add_back_button():
     st.markdown("""
     <style>
@@ -571,7 +619,6 @@ def add_back_button():
         st.session_state.selected_mode = None
         st.rerun()
 
-# Modify the main function to include the back button
 def main():
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
@@ -597,7 +644,6 @@ def main():
             else:
                 st.error("Invalid Employee Code. Please try again.")
     else:
-        # Add back button to all authenticated pages
         add_back_button()
         
         if st.session_state.selected_mode == "Sales":
@@ -611,7 +657,34 @@ def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
     
-    # Add tabs for new sale and sales history
+    # Location section at the top
+    st.subheader("Location Verification")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        sales_location = st.text_input("Enter your current location (Google Maps link or address)", 
+                                     key="location_input_sales")
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.button("Get Current Location", 
+                 on_click=lambda: st.markdown(
+                     """
+                     <script>
+                     getLocation(function(location, error) {
+                         if (location) {
+                             updateLocationInput('location_input_sales', location);
+                             // Show success message
+                             window.parent.document.dispatchEvent(new Event('locationCaptured'));
+                         } else {
+                             alert(error || "Failed to get location");
+                         }
+                     });
+                     </script>
+                     """,
+                     unsafe_allow_html=True
+                 ),
+                 key="get_location_sales",
+                 help="Click to automatically capture your current location")
+    
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
@@ -629,22 +702,18 @@ def sales_page():
 
         quantities = []
         product_discounts = []
+
         if selected_products:
-            # Display product prices and discount options in a table-like format
-            st.markdown("### Product Pricing & Discounts")
-            
-            # Create header
-            cols = st.columns([4, 2, 2, 2, 2])
-            with cols[0]:
+            st.markdown("### Product Prices & Discounts")
+            price_cols = st.columns(4)
+            with price_cols[0]:
                 st.markdown("**Product**")
-            with cols[1]:
+            with price_cols[1]:
                 st.markdown("**Price (INR)**")
-            with cols[2]:
-                st.markdown("**Quantity**")
-            with cols[3]:
+            with price_cols[2]:
                 st.markdown("**Discount %**")
-            with cols[4]:
-                st.markdown("**Subtotal**")
+            with price_cols[3]:
+                st.markdown("**Quantity**")
             
             subtotal = 0
             for product in selected_products:
@@ -655,34 +724,62 @@ def sales_page():
                 else:
                     unit_price = float(product_data['Price'])
                 
-                cols = st.columns([4, 2, 2, 2, 2])
+                cols = st.columns(4)
                 with cols[0]:
                     st.text(product)
                 with cols[1]:
                     st.text(f"₹{unit_price:.2f}")
                 with cols[2]:
-                    qty = st.number_input(f"Qty for {product}", min_value=1, value=1, step=1, 
-                                        key=f"qty_{product}", label_visibility="collapsed")
-                    quantities.append(qty)
+                    prod_discount = st.number_input(
+                        f"Discount for {product}",
+                        min_value=0.0,
+                        max_value=100.0,
+                        value=0.0,
+                        step=0.1,
+                        key=f"discount_{product}",
+                        label_visibility="collapsed"
+                    )
+                    product_discounts.append(prod_discount)
                 with cols[3]:
-                    discount = st.number_input(f"Discount % for {product}", min_value=0.0, max_value=100.0, 
-                                             value=0.0, step=1.0, key=f"discount_{product}", 
-                                             label_visibility="collapsed")
-                    product_discounts.append(discount)
-                with cols[4]:
-                    item_total = unit_price * qty * (1 - discount/100)
-                    st.text(f"₹{item_total:.2f}")
-                    subtotal += item_total
+                    qty = st.number_input(
+                        f"Qty for {product}",
+                        min_value=1,
+                        value=1,
+                        step=1,
+                        key=f"qty_{product}",
+                        label_visibility="collapsed"
+                    )
+                    quantities.append(qty)
+                
+                item_total = unit_price * (1 - prod_discount/100) * qty
+                subtotal += item_total
             
-            # Calculate taxes
-            tax_rate = 0.18  # 18% GST
-            tax_amount = subtotal * tax_rate
-            grand_total = subtotal + tax_amount
+            st.markdown("---")
+            st.markdown(f"**Subtotal: ₹{subtotal:.2f}**")
             
-            # Display final amount breakdown
+            st.subheader("Additional Discounts")
+            col1, col2 = st.columns(2)
+            with col1:
+                overall_discount = st.number_input("Overall Discount (%)", min_value=0.0, max_value=100.0, 
+                                                 value=0.0, step=0.1, key="percent_discount")
+            with col2:
+                amount_discount = st.number_input("Amount Discount (INR)", min_value=0.0, value=0.0, 
+                                                step=1.0, key="amount_discount")
+            
+            discount_amount = subtotal * (overall_discount / 100)
+            discounted_subtotal = subtotal - discount_amount - amount_discount
+            tax_rate = 0.18
+            tax_amount = discounted_subtotal * tax_rate
+            grand_total = discounted_subtotal + tax_amount
+            
             st.markdown("---")
             st.markdown("### Final Amount Calculation")
             st.markdown(f"Subtotal: ₹{subtotal:.2f}")
+            if overall_discount > 0:
+                st.markdown(f"Overall Discount ({overall_discount}%): -₹{discount_amount:.2f}")
+            if amount_discount > 0:
+                st.markdown(f"Amount Discount: -₹{amount_discount:.2f}")
+            st.markdown(f"Taxable Amount: ₹{discounted_subtotal:.2f}")
             st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
             st.markdown(f"**Grand Total: ₹{grand_total:.2f}**")
 
@@ -741,13 +838,6 @@ def sales_page():
             address = outlet_details['Address']
             state = outlet_details['State']
             city = outlet_details['City']
-            
-            # Display outlet details in a similar way to distributor details
-            st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
-            st.text_input("Contact Number", value=contact_number, disabled=True, key="outlet_contact_display")
-            st.text_area("Address", value=address, disabled=True, key="outlet_address_display")
-            st.text_input("State", value=state, disabled=True, key="outlet_state_display")
-            st.text_input("City", value=city, disabled=True, key="outlet_city_display")
         else:
             customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
             gst_number = st.text_input("GST Number", key="manual_gst_number")
@@ -763,18 +853,15 @@ def sales_page():
                 employee_selfie_path = save_uploaded_file(employee_selfie, "employee_selfies") if employee_selfie else None
                 payment_receipt_path = save_uploaded_file(payment_receipt, "payment_receipts") if payment_receipt else None
                 
-                # Calculate overall discount for logging (average of product discounts)
-                overall_discount = sum(product_discounts) / len(product_discounts) if product_discounts else 0
-                amount_discount = 0  # We removed this field from the UI
-                
                 pdf, pdf_path = generate_invoice(
                     customer_name, gst_number, contact_number, address, state, city,
-                    selected_products, quantities, discount_category, 
+                    selected_products, quantities, product_discounts, discount_category, 
                     selected_employee, overall_discount, amount_discount,
                     payment_status, amount_paid, employee_selfie_path, 
                     payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
-                    distributor_contact_number, distributor_email, distributor_territory
+                    distributor_contact_number, distributor_email, distributor_territory,
+                    sales_location
                 )
                 
                 with open(pdf_path, "rb") as f:
@@ -805,11 +892,9 @@ def sales_page():
                 sales_data = conn.read(worksheet="Sales", usecols=list(range(len(SALES_SHEET_COLUMNS))), ttl=5)
                 sales_data = sales_data.dropna(how="all")
                 
-                # Filter by employee first
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
                 filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
                 
-                # Apply additional filters if provided
                 if invoice_number_search:
                     filtered_data = filtered_data[filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False)]
                 if invoice_date_search:
@@ -819,54 +904,8 @@ def sales_page():
                     filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
                 
                 if not filtered_data.empty:
-                    st.dataframe(filtered_data[['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 'Quantity', 'Grand Total']])
+                    st.dataframe(filtered_data[['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 'Quantity', 'Grand Total', 'Location']])
                     
-                    # Option to download as CSV
-                    csv = filtered_data.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        "Download as CSV",
-                        csv,
-                        "sales_history.csv",
-                        "text/csv",
-                        key='download-csv'
-                    )
-                else:
-                    st.warning("No matching sales records found")
-            except Exception as e:
-                st.error(f"Error retrieving sales data: {e}")
-    
-    with tab2:
-        st.subheader("Previous Sales")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            invoice_number_search = st.text_input("Invoice Number", key="invoice_search")
-        with col2:
-            invoice_date_search = st.date_input("Invoice Date", key="date_search")
-        with col3:
-            outlet_name_search = st.text_input("Outlet Name", key="outlet_search")
-            
-        if st.button("Search Sales", key="search_sales_button"):
-            try:
-                sales_data = conn.read(worksheet="Sales", usecols=list(range(len(SALES_SHEET_COLUMNS))), ttl=5)
-                sales_data = sales_data.dropna(how="all")
-                
-                # Filter by employee first
-                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-                filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
-                
-                # Apply additional filters if provided
-                if invoice_number_search:
-                    filtered_data = filtered_data[filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False)]
-                if invoice_date_search:
-                    date_str = invoice_date_search.strftime("%d-%m-%Y")
-                    filtered_data = filtered_data[filtered_data['Invoice Date'] == date_str]
-                if outlet_name_search:
-                    filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
-                
-                if not filtered_data.empty:
-                    st.dataframe(filtered_data[['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 'Quantity', 'Grand Total']])
-                    
-                    # Option to download as CSV
                     csv = filtered_data.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         "Download as CSV",
@@ -883,6 +922,34 @@ def sales_page():
 def visit_page():
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
+
+    # Location section at the top
+    st.subheader("Location Verification")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        visit_location = st.text_input("Enter your current location (Google Maps link or address)", 
+                                     key="location_input_visit")
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.button("Get Current Location", 
+                 on_click=lambda: st.markdown(
+                     """
+                     <script>
+                     getLocation(function(location, error) {
+                         if (location) {
+                             updateLocationInput('location_input_visit', location);
+                             // Show success message
+                             window.parent.document.dispatchEvent(new Event('locationCaptured'));
+                         } else {
+                             alert(error || "Failed to get location");
+                         }
+                     });
+                     </script>
+                     """,
+                     unsafe_allow_html=True
+                 ),
+                 key="get_location_visit",
+                 help="Click to automatically capture your current location")
 
     st.subheader("Outlet Details")
     outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="visit_outlet_option")
@@ -922,7 +989,6 @@ def visit_page():
         if outlet_name:
             today = datetime.now().date()
             
-            # Set default times if user didn't select
             if entry_time is None:
                 entry_time = datetime.now().time()
             if exit_time is None:
@@ -936,7 +1002,8 @@ def visit_page():
             visit_id = record_visit(
                 selected_employee, outlet_name, outlet_contact, outlet_address,
                 outlet_state, outlet_city, visit_purpose, visit_notes, 
-                visit_selfie_path, entry_datetime, exit_datetime
+                visit_selfie_path, entry_datetime, exit_datetime,
+                visit_location
             )
             
             st.success(f"Visit {visit_id} recorded successfully!")
@@ -947,7 +1014,6 @@ def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
     
-    # Check if attendance already marked for today
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
@@ -957,9 +1023,32 @@ def attendance_page():
     
     if status == "Present":
         st.subheader("Location Verification")
-        live_location = st.text_input("Enter your current location (Google Maps link or address)", 
-                                    help="Please share your live location for verification",
-                                    key="location_input")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            live_location = st.text_input("Enter your current location (Google Maps link or address)", 
+                                        help="Please share your live location for verification",
+                                        key="location_input")
+        with col2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.button("Get Current Location", 
+                     on_click=lambda: st.markdown(
+                         """
+                         <script>
+                         getLocation(function(location, error) {
+                             if (location) {
+                                 updateLocationInput('location_input', location);
+                                 // Show success message
+                                 window.parent.document.dispatchEvent(new Event('locationCaptured'));
+                             } else {
+                                 alert(error || "Failed to get location");
+                             }
+                         });
+                         </script>
+                         """,
+                         unsafe_allow_html=True
+                     ),
+                     key="get_location",
+                     help="Click to automatically capture your current location")
         
         if st.button("Mark Attendance", key="mark_attendance_button"):
             if not live_location:
@@ -978,13 +1067,13 @@ def attendance_page():
                         st.success(f"Attendance recorded successfully! ID: {attendance_id}")
                         st.balloons()
     
-    else:  # Leave status
+    else:
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
         leave_reason = st.text_area("Reason for Leave", 
-                                   placeholder="Please provide details about your leave",
-                                   key="leave_reason")
+                                 placeholder="Please provide details about your leave",
+                                 key="leave_reason")
         
         if st.button("Submit Leave Request", key="submit_leave_button"):
             if not leave_reason:
