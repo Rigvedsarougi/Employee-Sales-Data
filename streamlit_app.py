@@ -61,14 +61,12 @@ SALES_SHEET_COLUMNS = [
     "Product Category",
     "Quantity",
     "Unit Price",
+    "Product Discount (%)",
     "Total Price",
     "GST Rate",
     "CGST Amount",
     "SGST Amount",
     "Grand Total",
-    "Overall Discount (%)",
-    "Amount Discount (INR)",
-    "Discounted Price",
     "Payment Status",
     "Amount Paid",
     "Payment Receipt Path",
@@ -210,7 +208,7 @@ def log_attendance_to_gsheet(conn, attendance_data):
         return False, str(e)
 
 def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, 
-                    discount_category, employee_name, overall_discount, amount_discount, 
+                    discount_category, employee_name, product_discounts, 
                     payment_status, amount_paid, employee_selfie_path, payment_receipt_path, invoice_number,
                     transaction_type, distributor_firm_name="", distributor_id="", distributor_contact_person="",
                     distributor_contact_number="", distributor_email="", distributor_territory=""):
@@ -258,21 +256,22 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(10, 10, "S.No", border=1, align='C', fill=True)
     pdf.cell(70, 10, "Product Name", border=1, align='C', fill=True)
-    pdf.cell(20, 10, "HSN/SAC", border=1, align='C', fill=True)
     pdf.cell(20, 10, "GST Rate", border=1, align='C', fill=True)
     pdf.cell(20, 10, "Qty", border=1, align='C', fill=True)
     pdf.cell(25, 10, "Rate (INR)", border=1, align='C', fill=True)
+    pdf.cell(25, 10, "Discount", border=1, align='C', fill=True)
     pdf.cell(25, 10, "Amount (INR)", border=1, align='C', fill=True)
     pdf.ln()
 
     # Table rows
-    pdf.set_font("Arial", '', 10)
+    pdf.set_font('Arial', '', 10)
     sales_data = []
     tax_rate = 0.18  # 18% GST
     
-    # Calculate subtotal before any discounts
     subtotal = 0
-    for idx, (product, quantity) in enumerate(zip(selected_products, quantities)):
+    total_discount = 0
+    
+    for idx, (product, quantity, product_discount) in enumerate(zip(selected_products, quantities, product_discounts)):
         product_data = Products[Products['Product Name'] == product].iloc[0]
         
         if discount_category in product_data:
@@ -280,29 +279,25 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
         else:
             unit_price = float(product_data['Price'])
         
-        item_total = unit_price * quantity
+        # Apply product discount
+        discount_amount = unit_price * (product_discount / 100)
+        discounted_price = unit_price - discount_amount
+        item_total = discounted_price * quantity
+        
         subtotal += item_total
+        total_discount += discount_amount * quantity
         
         pdf.cell(10, 8, str(idx + 1), border=1)
         pdf.cell(70, 8, product, border=1)
-        pdf.cell(20, 8, "3304", border=1, align='C')
         pdf.cell(20, 8, "18%", border=1, align='C')
         pdf.cell(20, 8, str(quantity), border=1, align='C')
         pdf.cell(25, 8, f"{unit_price:.2f}", border=1, align='R')
+        pdf.cell(25, 8, f"{product_discount}%", border=1, align='R')
         pdf.cell(25, 8, f"{item_total:.2f}", border=1, align='R')
         pdf.ln()
 
-    # Apply percentage discount
-    if overall_discount > 0:
-        discount_amount = subtotal * (overall_discount / 100)
-        discounted_subtotal = subtotal - discount_amount
-    else:
-        discounted_subtotal = subtotal
-    
-    # Apply amount discount
-    taxable_amount = max(discounted_subtotal - amount_discount, 0)
-    
     # Calculate taxes
+    taxable_amount = subtotal
     tax_amount = taxable_amount * tax_rate
     cgst_amount = tax_amount / 2
     sgst_amount = tax_amount / 2
@@ -310,20 +305,14 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
 
     # Display totals
     pdf.ln(10)
-    pdf.set_font("Arial", 'B', 10)
+    pdf.set_font('Arial', 'B', 10)
     pdf.cell(160, 10, "Subtotal", border=0, align='R')
     pdf.cell(30, 10, f"{subtotal:.2f}", border=1, align='R')
     pdf.ln()
     
-    if overall_discount > 0:
-        pdf.cell(160, 10, f"Discount ({overall_discount}%)", border=0, align='R')
-        pdf.cell(30, 10, f"-{discount_amount:.2f}", border=1, align='R')
-        pdf.ln()
-    
-    if amount_discount > 0:
-        pdf.cell(160, 10, "Amount Discount", border=0, align='R')
-        pdf.cell(30, 10, f"-{amount_discount:.2f}", border=1, align='R')
-        pdf.ln()
+    pdf.cell(160, 10, "Total Discount", border=0, align='R')
+    pdf.cell(30, 10, f"-{total_discount:.2f}", border=1, align='R')
+    pdf.ln()
     
     pdf.cell(160, 10, "Taxable Amount", border=0, align='R')
     pdf.cell(30, 10, f"{taxable_amount:.2f}", border=1, align='R')
@@ -606,11 +595,11 @@ def main():
             visit_page()
         else:
             attendance_page()
+
 def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
     
-    # Add tabs for new sale and sales history
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
@@ -628,24 +617,10 @@ def sales_page():
 
         quantities = []
         product_discounts = []
+        
         if selected_products:
-            # Display product prices and discount options in a table-like format
-            st.markdown("### Product Pricing & Discounts")
+            st.markdown("### Product Details")
             
-            # Create header
-            cols = st.columns([4, 2, 2, 2, 2])
-            with cols[0]:
-                st.markdown("**Product**")
-            with cols[1]:
-                st.markdown("**Price (INR)**")
-            with cols[2]:
-                st.markdown("**Quantity**")
-            with cols[3]:
-                st.markdown("**Discount %**")
-            with cols[4]:
-                st.markdown("**Subtotal**")
-            
-            subtotal = 0
             for product in selected_products:
                 product_data = Products[Products['Product Name'] == product].iloc[0]
                 
@@ -654,77 +629,47 @@ def sales_page():
                 else:
                     unit_price = float(product_data['Price'])
                 
-                cols = st.columns([4, 2, 2, 2, 2])
+                cols = st.columns([3, 2, 2, 2])
                 with cols[0]:
                     st.text(product)
                 with cols[1]:
                     st.text(f"₹{unit_price:.2f}")
                 with cols[2]:
-                    qty = st.number_input(f"Qty for {product}", min_value=1, value=1, step=1, 
+                    qty = st.number_input(f"Qty", min_value=1, value=1, step=1, 
                                         key=f"qty_{product}", label_visibility="collapsed")
                     quantities.append(qty)
                 with cols[3]:
-                    discount = st.number_input(f"Discount % for {product}", min_value=0.0, max_value=100.0, 
+                    discount = st.number_input(f"Discount %", min_value=0.0, max_value=100.0, 
                                              value=0.0, step=1.0, key=f"discount_{product}", 
                                              label_visibility="collapsed")
                     product_discounts.append(discount)
-                with cols[4]:
-                    item_total = unit_price * qty * (1 - discount/100)
-                    st.text(f"₹{item_total:.2f}")
-                    subtotal += item_total
             
-            # Calculate taxes
-            tax_rate = 0.18  # 18% GST
+            # Calculate and display totals
+            subtotal = 0
+            total_discount = 0
+            
+            for product, qty, discount in zip(selected_products, quantities, product_discounts):
+                product_data = Products[Products['Product Name'] == product].iloc[0]
+                if discount_category in product_data:
+                    unit_price = float(product_data[discount_category])
+                else:
+                    unit_price = float(product_data['Price'])
+                
+                discount_amount = unit_price * (discount / 100)
+                subtotal += (unit_price - discount_amount) * qty
+                total_discount += discount_amount * qty
+            
+            tax_rate = 0.18
             tax_amount = subtotal * tax_rate
             grand_total = subtotal + tax_amount
             
-            # Display final amount breakdown
             st.markdown("---")
             st.markdown("### Final Amount Calculation")
             st.markdown(f"Subtotal: ₹{subtotal:.2f}")
+            st.markdown(f"Total Discount: ₹{total_discount:.2f}")
+            st.markdown(f"Taxable Amount: ₹{subtotal:.2f}")
             st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
             st.markdown(f"**Grand Total: ₹{grand_total:.2f}**")
-
-        st.subheader("Payment Details")
-        payment_status = st.selectbox("Payment Status", ["pending", "paid", "partial paid"], key="payment_status")
-
-        amount_paid = 0.0
-        payment_receipt = None
-
-        if payment_status == "partial paid":
-            amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid_partial")
-            payment_receipt = st.file_uploader("Upload Payment Receipt", type=["jpg", "jpeg", "png", "pdf"], key="payment_receipt_partial")
-        elif payment_status == "paid":
-            amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid_full")
-            payment_receipt = st.file_uploader("Upload Payment Receipt", type=["jpg", "jpeg", "png", "pdf"], key="payment_receipt_full")
-
-        st.subheader("Distributor Details")
-        distributor_option = st.radio("Distributor Selection", ["Select from list", "None"], key="distributor_option")
-        
-        distributor_firm_name = ""
-        distributor_id = ""
-        distributor_contact_person = ""
-        distributor_contact_number = ""
-        distributor_email = ""
-        distributor_territory = ""
-        
-        if distributor_option == "Select from list":
-            distributor_names = Distributors['Firm Name'].tolist()
-            selected_distributor = st.selectbox("Select Distributor", distributor_names, key="distributor_select")
-            distributor_details = Distributors[Distributors['Firm Name'] == selected_distributor].iloc[0]
-            
-            distributor_firm_name = selected_distributor
-            distributor_id = distributor_details['Distributor ID']
-            distributor_contact_person = distributor_details['Contact Person']
-            distributor_contact_number = distributor_details['Contact Number']
-            distributor_email = distributor_details['Email ID']
-            distributor_territory = distributor_details['Territory']
-            
-            st.text_input("Distributor ID", value=distributor_id, disabled=True, key="distributor_id_display")
-            st.text_input("Contact Person", value=distributor_contact_person, disabled=True, key="distributor_contact_person_display")
-            st.text_input("Contact Number", value=distributor_contact_number, disabled=True, key="distributor_contact_number_display")
-            st.text_input("Email", value=distributor_email, disabled=True, key="distributor_email_display")
-            st.text_input("Territory", value=distributor_territory, disabled=True, key="distributor_territory_display")
 
         st.subheader("Outlet Details")
         outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="outlet_option")
@@ -734,19 +679,20 @@ def sales_page():
             selected_outlet = st.selectbox("Select Outlet", outlet_names, key="outlet_select")
             outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
             
+            # Display outlet details
+            st.text_input("Outlet Name", value=selected_outlet, disabled=True, key="outlet_name_display")
+            st.text_input("GST Number", value=outlet_details['GST'], disabled=True, key="outlet_gst_display")
+            st.text_input("Contact Number", value=outlet_details['Contact'], disabled=True, key="outlet_contact_display")
+            st.text_area("Address", value=outlet_details['Address'], disabled=True, key="outlet_address_display")
+            st.text_input("State", value=outlet_details['State'], disabled=True, key="outlet_state_display")
+            st.text_input("City", value=outlet_details['City'], disabled=True, key="outlet_city_display")
+            
             customer_name = selected_outlet
             gst_number = outlet_details['GST']
             contact_number = outlet_details['Contact']
             address = outlet_details['Address']
             state = outlet_details['State']
             city = outlet_details['City']
-            
-            # Display outlet details in a similar way to distributor details
-            st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
-            st.text_input("Contact Number", value=contact_number, disabled=True, key="outlet_contact_display")
-            st.text_area("Address", value=address, disabled=True, key="outlet_address_display")
-            st.text_input("State", value=state, disabled=True, key="outlet_state_display")
-            st.text_input("City", value=city, disabled=True, key="outlet_city_display")
         else:
             customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
             gst_number = st.text_input("GST Number", key="manual_gst_number")
@@ -761,10 +707,6 @@ def sales_page():
                 
                 employee_selfie_path = save_uploaded_file(employee_selfie, "employee_selfies") if employee_selfie else None
                 payment_receipt_path = save_uploaded_file(payment_receipt, "payment_receipts") if payment_receipt else None
-                
-                # Calculate overall discount for logging (average of product discounts)
-                overall_discount = sum(product_discounts) / len(product_discounts) if product_discounts else 0
-                amount_discount = 0  # We removed this field from the UI
                 
                 pdf, pdf_path = generate_invoice(
                     customer_name, gst_number, contact_number, address, state, city,
