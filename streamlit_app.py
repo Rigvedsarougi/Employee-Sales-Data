@@ -606,7 +606,6 @@ def main():
             visit_page()
         else:
             attendance_page()
-
 def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
@@ -628,18 +627,21 @@ def sales_page():
         selected_products = st.multiselect("Select Products", product_names, key="product_selection")
 
         quantities = []
+        discounts = []  # To store product-wise discounts
         if selected_products:
             # Display product prices based on discount category
-            st.markdown("### Product Prices")
-            price_cols = st.columns(4)
+            st.markdown("### Product Details")
+            price_cols = st.columns(5)
             with price_cols[0]:
                 st.markdown("**Product**")
             with price_cols[1]:
-                st.markdown(f"**Price ({discount_category})**")
+                st.markdown("**Price (INR)**")
             with price_cols[2]:
-                st.markdown("**Quantity**")
+                st.markdown("**Discount (INR)**")
             with price_cols[3]:
-                st.markdown("**Total**")
+                st.markdown("**Quantity**")
+            with price_cols[4]:
+                st.markdown("**Amount**")
             
             subtotal = 0
             for product in selected_products:
@@ -650,21 +652,35 @@ def sales_page():
                 else:
                     unit_price = float(product_data['Price'])
                 
-                cols = st.columns(4)
+                cols = st.columns(5)
                 with cols[0]:
                     st.text(product)
                 with cols[1]:
                     st.text(f"₹{unit_price:.2f}")
                 with cols[2]:
-                    qty = st.number_input(f"Qty for {product}", min_value=1, value=1, step=1, 
-                                        key=f"qty_{product}", label_visibility="collapsed")
-                    quantities.append(qty)
+                    discount = st.number_input(f"Discount for {product}", 
+                                            min_value=0.0, 
+                                            max_value=unit_price, 
+                                            value=0.0,
+                                            step=1.0,
+                                            key=f"discount_{product}", 
+                                            label_visibility="collapsed")
+                    discounts.append(discount)
                 with cols[3]:
-                    item_total = unit_price * qty
+                    qty = st.number_input(f"Qty for {product}", 
+                                        min_value=1, 
+                                        value=1, 
+                                        step=1, 
+                                        key=f"qty_{product}", 
+                                        label_visibility="collapsed")
+                    quantities.append(qty)
+                with cols[4]:
+                    item_total = (unit_price - discount) * qty
                     st.text(f"₹{item_total:.2f}")
-                    subtotal += item_total
+                
+                subtotal += item_total
             
-            # Calculate taxes and grand total
+            # Calculate taxes
             tax_rate = 0.18  # 18% GST
             tax_amount = subtotal * tax_rate
             cgst_amount = tax_amount / 2
@@ -734,6 +750,14 @@ def sales_page():
             address = outlet_details['Address']
             state = outlet_details['State']
             city = outlet_details['City']
+            
+            # Display outlet details like distributor details
+            st.text_input("Outlet Name", value=customer_name, disabled=True, key="outlet_name_display")
+            st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
+            st.text_input("Contact Number", value=contact_number, disabled=True, key="outlet_contact_display")
+            st.text_area("Address", value=address, disabled=True, key="outlet_address_display")
+            st.text_input("State", value=state, disabled=True, key="outlet_state_display")
+            st.text_input("City", value=city, disabled=True, key="outlet_city_display")
         else:
             customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
             gst_number = st.text_input("GST Number", key="manual_gst_number")
@@ -749,11 +773,13 @@ def sales_page():
                 employee_selfie_path = save_uploaded_file(employee_selfie, "employee_selfies") if employee_selfie else None
                 payment_receipt_path = save_uploaded_file(payment_receipt, "payment_receipts") if payment_receipt else None
                 
-                # Set overall_discount and amount_discount to 0 since we're using product-wise discounts
+                # Calculate overall discount for logging (sum of all product discounts)
+                total_discount = sum(discount * qty for discount, qty in zip(discounts, quantities))
+                
                 pdf, pdf_path = generate_invoice(
                     customer_name, gst_number, contact_number, address, state, city,
                     selected_products, quantities, discount_category, 
-                    selected_employee, 0, 0,  # No overall or amount discounts
+                    selected_employee, 0, total_discount,  # Using 0 for percentage discount, total_discount for amount
                     payment_status, amount_paid, employee_selfie_path, 
                     payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
