@@ -904,64 +904,121 @@ def visit_page():
                  key="get_location_visit",
                  help="Click to automatically capture your current location")
 
-    st.subheader("Outlet Details")
-    outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="visit_outlet_option")
+    tab1, tab2 = st.tabs(["New Visit", "Visit History"])
     
-    if outlet_option == "Select from list":
-        outlet_names = Outlet['Shop Name'].tolist()
-        selected_outlet = st.selectbox("Select Outlet", outlet_names, key="visit_outlet_select")
-        outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
+    with tab1:
+        st.subheader("Outlet Details")
+        outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="visit_outlet_option")
         
-        outlet_name = selected_outlet
-        outlet_contact = outlet_details['Contact']
-        outlet_address = outlet_details['Address']
-        outlet_state = outlet_details['State']
-        outlet_city = outlet_details['City']
-    else:
-        outlet_name = st.text_input("Outlet Name", key="visit_outlet_name")
-        outlet_contact = st.text_input("Outlet Contact", key="visit_outlet_contact")
-        outlet_address = st.text_area("Outlet Address", key="visit_outlet_address")
-        outlet_state = st.text_input("Outlet State", "Uttar Pradesh", key="visit_outlet_state")
-        outlet_city = st.text_input("Outlet City", "Noida", key="visit_outlet_city")
-
-    st.subheader("Visit Details")
-    visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
-    visit_notes = st.text_area("Visit Notes", key="visit_notes")
-    
-    st.subheader("Visit Verification")
-    visit_selfie = st.file_uploader("Upload Visit Selfie", type=["jpg", "jpeg", "png"], key="visit_selfie")
-
-    st.subheader("Time Tracking")
-    col1, col2 = st.columns(2)
-    with col1:
-        entry_time = st.time_input("Entry Time", value=None, key="visit_entry_time")
-    with col2:
-        exit_time = st.time_input("Exit Time", value=None, key="visit_exit_time")
-
-    if st.button("Record Visit", key="record_visit_button"):
-        if outlet_name:
-            today = datetime.now().date()
+        if outlet_option == "Select from list":
+            outlet_names = Outlet['Shop Name'].tolist()
+            selected_outlet = st.selectbox("Select Outlet", outlet_names, key="visit_outlet_select")
+            outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
             
-            if entry_time is None:
-                entry_time = datetime.now().time()
-            if exit_time is None:
-                exit_time = datetime.now().time()
-                
-            entry_datetime = datetime.combine(today, entry_time)
-            exit_datetime = datetime.combine(today, exit_time)
+            outlet_name = selected_outlet
+            outlet_contact = outlet_details['Contact']
+            outlet_address = outlet_details['Address']
+            outlet_state = outlet_details['State']
+            outlet_city = outlet_details['City']
             
-            visit_selfie_path = save_uploaded_file(visit_selfie, "visit_selfies") if visit_selfie else None
-            
-            visit_id = record_visit(
-                selected_employee, outlet_name, outlet_contact, outlet_address,
-                outlet_state, outlet_city, visit_purpose, visit_notes, 
-                visit_selfie_path, entry_datetime, exit_datetime,
-                visit_location
-            )
-            
-            st.success(f"Visit {visit_id} recorded successfully!")
+            # Show outlet details like distributor details
+            st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display")
+            st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
+            st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
+            st.text_input("Outlet City", value=outlet_city, disabled=True, key="outlet_city_display")
         else:
-            st.error("Please fill all required fields.")
+            outlet_name = st.text_input("Outlet Name", key="visit_outlet_name")
+            outlet_contact = st.text_input("Outlet Contact", key="visit_outlet_contact")
+            outlet_address = st.text_area("Outlet Address", key="visit_outlet_address")
+            outlet_state = st.text_input("Outlet State", "Uttar Pradesh", key="visit_outlet_state")
+            outlet_city = st.text_input("Outlet City", "Noida", key="visit_outlet_city")
+
+        st.subheader("Visit Details")
+        visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
+        visit_notes = st.text_area("Visit Notes", key="visit_notes")
+        
+        st.subheader("Visit Verification")
+        visit_selfie = st.file_uploader("Upload Visit Selfie", type=["jpg", "jpeg", "png"], key="visit_selfie")
+
+        st.subheader("Time Tracking")
+        col1, col2 = st.columns(2)
+        with col1:
+            entry_time = st.time_input("Entry Time", value=None, key="visit_entry_time")
+        with col2:
+            exit_time = st.time_input("Exit Time", value=None, key="visit_exit_time")
+
+        if st.button("Record Visit", key="record_visit_button"):
+            if outlet_name:
+                today = datetime.now().date()
+                
+                if entry_time is None:
+                    entry_time = datetime.now().time()
+                if exit_time is None:
+                    exit_time = datetime.now().time()
+                    
+                entry_datetime = datetime.combine(today, entry_time)
+                exit_datetime = datetime.combine(today, exit_time)
+                
+                visit_selfie_path = save_uploaded_file(visit_selfie, "visit_selfies") if visit_selfie else None
+                
+                visit_id = record_visit(
+                    selected_employee, outlet_name, outlet_contact, outlet_address,
+                    outlet_state, outlet_city, visit_purpose, visit_notes, 
+                    visit_selfie_path, entry_datetime, exit_datetime,
+                    visit_location
+                )
+                
+                st.success(f"Visit {visit_id} recorded successfully!")
+            else:
+                st.error("Please fill all required fields.")
+    
+    with tab2:
+        st.subheader("Previous Visits")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            visit_id_search = st.text_input("Visit ID", key="visit_id_search")
+        with col2:
+            visit_date_search = st.date_input("Visit Date", key="visit_date_search")
+        with col3:
+            outlet_name_search = st.text_input("Outlet Name", key="visit_outlet_search")
+            
+        if st.button("Search Visits", key="search_visits_button"):
+            try:
+                visit_data = conn.read(worksheet="Visits", usecols=list(range(len(VISIT_SHEET_COLUMNS))), ttl=5)
+                visit_data = visit_data.dropna(how="all")
+                
+                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+                filtered_data = visit_data[visit_data['Employee Code'] == employee_code]
+                
+                if visit_id_search:
+                    filtered_data = filtered_data[filtered_data['Visit ID'].str.contains(visit_id_search, case=False)]
+                if visit_date_search:
+                    date_str = visit_date_search.strftime("%d-%m-%Y")
+                    filtered_data = filtered_data[filtered_data['Visit Date'] == date_str]
+                if outlet_name_search:
+                    filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
+                
+                if not filtered_data.empty:
+                    # Display only the most relevant columns
+                    display_columns = [
+                        'Visit ID', 'Visit Date', 'Outlet Name', 'Visit Purpose', 
+                        'Entry Time', 'Exit Time', 'Visit Duration (minutes)', 'Location'
+                    ]
+                    st.dataframe(filtered_data[display_columns])
+                    
+                    # Add download option
+                    csv = filtered_data.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        "Download as CSV",
+                        csv,
+                        "visit_history.csv",
+                        "text/csv",
+                        key='download-visit-csv'
+                    )
+                else:
+                    st.warning("No matching visit records found")
+            except Exception as e:
+                st.error(f"Error retrieving visit data: {e}")
 
 def attendance_page():
     st.title("Attendance Management")
