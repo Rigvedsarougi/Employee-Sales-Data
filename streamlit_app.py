@@ -1003,7 +1003,7 @@ def visit_page():
                 if not filtered_data.empty:
                     # Display only the most relevant columns
                     display_columns = [
-                        'Visit ID', 'Visit Date', 'Outlet Name', 'Visit Purpose', 
+                        'Visit ID', 'Visit Date', 'Outlet Name', 'Visit Purpose', 'Visit Notes',
                         'Entry Time', 'Exit Time', 'Visit Duration (minutes)', 'Location'
                     ]
                     st.dataframe(filtered_data[display_columns])
