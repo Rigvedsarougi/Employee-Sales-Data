@@ -792,6 +792,12 @@ def sales_page():
             address = outlet_details['Address']
             state = outlet_details['State']
             city = outlet_details['City']
+            
+            # Show outlet details like distributor details
+            st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display")
+            st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
+            st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
+            st.text_input("Outlet City", value=outlet_city, disabled=True, key="outlet_city_display")
         else:
             customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
             gst_number = st.text_input("GST Number", key="manual_gst_number")
