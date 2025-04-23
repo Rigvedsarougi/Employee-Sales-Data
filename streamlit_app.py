@@ -7,52 +7,10 @@ import os
 import uuid
 from PIL import Image
 
-# Updated JavaScript for geolocation
+# Updated JavaScript for geolocation (removed since we're replacing location with remarks)
 LOCATION_JS = """
 <script>
-function getLocation(callback) {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            function(position) {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
-                callback(googleMapsLink);
-            },
-            function(error) {
-                let errorMessage = "Error getting location: ";
-                switch(error.code) {
-                    case error.PERMISSION_DENIED:
-                        errorMessage += "User denied the request for Geolocation.";
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        errorMessage += "Location information is unavailable.";
-                        break;
-                    case error.TIMEOUT:
-                        errorMessage += "The request to get user location timed out.";
-                        break;
-                    case error.UNKNOWN_ERROR:
-                        errorMessage += "An unknown error occurred.";
-                        break;
-                }
-                callback(null, errorMessage);
-            }
-        );
-    } else {
-        callback(null, "Geolocation is not supported by this browser.");
-    }
-}
-
-// Function to update the location input field
-function updateLocationInput(inputId, location) {
-    const inputElement = window.parent.document.getElementById(inputId);
-    if (inputElement) {
-        inputElement.value = location;
-        // Trigger change event to ensure Streamlit detects the change
-        const event = new Event('input', { bubbles: true });
-        inputElement.dispatchEvent(event);
-    }
-}
+// This can be removed since we're not using location anymore
 </script>
 """
 
@@ -124,7 +82,7 @@ SALES_SHEET_COLUMNS = [
     "Payment Receipt Path",
     "Employee Selfie Path",
     "Invoice PDF Path",
-    "Location"
+    "Remarks"  # Changed from Location to Remarks
 ]
 
 VISIT_SHEET_COLUMNS = [
@@ -145,7 +103,7 @@ VISIT_SHEET_COLUMNS = [
     "Visit Notes",
     "Visit Selfie Path",
     "Visit Status",
-    "Location"
+    "Remarks"  # Changed from Location to Remarks
 ]
 
 ATTENDANCE_SHEET_COLUMNS = [
@@ -259,7 +217,7 @@ def log_attendance_to_gsheet(conn, attendance_data):
 def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, product_discounts,
                     discount_category, employee_name, payment_status, amount_paid, employee_selfie_path, payment_receipt_path, invoice_number,
                     transaction_type, distributor_firm_name="", distributor_id="", distributor_contact_person="",
-                    distributor_contact_number="", distributor_email="", distributor_territory="", location=""):
+                    distributor_contact_number="", distributor_email="", distributor_territory="", remarks=""):
     pdf = PDF()
     pdf.alias_nb_pages()
     pdf.add_page()
@@ -312,7 +270,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     pdf.ln()
 
     # Table rows
-    pdf.set_font("Arial", '', 10)
+    pdf.set_font('Arial', '', 10)
     sales_data = []
     tax_rate = 0.18  # 18% GST
     
@@ -465,7 +423,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
             "Payment Receipt Path": payment_receipt_path if payment_status in ["paid", "partial paid"] else "",
             "Employee Selfie Path": employee_selfie_path,
             "Invoice PDF Path": f"invoices/{invoice_number}.pdf",
-            "Location": location
+            "Remarks": remarks  # Changed from Location to Remarks
         })
 
     # Save the PDF
@@ -479,7 +437,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     return pdf, pdf_path
 
 def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, outlet_state, outlet_city, 
-                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time, location=""):
+                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time, remarks=""):
     visit_id = generate_visit_id()
     visit_date = datetime.now().strftime("%d-%m-%Y")
     
@@ -503,7 +461,7 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, out
         "Visit Notes": visit_notes,
         "Visit Selfie Path": visit_selfie_path,
         "Visit Status": "completed",
-        "Location": location
+        "Remarks": remarks  # Changed from Location to Remarks
     }
     
     visit_df = pd.DataFrame([visit_data])
@@ -630,33 +588,12 @@ def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
     
-    # Location section at the top
-    st.subheader("Location Verification")
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        sales_location = st.text_input("Enter your current location (Google Maps link or address)", 
-                                     key="location_input_sales")
-    with col2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.button("Get Current Location", 
-                 on_click=lambda: st.markdown(
-                     """
-                     <script>
-                     getLocation(function(location, error) {
-                         if (location) {
-                             updateLocationInput('location_input_sales', location);
-                             // Show success message
-                             window.parent.document.dispatchEvent(new Event('locationCaptured'));
-                         } else {
-                             alert(error || "Failed to get location");
-                         }
-                     });
-                     </script>
-                     """,
-                     unsafe_allow_html=True
-                 ),
-                 key="get_location_sales",
-                 help="Click to automatically capture your current location")
+    # Removed location section and added remarks instead
+    st.subheader("Additional Remarks")
+    sales_remarks = st.text_area("Enter any additional remarks (optional)", 
+                               key="remarks_input_sales",
+                               max_chars=500,
+                               height=100)
     
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
@@ -728,7 +665,7 @@ def sales_page():
                 subtotal += item_total
             
 
-            # In the sales_page() function, replace the final amount calculation with:
+            # Final amount calculation
             st.markdown("---")
             st.markdown("### Final Amount Calculation")
             st.markdown(f"Subtotal: ₹{subtotal:.2f}")
@@ -793,7 +730,12 @@ def sales_page():
             state = outlet_details['State']
             city = outlet_details['City']
             
-
+            # Show outlet details like distributor details
+            st.text_input("Outlet Contact", value=contact_number, disabled=True, key="outlet_contact_display")
+            st.text_input("Outlet Address", value=address, disabled=True, key="outlet_address_display")
+            st.text_input("Outlet State", value=state, disabled=True, key="outlet_state_display")
+            st.text_input("Outlet City", value=city, disabled=True, key="outlet_city_display")
+            st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
         else:
             customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
             gst_number = st.text_input("GST Number", key="manual_gst_number")
@@ -816,7 +758,7 @@ def sales_page():
                     payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
                     distributor_contact_number, distributor_email, distributor_territory,
-                    sales_location
+                    sales_remarks  # Changed from location to remarks
                 )
                 
                 with open(pdf_path, "rb") as f:
@@ -859,7 +801,7 @@ def sales_page():
                     filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
                 
                 if not filtered_data.empty:
-                    st.dataframe(filtered_data[['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 'Quantity', 'Grand Total', 'Location']])
+                    st.dataframe(filtered_data[['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 'Quantity', 'Grand Total', 'Remarks']])
                     
                     csv = filtered_data.to_csv(index=False).encode('utf-8')
                     st.download_button(
@@ -878,33 +820,12 @@ def visit_page():
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
 
-    # Location section at the top
-    st.subheader("Location Verification")
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        visit_location = st.text_input("Enter your current location (Google Maps link or address)", 
-                                     key="location_input_visit")
-    with col2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.button("Get Current Location", 
-                 on_click=lambda: st.markdown(
-                     """
-                     <script>
-                     getLocation(function(location, error) {
-                         if (location) {
-                             updateLocationInput('location_input_visit', location);
-                             // Show success message
-                             window.parent.document.dispatchEvent(new Event('locationCaptured'));
-                         } else {
-                             alert(error || "Failed to get location");
-                         }
-                     });
-                     </script>
-                     """,
-                     unsafe_allow_html=True
-                 ),
-                 key="get_location_visit",
-                 help="Click to automatically capture your current location")
+    # Removed location section and added remarks instead
+    st.subheader("Additional Remarks")
+    visit_remarks = st.text_area("Enter any additional remarks (optional)", 
+                              key="remarks_input_visit",
+                              max_chars=500,
+                              height=100)
 
     tab1, tab2 = st.tabs(["New Visit", "Visit History"])
     
@@ -967,7 +888,7 @@ def visit_page():
                     selected_employee, outlet_name, outlet_contact, outlet_address,
                     outlet_state, outlet_city, visit_purpose, visit_notes, 
                     visit_selfie_path, entry_datetime, exit_datetime,
-                    visit_location
+                    visit_remarks  # Changed from location to remarks
                 )
                 
                 st.success(f"Visit {visit_id} recorded successfully!")
@@ -1004,7 +925,7 @@ def visit_page():
                     # Display only the most relevant columns
                     display_columns = [
                         'Visit ID', 'Visit Date', 'Outlet Name', 'Visit Purpose', 'Visit Notes',
-                        'Entry Time', 'Exit Time', 'Visit Duration (minutes)', 'Location'
+                        'Entry Time', 'Exit Time', 'Visit Duration (minutes)', 'Remarks'
                     ]
                     st.dataframe(filtered_data[display_columns])
                     
