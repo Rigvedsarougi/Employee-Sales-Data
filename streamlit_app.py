@@ -142,7 +142,8 @@ SALES_SHEET_COLUMNS = [
     "Payment Receipt Path",
     "Employee Selfie Path",
     "Invoice PDF Path",
-    "Remarks"
+    "Remarks",
+    "Delivery Status"  # Added new column for delivery status
 ]
 
 VISIT_SHEET_COLUMNS = [
@@ -266,6 +267,23 @@ def log_sales_to_gsheet(conn, sales_data):
     except Exception as e:
         st.error(f"Error logging sales data: {e}")
         st.stop()
+
+def update_delivery_status(conn, invoice_number, product_name, new_status):
+    try:
+        # Read all existing data
+        sales_data = conn.read(worksheet="Sales", ttl=5)
+        sales_data = sales_data.dropna(how="all")
+        
+        # Update the delivery status for the specific record
+        mask = (sales_data['Invoice Number'] == invoice_number) & (sales_data['Product Name'] == product_name)
+        sales_data.loc[mask, 'Delivery Status'] = new_status
+        
+        # Write back the updated data
+        conn.update(worksheet="Sales", data=sales_data)
+        return True
+    except Exception as e:
+        st.error(f"Error updating delivery status: {e}")
+        return False
 
 def log_visit_to_gsheet(conn, visit_data):
     try:
@@ -414,7 +432,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     # Payment Status
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"Payment Status: {payment_status.upper()}", ln=True)
-    if payment_status in ["paid", "partial paid"]:
+    if payment_status == "paid":
         pdf.cell(0, 10, f"Amount Paid: {amount_paid} INR", ln=True)
     pdf.ln(10)
     
@@ -424,40 +442,6 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     pdf.set_font("Arial", '', 10)
     pdf.multi_cell(0, 5, bank_details)
     
-    # Attachments
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "Attachments", ln=True)
-    pdf.ln(10)
-    
-    if employee_selfie_path:
-        try:
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(0, 10, "Employee Selfie:", ln=True)
-            img = Image.open(employee_selfie_path)
-            img.thumbnail((150, 150))
-            temp_path = f"temp_{os.path.basename(employee_selfie_path)}"
-            img.save(temp_path)
-            pdf.image(temp_path, x=10, y=pdf.get_y(), w=50)
-            pdf.ln(60)
-            os.remove(temp_path)
-        except Exception as e:
-            st.error(f"Error adding employee selfie: {e}")
-    
-    if payment_receipt_path and payment_status in ["paid", "partial paid"]:
-        try:
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(0, 10, "Payment Receipt:", ln=True)
-            img = Image.open(payment_receipt_path)
-            img.thumbnail((150, 150))
-            temp_path = f"temp_{os.path.basename(payment_receipt_path)}"
-            img.save(temp_path)
-            pdf.image(temp_path, x=10, y=pdf.get_y(), w=50)
-            pdf.ln(60)
-            os.remove(temp_path)
-        except Exception as e:
-            st.error(f"Error adding payment receipt: {e}")
-
     # Prepare sales data for logging
     for idx, (product, quantity, prod_discount) in enumerate(zip(selected_products, quantities, product_discounts)):
         product_data = Products[Products['Product Name'] == product].iloc[0]
@@ -503,11 +487,12 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
             "SGST Amount": (item_total * tax_rate) / 2,
             "Grand Total": item_total + (item_total * tax_rate),
             "Payment Status": payment_status,
-            "Amount Paid": amount_paid if payment_status in ["paid", "partial paid"] else 0,
-            "Payment Receipt Path": payment_receipt_path if payment_status in ["paid", "partial paid"] else "",
+            "Amount Paid": amount_paid if payment_status == "paid" else 0,
+            "Payment Receipt Path": payment_receipt_path if payment_status == "paid" else "",
             "Employee Selfie Path": employee_selfie_path,
             "Invoice PDF Path": f"invoices/{invoice_number}.pdf",
-            "Remarks": remarks
+            "Remarks": remarks,
+            "Delivery Status": "pending"  # Default status is pending
         })
 
     # Save the PDF
@@ -696,9 +681,6 @@ def sales_page():
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
-        st.subheader("Employee Verification")
-        employee_selfie = st.file_uploader("Upload Employee Selfie", type=["jpg", "jpeg", "png"], key="employee_selfie", label_visibility="collapsed")
-
         discount_category = Person[Person['Employee Name'] == selected_employee]['Discount Category'].values[0]
 
         st.subheader("Transaction Details")
@@ -773,17 +755,12 @@ def sales_page():
             
 
         st.subheader("Payment Details")
-        payment_status = st.selectbox("Payment Status", ["pending", "paid", "partial paid"], key="payment_status")
+        payment_status = st.selectbox("Payment Status", ["pending", "paid"], key="payment_status")
 
         amount_paid = 0.0
-        payment_receipt = None
 
-        if payment_status == "partial paid":
-            amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid_partial")
-            payment_receipt = st.file_uploader("Upload Payment Receipt", type=["jpg", "jpeg", "png", "pdf"], key="payment_receipt_partial", label_visibility="collapsed")
-        elif payment_status == "paid":
-            amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid_full")
-            payment_receipt = st.file_uploader("Upload Payment Receipt", type=["jpg", "jpeg", "png", "pdf"], key="payment_receipt_full", label_visibility="collapsed")
+        if payment_status == "paid":
+            amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid")
 
         st.subheader("Distributor Details")
         distributor_option = st.radio("Distributor Selection", ["Select from list", "None"], key="distributor_option")
@@ -846,8 +823,9 @@ def sales_page():
             if selected_products and customer_name:
                 invoice_number = generate_invoice_number()
                 
-                employee_selfie_path = save_uploaded_file(employee_selfie, "employee_selfies") if employee_selfie else None
-                payment_receipt_path = save_uploaded_file(payment_receipt, "payment_receipts") if payment_receipt else None
+                # No employee selfie or payment receipt uploads
+                employee_selfie_path = None
+                payment_receipt_path = None
 
                 pdf, pdf_path = generate_invoice(
                     customer_name, gst_number, contact_number, address, state, city,
@@ -899,8 +877,46 @@ def sales_page():
                     filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
                 
                 if not filtered_data.empty:
-                    st.dataframe(filtered_data[['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 'Quantity', 'Grand Total', 'Remarks']])
+                    # Display the data with delivery status
+                    display_cols = ['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 
+                                  'Quantity', 'Grand Total', 'Payment Status', 'Delivery Status']
                     
+                    # Create editable dataframe
+                    edited_data = st.data_editor(
+                        filtered_data[display_cols],
+                        column_config={
+                            "Delivery Status": st.column_config.SelectboxColumn(
+                                "Delivery Status",
+                                help="Update delivery status",
+                                width="medium",
+                                options=["pending", "delivered"],
+                                required=True
+                            )
+                        },
+                        key="sales_history_editor",
+                        use_container_width=True
+                    )
+                    
+                    # Add button to update status
+                    if st.button("Update Delivery Status"):
+                        for index, row in edited_data.iterrows():
+                            original_row = filtered_data.iloc[index]
+                            if row['Delivery Status'] != original_row['Delivery Status']:
+                                success = update_delivery_status(
+                                    conn,
+                                    row['Invoice Number'],
+                                    row['Product Name'],
+                                    row['Delivery Status']
+                                )
+                                if success:
+                                    st.success(f"Updated delivery status for {row['Product Name']} in invoice {row['Invoice Number']}")
+                                else:
+                                    st.error(f"Failed to update delivery status for {row['Product Name']}")
+                        
+                        # Refresh the data after update
+                        st.rerun()
+                    
+                    # Add download options
                     csv = filtered_data.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         "Download as CSV",
@@ -909,6 +925,23 @@ def sales_page():
                         "text/csv",
                         key='download-csv'
                     )
+                    
+                    # Add download invoice button
+                    unique_invoices = filtered_data['Invoice Number'].unique()
+                    selected_invoice = st.selectbox("Select Invoice to Download", unique_invoices)
+                    
+                    invoice_path = f"invoices/{selected_invoice}.pdf"
+                    if os.path.exists(invoice_path):
+                        with open(invoice_path, "rb") as f:
+                            st.download_button(
+                                "Download Invoice PDF",
+                                f,
+                                file_name=f"{selected_invoice}.pdf",
+                                mime="application/pdf",
+                                key=f"download_invoice_{selected_invoice}"
+                            )
+                    else:
+                        st.warning("Invoice PDF not found")
                 else:
                     st.warning("No matching sales records found")
             except Exception as e:
@@ -954,9 +987,6 @@ def visit_page():
         visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
         visit_notes = st.text_area("Visit Notes", key="visit_notes")
         
-        st.subheader("Visit Verification")
-        visit_selfie = st.file_uploader("Upload Visit Selfie", type=["jpg", "jpeg", "png"], key="visit_selfie", label_visibility="collapsed")
-
         st.subheader("Time Tracking")
         col1, col2 = st.columns(2)
         with col1:
@@ -976,7 +1006,8 @@ def visit_page():
                 entry_datetime = datetime.combine(today, entry_time)
                 exit_datetime = datetime.combine(today, exit_time)
                 
-                visit_selfie_path = save_uploaded_file(visit_selfie, "visit_selfies") if visit_selfie else None
+                # No visit selfie upload
+                visit_selfie_path = None
                 
                 visit_id = record_visit(
                     selected_employee, outlet_name, outlet_contact, outlet_address,
@@ -1046,9 +1077,9 @@ def attendance_page():
         return
     
     st.subheader("Attendance Status")
-    status = st.radio("Select Status", ["Present", "Leave"], index=0, key="attendance_status")
+    status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
     
-    if status == "Present":
+    if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
         col1, col2 = st.columns([3, 1])
         with col1:
@@ -1084,7 +1115,7 @@ def attendance_page():
                 with st.spinner("Recording attendance..."):
                     attendance_id, error = record_attendance(
                         selected_employee,
-                        "Present",
+                        status,  # Will be "Present" or "Half Day"
                         location_link=live_location
                     )
                     
