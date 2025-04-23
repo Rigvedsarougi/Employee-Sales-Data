@@ -7,38 +7,7 @@ import os
 import uuid
 from PIL import Image
 
-LOCATION_JS = """
-<script>
-// This can be removed since we're not using location anymore
-</script>
-"""
 
-hide_streamlit_style = """
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
-    header {visibility: hidden;}
-    </style>
-""" + LOCATION_JS
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-hide_footer_style = """
-    <style>
-    footer {
-        visibility: hidden;
-    }
-    footer:after {
-        content: '';
-        display: none;
-    }
-    .css-15tx938.e8zbici2 {  /* This class targets the footer in some Streamlit builds */
-        display: none !important;
-    }
-    </style>
-"""
-
-st.markdown(hide_footer_style, unsafe_allow_html=True)
 # Display Title and Description
 st.title("Biolume: Management System")
 
