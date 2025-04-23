@@ -675,8 +675,8 @@ def sales_page():
     selected_employee = st.session_state.employee_name
     
     # Removed location section and added remarks instead
-    st.subheader("Additional Remarks")
-    sales_remarks = st.text_area("Enter any additional remarks (optional)", 
+    st.subheader("Current Location")
+    sales_remarks = st.text_area("Enter the Current Location", 
                                key="remarks_input_sales",
                                max_chars=500,
                                height=100)
@@ -907,8 +907,8 @@ def visit_page():
     selected_employee = st.session_state.employee_name
 
     # Removed location section and added remarks instead
-    st.subheader("Additional Remarks")
-    visit_remarks = st.text_area("Enter any additional remarks (optional)", 
+    st.subheader("Current Location")
+    visit_remarks = st.text_area("Enter your Current Location", 
                               key="remarks_input_visit",
                               max_chars=500,
                               height=100)
