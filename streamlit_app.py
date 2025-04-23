@@ -852,7 +852,6 @@ def sales_page():
     
 
     with tab2:
-    st.subheader("Previous Sales")
     col1, col2, col3 = st.columns(3)
     with col1:
         invoice_number_search = st.text_input("Invoice Number", key="invoice_search")
