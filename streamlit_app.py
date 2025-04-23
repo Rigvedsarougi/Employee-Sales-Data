@@ -7,7 +7,6 @@ import os
 import uuid
 from PIL import Image
 
-# Updated JavaScript for geolocation (removed since we're replacing location with remarks)
 LOCATION_JS = """
 <script>
 // This can be removed since we're not using location anymore
@@ -42,6 +41,70 @@ hide_footer_style = """
 st.markdown(hide_footer_style, unsafe_allow_html=True)
 # Display Title and Description
 st.title("Biolume: Management System")
+
+def validate_data_before_write(df, expected_columns):
+    """Validate data structure before writing to Google Sheets"""
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Data must be a pandas DataFrame")
+    
+    missing_cols = set(expected_columns) - set(df.columns)
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {missing_cols}")
+    
+    if df.empty:
+        raise ValueError("Cannot write empty dataframe")
+    
+    return True
+
+def backup_sheet(conn, worksheet_name):
+    """Create a timestamped backup of the worksheet"""
+    try:
+        data = conn.read(worksheet=worksheet_name, ttl=1)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"{worksheet_name}_backup_{timestamp}"
+        conn.update(worksheet=backup_name, data=data)
+    except Exception as e:
+        st.error(f"Warning: Failed to create backup - {str(e)}")
+
+def attempt_data_recovery(conn, worksheet_name):
+    """Attempt to recover from the most recent backup"""
+    try:
+        # Get list of all worksheets
+        all_sheets = conn.list_worksheets()
+        backups = [s for s in all_sheets if s.startswith(f"{worksheet_name}_backup")]
+        
+        if backups:
+            # Sort backups by timestamp (newest first)
+            backups.sort(reverse=True)
+            latest_backup = backups[0]
+            
+            # Restore from backup
+            backup_data = conn.read(worksheet=latest_backup)
+            conn.update(worksheet=worksheet_name, data=backup_data)
+            return True
+        return False
+    except Exception as e:
+        st.error(f"Recovery failed: {str(e)}")
+        return False
+
+def safe_sheet_operation(operation, *args, **kwargs):
+    """Wrapper for safe sheet operations with retry logic"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return operation(*args, **kwargs)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                st.error(f"Operation failed after {max_retries} attempts: {str(e)}")
+                if "Sales" in str(args) or "Visits" in str(args) or "Attendance" in str(args):
+                    worksheet_name = [a for a in args if isinstance(a, str) and ("Sales" in a or "Visits" in a or "Attendance" in a)][0]
+                    if attempt_data_recovery(conn, worksheet_name):
+                        st.success("Data recovery attempted from backup")
+                raise
+            time.sleep(1 * (attempt + 1))  # Exponential backoff
+
+
+
 
 # Constants
 SALES_SHEET_COLUMNS = [
@@ -150,6 +213,8 @@ os.makedirs("payment_receipts", exist_ok=True)
 os.makedirs("invoices", exist_ok=True)
 os.makedirs("visit_selfies", exist_ok=True)
 
+
+
 # Custom PDF class
 class PDF(FPDF):
     def header(self):
@@ -186,29 +251,50 @@ def save_uploaded_file(uploaded_file, folder):
 
 def log_sales_to_gsheet(conn, sales_data):
     try:
-        existing_sales_data = conn.read(worksheet="Sales", usecols=list(range(len(SALES_SHEET_COLUMNS))), ttl=5)
+        # Read all existing data first
+        existing_sales_data = conn.read(worksheet="Sales", ttl=5)
         existing_sales_data = existing_sales_data.dropna(how="all")
+        
+        # Ensure columns match (in case sheet structure changes)
+        sales_data = sales_data.reindex(columns=SALES_SHEET_COLUMNS)
+        
+        # Concatenate and drop any potential duplicates
         updated_sales_data = pd.concat([existing_sales_data, sales_data], ignore_index=True)
+        updated_sales_data = updated_sales_data.drop_duplicates(subset=["Invoice Number", "Product Name"], keep="last")
+        
+        # Write back all data
         conn.update(worksheet="Sales", data=updated_sales_data)
         st.success("Sales data successfully logged to Google Sheets!")
     except Exception as e:
         st.error(f"Error logging sales data: {e}")
+        st.stop()  # Prevent further execution if there's an error
 
 def log_visit_to_gsheet(conn, visit_data):
     try:
-        existing_visit_data = conn.read(worksheet="Visits", usecols=list(range(len(VISIT_SHEET_COLUMNS))), ttl=5)
+        existing_visit_data = conn.read(worksheet="Visits", ttl=5)
         existing_visit_data = existing_visit_data.dropna(how="all")
+        
+        visit_data = visit_data.reindex(columns=VISIT_SHEET_COLUMNS)
+        
         updated_visit_data = pd.concat([existing_visit_data, visit_data], ignore_index=True)
+        updated_visit_data = updated_visit_data.drop_duplicates(subset=["Visit ID"], keep="last")
+        
         conn.update(worksheet="Visits", data=updated_visit_data)
         st.success("Visit data successfully logged to Google Sheets!")
     except Exception as e:
         st.error(f"Error logging visit data: {e}")
+        st.stop()
 
 def log_attendance_to_gsheet(conn, attendance_data):
     try:
-        existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
+        existing_data = conn.read(worksheet="Attendance", ttl=5)
         existing_data = existing_data.dropna(how="all")
+        
+        attendance_data = attendance_data.reindex(columns=ATTENDANCE_SHEET_COLUMNS)
+        
         updated_data = pd.concat([existing_data, attendance_data], ignore_index=True)
+        updated_data = updated_data.drop_duplicates(subset=["Attendance ID"], keep="last")
+        
         conn.update(worksheet="Attendance", data=updated_data)
         return True, None
     except Exception as e:
@@ -786,7 +872,7 @@ def sales_page():
             
         if st.button("Search Sales", key="search_sales_button"):
             try:
-                sales_data = conn.read(worksheet="Sales", usecols=list(range(len(SALES_SHEET_COLUMNS))), ttl=5)
+                sales_data = conn.read(worksheet="Sales", ttl=5)
                 sales_data = sales_data.dropna(how="all")
                 
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
@@ -907,7 +993,7 @@ def visit_page():
             
         if st.button("Search Visits", key="search_visits_button"):
             try:
-                visit_data = conn.read(worksheet="Visits", usecols=list(range(len(VISIT_SHEET_COLUMNS))), ttl=5)
+                visit_data = conn.read(worksheet="Visits", ttl=5)
                 visit_data = visit_data.dropna(how="all")
                 
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
