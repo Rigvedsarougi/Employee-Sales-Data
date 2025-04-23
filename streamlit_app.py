@@ -40,8 +40,6 @@ hide_footer_style = """
 
 st.markdown(hide_footer_style, unsafe_allow_html=True)
 # Display Title and Description
-
-# Display Title and Description
 st.title("Biolume: Management System")
 
 def validate_data_before_write(df, expected_columns):
@@ -105,9 +103,6 @@ def safe_sheet_operation(operation, *args, **kwargs):
                 raise
             time.sleep(1 * (attempt + 1))  # Exponential backoff
 
-
-
-
 # Constants
 SALES_SHEET_COLUMNS = [
     "Invoice Number",
@@ -147,7 +142,7 @@ SALES_SHEET_COLUMNS = [
     "Payment Receipt Path",
     "Employee Selfie Path",
     "Invoice PDF Path",
-    "Remarks"  # Changed from Location to Remarks
+    "Remarks"
 ]
 
 VISIT_SHEET_COLUMNS = [
@@ -168,7 +163,7 @@ VISIT_SHEET_COLUMNS = [
     "Visit Notes",
     "Visit Selfie Path",
     "Visit Status",
-    "Remarks"  # Changed from Location to Remarks
+    "Remarks"
 ]
 
 ATTENDANCE_SHEET_COLUMNS = [
@@ -193,7 +188,7 @@ Outlet = pd.read_csv('Invoice - Outlet.csv')
 Person = pd.read_csv('Invoice - Person.csv')
 Distributors = pd.read_csv('Invoice - Distributors.csv')
 
-# Company Details
+# Company Details with ALLGEN TRADING logo
 company_name = "BIOLUME SKIN SCIENCE PRIVATE LIMITED"
 company_address = """Ground Floor Rampal Awana Complex,
 Rampal Awana Complex, Indra Market,
@@ -215,13 +210,14 @@ os.makedirs("payment_receipts", exist_ok=True)
 os.makedirs("invoices", exist_ok=True)
 os.makedirs("visit_selfies", exist_ok=True)
 
-
-
 # Custom PDF class
 class PDF(FPDF):
     def header(self):
         if company_logo:
-            self.image(company_logo, 10, 8, 33)
+            try:
+                self.image(company_logo, 10, 8, 33)
+            except:
+                pass
         
         self.set_font('Arial', 'B', 16)
         self.cell(0, 10, company_name, ln=True, align='C')
@@ -269,7 +265,7 @@ def log_sales_to_gsheet(conn, sales_data):
         st.success("Sales data successfully logged to Google Sheets!")
     except Exception as e:
         st.error(f"Error logging sales data: {e}")
-        st.stop()  # Prevent further execution if there's an error
+        st.stop()
 
 def log_visit_to_gsheet(conn, visit_data):
     try:
@@ -511,7 +507,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
             "Payment Receipt Path": payment_receipt_path if payment_status in ["paid", "partial paid"] else "",
             "Employee Selfie Path": employee_selfie_path,
             "Invoice PDF Path": f"invoices/{invoice_number}.pdf",
-            "Remarks": remarks  # Changed from Location to Remarks
+            "Remarks": remarks
         })
 
     # Save the PDF
@@ -549,7 +545,7 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, out
         "Visit Notes": visit_notes,
         "Visit Selfie Path": visit_selfie_path,
         "Visit Status": "completed",
-        "Remarks": remarks  # Changed from Location to Remarks
+        "Remarks": remarks
     }
     
     visit_df = pd.DataFrame([visit_data])
@@ -649,7 +645,6 @@ def main():
     if not st.session_state.authenticated:
         st.title("Employee Authentication")
         
-        mode = st.radio("Select Mode", ["Sales", "Visit", "Attendance"], key="mode_selection")
         employee_names = Person['Employee Name'].tolist()
         employee_name = st.selectbox("Select Your Name", employee_names, key="employee_select")
         passkey = st.text_input("Enter Your Employee Code", type="password", key="passkey_input")
@@ -657,37 +652,52 @@ def main():
         if st.button("Log in", key="login_button"):
             if authenticate_employee(employee_name, passkey):
                 st.session_state.authenticated = True
-                st.session_state.selected_mode = mode
                 st.session_state.employee_name = employee_name
                 st.rerun()
             else:
                 st.error("Invalid Employee Code. Please try again.")
     else:
-        add_back_button()
+        # Show three option boxes after login
+        st.title("Select Mode")
+        col1, col2, col3 = st.columns(3)
         
-        if st.session_state.selected_mode == "Sales":
-            sales_page()
-        elif st.session_state.selected_mode == "Visit":
-            visit_page()
-        else:
-            attendance_page()
+        with col1:
+            if st.button("Sales", use_container_width=True, key="sales_mode"):
+                st.session_state.selected_mode = "Sales"
+                st.rerun()
+        
+        with col2:
+            if st.button("Visit", use_container_width=True, key="visit_mode"):
+                st.session_state.selected_mode = "Visit"
+                st.rerun()
+        
+        with col3:
+            if st.button("Attendance", use_container_width=True, key="attendance_mode"):
+                st.session_state.selected_mode = "Attendance"
+                st.rerun()
+        
+        if st.session_state.selected_mode:
+            add_back_button()
+            
+            if st.session_state.selected_mode == "Sales":
+                sales_page()
+            elif st.session_state.selected_mode == "Visit":
+                visit_page()
+            else:
+                attendance_page()
 
 def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
     
-    # Removed location section and added remarks instead
-    st.subheader("Current Location")
-    sales_remarks = st.text_area("Enter the Current Location", 
-                               key="remarks_input_sales",
-                               max_chars=500,
-                               height=100)
+    # Empty remarks since we removed the location input
+    sales_remarks = ""
     
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
         st.subheader("Employee Verification")
-        employee_selfie = st.file_uploader("Upload Employee Selfie", type=["jpg", "jpeg", "png"], key="employee_selfie")
+        employee_selfie = st.file_uploader("Upload Employee Selfie", type=["jpg", "jpeg", "png"], key="employee_selfie", label_visibility="collapsed")
 
         discount_category = Person[Person['Employee Name'] == selected_employee]['Discount Category'].values[0]
 
@@ -770,10 +780,10 @@ def sales_page():
 
         if payment_status == "partial paid":
             amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid_partial")
-            payment_receipt = st.file_uploader("Upload Payment Receipt", type=["jpg", "jpeg", "png", "pdf"], key="payment_receipt_partial")
+            payment_receipt = st.file_uploader("Upload Payment Receipt", type=["jpg", "jpeg", "png", "pdf"], key="payment_receipt_partial", label_visibility="collapsed")
         elif payment_status == "paid":
             amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid_full")
-            payment_receipt = st.file_uploader("Upload Payment Receipt", type=["jpg", "jpeg", "png", "pdf"], key="payment_receipt_full")
+            payment_receipt = st.file_uploader("Upload Payment Receipt", type=["jpg", "jpeg", "png", "pdf"], key="payment_receipt_full", label_visibility="collapsed")
 
         st.subheader("Distributor Details")
         distributor_option = st.radio("Distributor Selection", ["Select from list", "None"], key="distributor_option")
@@ -846,7 +856,7 @@ def sales_page():
                     payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
                     distributor_contact_number, distributor_email, distributor_territory,
-                    sales_remarks  # Changed from location to remarks
+                    sales_remarks
                 )
                 
                 with open(pdf_path, "rb") as f:
@@ -908,12 +918,8 @@ def visit_page():
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
 
-    # Removed location section and added remarks instead
-    st.subheader("Current Location")
-    visit_remarks = st.text_area("Enter your Current Location", 
-                              key="remarks_input_visit",
-                              max_chars=500,
-                              height=100)
+    # Empty remarks since we removed the location input
+    visit_remarks = ""
 
     tab1, tab2 = st.tabs(["New Visit", "Visit History"])
     
@@ -949,7 +955,7 @@ def visit_page():
         visit_notes = st.text_area("Visit Notes", key="visit_notes")
         
         st.subheader("Visit Verification")
-        visit_selfie = st.file_uploader("Upload Visit Selfie", type=["jpg", "jpeg", "png"], key="visit_selfie")
+        visit_selfie = st.file_uploader("Upload Visit Selfie", type=["jpg", "jpeg", "png"], key="visit_selfie", label_visibility="collapsed")
 
         st.subheader("Time Tracking")
         col1, col2 = st.columns(2)
@@ -976,7 +982,7 @@ def visit_page():
                     selected_employee, outlet_name, outlet_contact, outlet_address,
                     outlet_state, outlet_city, visit_purpose, visit_notes, 
                     visit_selfie_path, entry_datetime, exit_datetime,
-                    visit_remarks  # Changed from location to remarks
+                    visit_remarks
                 )
                 
                 st.success(f"Visit {visit_id} recorded successfully!")
