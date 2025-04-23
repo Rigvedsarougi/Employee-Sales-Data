@@ -849,7 +849,7 @@ def sales_page():
                 st.success(f"Invoice {invoice_number} generated successfully!")
             else:
                 st.error("Please fill all required fields and select products.")
-    
+
     with tab2:
         st.subheader("Previous Sales")
         col1, col2, col3 = st.columns(3)
@@ -859,15 +859,15 @@ def sales_page():
             invoice_date_search = st.date_input("Invoice Date", key="date_search")
         with col3:
             outlet_name_search = st.text_input("Outlet Name", key="outlet_search")
-            
+    
         if st.button("Search Sales", key="search_sales_button"):
             try:
                 sales_data = conn.read(worksheet="Sales", ttl=5)
                 sales_data = sales_data.dropna(how="all")
-                
+    
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
                 filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
-                
+    
                 if invoice_number_search:
                     filtered_data = filtered_data[filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False)]
                 if invoice_date_search:
@@ -875,32 +875,26 @@ def sales_page():
                     filtered_data = filtered_data[filtered_data['Invoice Date'] == date_str]
                 if outlet_name_search:
                     filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
-                
+    
                 if not filtered_data.empty:
-                    # Display the data with delivery status
-                    display_cols = ['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 
-                                  'Quantity', 'Grand Total', 'Payment Status', 'Delivery Status']
-                    
-                    # Create editable dataframe
-                    edited_data = st.data_editor(
+                    display_cols = ['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 'Delivery Status']
+                    editable_data = st.data_editor(
                         filtered_data[display_cols],
                         column_config={
                             "Delivery Status": st.column_config.SelectboxColumn(
                                 "Delivery Status",
                                 help="Update delivery status",
-                                width="medium",
                                 options=["pending", "delivered"],
                                 required=True
                             )
                         },
-                        key="sales_history_editor",
-                        use_container_width=True
+                        use_container_width=True,
+                        key="sales_edit"
                     )
-                    
-                    # Add button to update status
+    
                     if st.button("Update Delivery Status"):
-                        for index, row in edited_data.iterrows():
-                            original_row = filtered_data.iloc[index]
+                        for idx, row in editable_data.iterrows():
+                            original_row = filtered_data.iloc[idx]
                             if row['Delivery Status'] != original_row['Delivery Status']:
                                 success = update_delivery_status(
                                     conn,
@@ -909,39 +903,23 @@ def sales_page():
                                     row['Delivery Status']
                                 )
                                 if success:
-                                    st.success(f"Updated delivery status for {row['Product Name']} in invoice {row['Invoice Number']}")
-                                else:
-                                    st.error(f"Failed to update delivery status for {row['Product Name']}")
-                        
-                        # Refresh the data after update
+                                    st.success(f"Updated status for {row['Product Name']} in Invoice {row['Invoice Number']}")
                         st.rerun()
-                    
-                    # Add download options
-                    csv = filtered_data.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        "Download as CSV",
-                        csv,
-                        "sales_history.csv",
-                        "text/csv",
-                        key='download-csv'
-                    )
-                    
-                    # Add download invoice button
-                    unique_invoices = filtered_data['Invoice Number'].unique()
-                    selected_invoice = st.selectbox("Select Invoice to Download", unique_invoices)
-                    
-                    invoice_path = f"invoices/{selected_invoice}.pdf"
-                    if os.path.exists(invoice_path):
-                        with open(invoice_path, "rb") as f:
-                            st.download_button(
-                                "Download Invoice PDF",
-                                f,
-                                file_name=f"{selected_invoice}.pdf",
-                                mime="application/pdf",
-                                key=f"download_invoice_{selected_invoice}"
-                            )
-                    else:
-                        st.warning("Invoice PDF not found")
+    
+                    st.markdown("### Download Invoice PDFs")
+                    for invoice_num in filtered_data['Invoice Number'].unique():
+                        path = f"invoices/{invoice_num}.pdf"
+                        if os.path.exists(path):
+                            with open(path, "rb") as f:
+                                st.download_button(
+                                    f"Download {invoice_num}.pdf",
+                                    f,
+                                    file_name=f"{invoice_num}.pdf",
+                                    mime="application/pdf",
+                                    key=f"download_{invoice_num}"
+                                )
+                        else:
+                            st.warning(f"PDF for {invoice_num} not found.")
                 else:
                     st.warning("No matching sales records found")
             except Exception as e:
