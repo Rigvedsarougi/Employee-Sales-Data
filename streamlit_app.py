@@ -640,7 +640,7 @@ def main():
                 st.session_state.employee_name = employee_name
                 st.rerun()
             else:
-                st.error("Invalid Employee Code. Please try again.")
+                st.error("Invalid Password. Please try again.")
     else:
         # Show three option boxes after login
         st.title("Select Mode")
