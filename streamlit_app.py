@@ -744,7 +744,6 @@ def sales_page():
                 item_total = unit_price * (1 - prod_discount/100) * qty
                 subtotal += item_total
             
-
             # Final amount calculation
             st.markdown("---")
             st.markdown("### Final Amount Calculation")
@@ -752,13 +751,11 @@ def sales_page():
             tax_amount = subtotal * 0.18
             st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
             st.markdown(f"**Grand Total: ₹{subtotal + tax_amount:.2f}**")
-            
 
         st.subheader("Payment Details")
         payment_status = st.selectbox("Payment Status", ["pending", "paid"], key="payment_status")
 
         amount_paid = 0.0
-
         if payment_status == "paid":
             amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid")
 
@@ -805,7 +802,6 @@ def sales_page():
             state = outlet_details['State']
             city = outlet_details['City']
             
-            # Show outlet details like distributor details
             st.text_input("Outlet Contact", value=contact_number, disabled=True, key="outlet_contact_display")
             st.text_input("Outlet Address", value=address, disabled=True, key="outlet_address_display")
             st.text_input("Outlet State", value=state, disabled=True, key="outlet_state_display")
@@ -822,8 +818,6 @@ def sales_page():
         if st.button("Generate Invoice", key="generate_invoice_button"):
             if selected_products and customer_name:
                 invoice_number = generate_invoice_number()
-                
-                # No employee selfie or payment receipt uploads
                 employee_selfie_path = None
                 payment_receipt_path = None
 
@@ -847,108 +841,171 @@ def sales_page():
                     )
                 
                 st.success(f"Invoice {invoice_number} generated successfully!")
+                st.balloons()
             else:
                 st.error("Please fill all required fields and select products.")
     
     with tab2:
-        st.subheader("Previous Sales")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            invoice_number_search = st.text_input("Invoice Number", key="invoice_search")
-        with col2:
-            invoice_date_search = st.date_input("Invoice Date", key="date_search")
-        with col3:
-            outlet_name_search = st.text_input("Outlet Name", key="outlet_search")
-            
-        if st.button("Search Sales", key="search_sales_button"):
+        st.subheader("Sales History")
+        
+        @st.cache_data(ttl=300)
+        def load_sales_data():
             try:
                 sales_data = conn.read(worksheet="Sales", ttl=5)
                 sales_data = sales_data.dropna(how="all")
-                
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-                filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
-                
-                if invoice_number_search:
-                    filtered_data = filtered_data[filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False)]
-                if invoice_date_search:
-                    date_str = invoice_date_search.strftime("%d-%m-%Y")
-                    filtered_data = filtered_data[filtered_data['Invoice Date'] == date_str]
-                if outlet_name_search:
-                    filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
-                
-                if not filtered_data.empty:
-                    # Group by invoice number to show consolidated invoices
-                    grouped_data = filtered_data.groupby('Invoice Number').agg({
-                        'Invoice Date': 'first',
-                        'Outlet Name': 'first',
-                        'Grand Total': 'sum',
-                        'Payment Status': 'first',
-                        'Delivery Status': lambda x: "pending" if "pending" in x.values else "delivered"
-                    }).reset_index()
-                    
-                    # Display the grouped data
-                    st.dataframe(grouped_data)
-                    
-                    # Add download options
-                    csv = grouped_data.to_csv(index=False).encode('utf-8')
+                return sales_data[sales_data['Employee Code'] == employee_code]
+            except Exception as e:
+                st.error(f"Error loading sales data: {e}")
+                return pd.DataFrame()
+
+        sales_data = load_sales_data()
+        
+        if sales_data.empty:
+            st.warning("No sales records found")
+            return
+            
+        with st.expander("🔍 Search Filters", expanded=True):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                invoice_number_search = st.text_input("Invoice Number", key="invoice_search")
+            with col2:
+                invoice_date_search = st.date_input("Invoice Date", key="date_search")
+            with col3:
+                outlet_name_search = st.text_input("Outlet Name", key="outlet_search")
+            
+            if st.button("Apply Filters", key="search_sales_button"):
+                st.rerun()
+        
+        filtered_data = sales_data.copy()
+        if invoice_number_search:
+            filtered_data = filtered_data[filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False)]
+        if invoice_date_search:
+            date_str = invoice_date_search.strftime("%d-%m-%Y")
+            filtered_data = filtered_data[filtered_data['Invoice Date'] == date_str]
+        if outlet_name_search:
+            filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
+        
+        if filtered_data.empty:
+            st.warning("No matching records found")
+            return
+            
+        invoice_summary = filtered_data.groupby('Invoice Number').agg({
+            'Invoice Date': 'first',
+            'Outlet Name': 'first',
+            'Grand Total': 'sum',
+            'Payment Status': 'first',
+            'Delivery Status': lambda x: "pending" if "pending" in x.values else "delivered"
+        }).sort_values('Invoice Date', ascending=False).reset_index()
+        
+        st.write(f"📄 Showing {len(invoice_summary)} invoices")
+        st.dataframe(
+            invoice_summary,
+            column_config={
+                "Grand Total": st.column_config.NumberColumn(format="₹%.2f"),
+                "Invoice Date": st.column_config.DateColumn(format="DD/MM/YYYY")
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        selected_invoice = st.selectbox(
+            "Select invoice to view details",
+            invoice_summary['Invoice Number'],
+            key="invoice_selection"
+        )
+        
+        invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
+        invoice_data = invoice_details.iloc[0]
+        
+        detail_tab, delivery_tab, regenerate_tab = st.tabs(["Details", "Delivery Status", "Regenerate"])
+        
+        with detail_tab:
+            st.subheader(f"Invoice {selected_invoice}")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Date", invoice_data['Invoice Date'])
+                st.metric("Outlet", invoice_data['Outlet Name'])
+                st.metric("Contact", invoice_data['Outlet Contact'])
+            with col2:
+                total_amount = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Grand Total'].values[0]
+                st.metric("Total Amount", f"₹{total_amount:.2f}")
+                st.metric("Payment Status", invoice_data['Payment Status'].capitalize())
+                delivery_status = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Delivery Status'].values[0]
+                st.metric("Delivery Status", "✅ Delivered" if delivery_status == "delivered" else "🕒 Pending")
+            
+            st.subheader("Products")
+            st.dataframe(
+                invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price']],
+                column_config={
+                    "Unit Price": st.column_config.NumberColumn(format="₹%.2f"),
+                    "Total Price": st.column_config.NumberColumn(format="₹%.2f")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            invoice_path = f"invoices/{selected_invoice}.pdf"
+            if os.path.exists(invoice_path):
+                with open(invoice_path, "rb") as f:
                     st.download_button(
-                        "Download Summary as CSV",
-                        csv,
-                        "sales_summary.csv",
-                        "text/csv",
-                        key='download-summary-csv'
+                        "📥 Download Original Invoice",
+                        f,
+                        file_name=f"{selected_invoice}.pdf",
+                        mime="application/pdf",
+                        key=f"download_original_{selected_invoice}"
                     )
-                    
-                    # Add detailed view for selected invoice
-                    selected_invoice = st.selectbox("Select Invoice to View Details", grouped_data['Invoice Number'])
-                    
-                    # Get all products for selected invoice
-                    invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
-                    
-                    # Create editable dataframe for delivery status
-                    edited_details = st.data_editor(
-                        invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price', 'Delivery Status']],
-                        column_config={
-                            "Delivery Status": st.column_config.SelectboxColumn(
-                                "Delivery Status",
-                                help="Update delivery status",
-                                width="medium",
-                                options=["pending", "delivered"],
-                                required=True
+            else:
+                st.warning("Original invoice PDF not found in storage")
+        
+        with delivery_tab:
+            st.subheader("Update Delivery Status")
+            
+            edited_details = st.data_editor(
+                invoice_details[['Product Name', 'Quantity', 'Delivery Status']],
+                column_config={
+                    "Delivery Status": st.column_config.SelectboxColumn(
+                        "Status",
+                        options=["pending", "delivered"],
+                        required=True
+                    )
+                },
+                disabled=["Product Name", "Quantity"],
+                key=f"delivery_editor_{selected_invoice}",
+                use_container_width=True
+            )
+            
+            if st.button("💾 Save Changes", key=f"save_delivery_{selected_invoice}"):
+                with st.spinner("Saving changes..."):
+                    any_changes = False
+                    for index, row in edited_details.iterrows():
+                        original_status = invoice_details.iloc[index]['Delivery Status']
+                        if row['Delivery Status'] != original_status:
+                            success = update_delivery_status(
+                                conn,
+                                selected_invoice,
+                                row['Product Name'],
+                                row['Delivery Status']
                             )
-                        },
-                        key=f"delivery_status_{selected_invoice}",
-                        use_container_width=True
-                    )
+                            if success:
+                                any_changes = True
+                            else:
+                                st.error(f"Failed to update {row['Product Name']}")
                     
-                    # Add button to update status
-                    if st.button("Update Delivery Status", key=f"update_status_{selected_invoice}"):
-                        for index, row in edited_details.iterrows():
-                            original_row = invoice_details.iloc[index]
-                            if row['Delivery Status'] != original_row['Delivery Status']:
-                                success = update_delivery_status(
-                                    conn,
-                                    selected_invoice,
-                                    row['Product Name'],
-                                    row['Delivery Status']
-                                )
-                                if success:
-                                    st.success(f"Updated delivery status for {row['Product Name']}")
-                                else:
-                                    st.error(f"Failed to update delivery status for {row['Product Name']}")
-                        
-                        # Refresh the data after update
+                    if any_changes:
+                        st.success("Delivery status updated successfully!")
+                        st.cache_data.clear()
                         st.rerun()
-                    
-                    # Add button to regenerate invoice
-                    if st.button("Regenerate Invoice", key=f"regenerate_{selected_invoice}"):
-                        # Get all data for this invoice
-                        invoice_data = filtered_data[filtered_data['Invoice Number'] == selected_invoice].iloc[0]
-                        
-                        # Get all products for this invoice
-                        products = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
-                        
-                        # Regenerate the invoice
+                    else:
+                        st.info("No changes detected")
+        
+        with regenerate_tab:
+            st.subheader("Regenerate Invoice")
+            st.info("This will create a new PDF with current data while keeping the same invoice number")
+            
+            if st.button("🔄 Regenerate Invoice", key=f"regenerate_btn_{selected_invoice}"):
+                with st.spinner("Regenerating invoice..."):
+                    try:
                         pdf, pdf_path = generate_invoice(
                             invoice_data['Outlet Name'],
                             invoice_data.get('GST Number', ''),
@@ -956,16 +1013,16 @@ def sales_page():
                             invoice_data['Outlet Address'],
                             invoice_data['Outlet State'],
                             invoice_data['Outlet City'],
-                            products['Product Name'].tolist(),
-                            products['Quantity'].tolist(),
-                            products['Product Discount (%)'].tolist(),
+                            invoice_details['Product Name'].tolist(),
+                            invoice_details['Quantity'].tolist(),
+                            invoice_details['Product Discount (%)'].tolist(),
                             invoice_data['Discount Category'],
                             invoice_data['Employee Name'],
                             invoice_data['Payment Status'],
                             invoice_data['Amount Paid'],
-                            None,  # employee_selfie_path
-                            None,  # payment_receipt_path
-                            selected_invoice,  # Use same invoice number
+                            None,
+                            None,
+                            selected_invoice,
                             invoice_data['Transaction Type'],
                             invoice_data.get('Distributor Firm Name', ''),
                             invoice_data.get('Distributor ID', ''),
@@ -978,32 +1035,17 @@ def sales_page():
                         
                         with open(pdf_path, "rb") as f:
                             st.download_button(
-                                "Download Regenerated Invoice", 
+                                "📥 Download Regenerated Invoice", 
                                 f, 
                                 file_name=f"{selected_invoice}.pdf",
                                 mime="application/pdf",
                                 key=f"download_regenerated_{selected_invoice}"
                             )
                         
-                        st.success(f"Invoice {selected_invoice} regenerated successfully!")
-                    
-                    # Add download button for original invoice
-                    invoice_path = f"invoices/{selected_invoice}.pdf"
-                    if os.path.exists(invoice_path):
-                        with open(invoice_path, "rb") as f:
-                            st.download_button(
-                                "Download Original Invoice",
-                                f,
-                                file_name=f"{selected_invoice}.pdf",
-                                mime="application/pdf",
-                                key=f"download_original_{selected_invoice}"
-                            )
-                    else:
-                        st.warning("Original invoice PDF not found")
-                else:
-                    st.warning("No matching sales records found")
-            except Exception as e:
-                st.error(f"Error retrieving sales data: {e}")
+                        st.success("Invoice regenerated successfully!")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"Error regenerating invoice: {e}")
 
 def visit_page():
     st.title("Visit Management")
