@@ -627,9 +627,15 @@ def main():
     if 'employee_name' not in st.session_state:
         st.session_state.employee_name = None
 
-    if not st.session_state.authenticated:
-        st.title("Employee Authentication")
-        
+if not st.session_state.authenticated:
+    # Centered logo and title using markdown + HTML
+    st.markdown("""
+        <div style="text-align: center;">
+            <img src="ALLGEN TRADING logo.png" width="150">
+            <h2 style="margin-top: 10px;">Employee Authentication</h2>
+        </div>
+    """, unsafe_allow_html=True)
+     
         employee_names = Person['Employee Name'].tolist()
         employee_name = st.selectbox("Select Your Name", employee_names, key="employee_select")
         passkey = st.text_input("Enter Your Employee Code", type="password", key="passkey_input")
