@@ -730,7 +730,7 @@ def sales_page():
                         key=f"discount_{product}",
                         label_visibility="collapsed",
                         help="Enter discount %",
-                        placeholder="0.0%"
+                        placeholder="0.0% Discount"
                     )
                     st.markdown(
                         """
