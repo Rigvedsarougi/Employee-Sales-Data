@@ -7,6 +7,38 @@ import os
 import uuid
 from PIL import Image
 
+import streamlit as st
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
+from fpdf import FPDF
+from datetime import datetime, time
+import os
+import uuid
+from PIL import Image
+
+# Add logo display function
+def display_login_header():
+    # Create columns to center the logo and heading
+    col1, col2, col3 = st.columns([1, 3, 1])
+    
+    with col2:
+        # Display centered logo
+        try:
+            logo = Image.open("logo.png")
+            st.image(logo, use_column_width=True)
+        except FileNotFoundError:
+            st.warning("Logo image not found. Please ensure 'logo.png' exists in the same directory.")
+        except Exception as e:
+            st.warning(f"Could not load logo: {str(e)}")
+        
+        # Centered heading with custom style
+        st.markdown("""
+        <div style='text-align: center; margin-bottom: 30px;'>
+            <h1 style='margin-bottom: 0;'>Employee Portal</h1>
+            <h2 style='margin-top: 0; color: #555;'>Login</h2>
+        </div>
+        """, unsafe_allow_html=True)
+
 LOCATION_JS = """
 <script>
 // This can be removed since we're not using location anymore
@@ -628,20 +660,42 @@ def main():
         st.session_state.employee_name = None
 
     if not st.session_state.authenticated:
-        st.title("Employee Authentication")
+        # Display the centered logo and heading
+        display_login_header()
         
         employee_names = Person['Employee Name'].tolist()
-        employee_name = st.selectbox("Select Your Name", employee_names, key="employee_select")
-        passkey = st.text_input("Enter Your Employee Code", type="password", key="passkey_input")
         
-        if st.button("Log in", key="login_button"):
-            if authenticate_employee(employee_name, passkey):
-                st.session_state.authenticated = True
-                st.session_state.employee_name = employee_name
-                st.rerun()
-            else:
-                st.error("Invalid Password. Please try again.")
+        # Create centered form
+        form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
+        
+        with form_col2:
+            with st.container():
+                employee_name = st.selectbox(
+                    "Select Your Name", 
+                    employee_names, 
+                    key="employee_select"
+                )
+                passkey = st.text_input(
+                    "Enter Your Employee Code", 
+                    type="password", 
+                    key="passkey_input"
+                )
+                
+                login_button = st.button(
+                    "Log in", 
+                    key="login_button",
+                    use_container_width=True
+                )
+                
+                if login_button:
+                    if authenticate_employee(employee_name, passkey):
+                        st.session_state.authenticated = True
+                        st.session_state.employee_name = employee_name
+                        st.rerun()
+                    else:
+                        st.error("Invalid Password. Please try again.")
     else:
+        # [REST OF YOUR ORIGINAL main() FUNCTION REMAINS EXACTLY THE SAME]
         # Show three option boxes after login
         st.title("Select Mode")
         col1, col2, col3 = st.columns(3)
