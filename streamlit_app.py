@@ -917,91 +917,71 @@ def sales_page():
         invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
         invoice_data = invoice_details.iloc[0]
         
-        detail_tab, regenerate_tab = st.tabs(["Details", "Regenerate"])
+        st.subheader(f"Invoice {selected_invoice}")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Date", invoice_data['Invoice Date'])
+            st.metric("Outlet", invoice_data['Outlet Name'])
+            st.metric("Contact", invoice_data['Outlet Contact'])
+        with col2:
+            total_amount = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Grand Total'].values[0]
+            st.metric("Total Amount", f"₹{total_amount:.2f}")
+            st.metric("Payment Status", invoice_data['Payment Status'].capitalize())
         
-        with detail_tab:
-            st.subheader(f"Invoice {selected_invoice}")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Date", invoice_data['Invoice Date'])
-                st.metric("Outlet", invoice_data['Outlet Name'])
-                st.metric("Contact", invoice_data['Outlet Contact'])
-            with col2:
-                total_amount = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Grand Total'].values[0]
-                st.metric("Total Amount", f"₹{total_amount:.2f}")
-                st.metric("Payment Status", invoice_data['Payment Status'].capitalize())
-            
-            st.subheader("Products")
-            st.dataframe(
-                invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price']],
-                column_config={
-                    "Unit Price": st.column_config.NumberColumn(format="₹%.2f"),
-                    "Total Price": st.column_config.NumberColumn(format="₹%.2f")
-                },
-                use_container_width=True,
-                hide_index=True
-            )
-            
-            invoice_path = f"invoices/{selected_invoice}.pdf"
-            if os.path.exists(invoice_path):
-                with open(invoice_path, "rb") as f:
-                    st.download_button(
-                        "📥 Download Original Invoice",
-                        f,
-                        file_name=f"{selected_invoice}.pdf",
-                        mime="application/pdf",
-                        key=f"download_original_{selected_invoice}"
+        st.subheader("Products")
+        st.dataframe(
+            invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price']],
+            column_config={
+                "Unit Price": st.column_config.NumberColumn(format="₹%.2f"),
+                "Total Price": st.column_config.NumberColumn(format="₹%.2f")
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        if st.button("🔄 Regenerate Invoice", key=f"regenerate_btn_{selected_invoice}"):
+            with st.spinner("Regenerating invoice..."):
+                try:
+                    pdf, pdf_path = generate_invoice(
+                        invoice_data['Outlet Name'],
+                        invoice_data.get('GST Number', ''),
+                        invoice_data['Outlet Contact'],
+                        invoice_data['Outlet Address'],
+                        invoice_data['Outlet State'],
+                        invoice_data['Outlet City'],
+                        invoice_details['Product Name'].tolist(),
+                        invoice_details['Quantity'].tolist(),
+                        invoice_details['Product Discount (%)'].tolist(),
+                        invoice_data['Discount Category'],
+                        invoice_data['Employee Name'],
+                        invoice_data['Payment Status'],
+                        invoice_data['Amount Paid'],
+                        None,
+                        None,
+                        selected_invoice,
+                        invoice_data['Transaction Type'],
+                        invoice_data.get('Distributor Firm Name', ''),
+                        invoice_data.get('Distributor ID', ''),
+                        invoice_data.get('Distributor Contact Person', ''),
+                        invoice_data.get('Distributor Contact Number', ''),
+                        invoice_data.get('Distributor Email', ''),
+                        invoice_data.get('Distributor Territory', ''),
+                        invoice_data.get('Remarks', '')
                     )
-            else:
-                st.warning("Original invoice PDF not found in storage")
-        
-        with regenerate_tab:
-            st.subheader("Regenerate Invoice")
-            st.info("This will create a new PDF with current data while keeping the same invoice number")
-            
-            if st.button("🔄 Regenerate Invoice", key=f"regenerate_btn_{selected_invoice}"):
-                with st.spinner("Regenerating invoice..."):
-                    try:
-                        pdf, pdf_path = generate_invoice(
-                            invoice_data['Outlet Name'],
-                            invoice_data.get('GST Number', ''),
-                            invoice_data['Outlet Contact'],
-                            invoice_data['Outlet Address'],
-                            invoice_data['Outlet State'],
-                            invoice_data['Outlet City'],
-                            invoice_details['Product Name'].tolist(),
-                            invoice_details['Quantity'].tolist(),
-                            invoice_details['Product Discount (%)'].tolist(),
-                            invoice_data['Discount Category'],
-                            invoice_data['Employee Name'],
-                            invoice_data['Payment Status'],
-                            invoice_data['Amount Paid'],
-                            None,
-                            None,
-                            selected_invoice,
-                            invoice_data['Transaction Type'],
-                            invoice_data.get('Distributor Firm Name', ''),
-                            invoice_data.get('Distributor ID', ''),
-                            invoice_data.get('Distributor Contact Person', ''),
-                            invoice_data.get('Distributor Contact Number', ''),
-                            invoice_data.get('Distributor Email', ''),
-                            invoice_data.get('Distributor Territory', ''),
-                            invoice_data.get('Remarks', '')
+                    
+                    with open(pdf_path, "rb") as f:
+                        st.download_button(
+                            "📥 Download Regenerated Invoice", 
+                            f, 
+                            file_name=f"{selected_invoice}.pdf",
+                            mime="application/pdf",
+                            key=f"download_regenerated_{selected_invoice}"
                         )
-                        
-                        with open(pdf_path, "rb") as f:
-                            st.download_button(
-                                "📥 Download Regenerated Invoice", 
-                                f, 
-                                file_name=f"{selected_invoice}.pdf",
-                                mime="application/pdf",
-                                key=f"download_regenerated_{selected_invoice}"
-                            )
-                        
-                        st.success("Invoice regenerated successfully!")
-                        st.balloons()
-                    except Exception as e:
-                        st.error(f"Error regenerating invoice: {e}")
+                    
+                    st.success("Invoice regenerated successfully!")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Error regenerating invoice: {e}")
 
 def visit_page():
     st.title("Visit Management")
