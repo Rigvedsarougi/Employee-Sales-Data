@@ -71,8 +71,7 @@ hide_footer_style = """
 """
 
 st.markdown(hide_footer_style, unsafe_allow_html=True)
-# Display Title and Description
-st.title("Biolume: Management System")
+
 
 def validate_data_before_write(df, expected_columns):
     """Validate data structure before writing to Google Sheets"""
