@@ -849,16 +849,29 @@ def sales_page():
         st.subheader("Sales History")
         
         @st.cache_data(ttl=300)
+
+# In your load_sales_data() function, modify the datetime conversion:
         def load_sales_data():
             try:
                 sales_data = conn.read(worksheet="Sales", ttl=5)
                 sales_data = sales_data.dropna(how="all")
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
                 filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
-
+                
+                # Convert all columns to appropriate types
                 filtered_data.loc[:, 'Outlet Name'] = filtered_data['Outlet Name'].astype(str)
                 filtered_data.loc[:, 'Invoice Number'] = filtered_data['Invoice Number'].astype(str)
-                filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True)
+                
+                # Handle date conversion more robustly
+                try:
+                    filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(
+                        filtered_data['Invoice Date'], 
+                        dayfirst=True,
+                        errors='coerce'  # Will convert invalid dates to NaT
+                    )
+                except Exception as e:
+                    st.error(f"Error converting dates: {str(e)}")
+                    filtered_data.loc[:, 'Invoice Date'] = pd.NaT
                 
                 # Convert numeric columns
                 numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
@@ -870,6 +883,7 @@ def sales_page():
             except Exception as e:
                 st.error(f"Error loading sales data: {e}")
                 return pd.DataFrame()
+
 
         sales_data = load_sales_data()
         
@@ -890,13 +904,25 @@ def sales_page():
                 st.rerun()
         
         filtered_data = sales_data.copy()
-        if invoice_number_search:
-            filtered_data = filtered_data[
-                filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
-            ]
+
+# Replace this:
         if invoice_date_search:
             date_str = invoice_date_search.strftime("%d-%m-%Y")
             filtered_data = filtered_data[filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str]
+        
+        # With this more robust version:
+        if invoice_date_search:
+            try:
+                date_str = invoice_date_search.strftime("%d-%m-%Y")
+                # First ensure we have datetime type
+                filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], errors='coerce')
+                # Then filter
+                filtered_data = filtered_data[
+                    filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str
+                ]
+            except Exception as e:
+                st.error(f"Error filtering by date: {str(e)}")
+                
         if outlet_name_search:
             filtered_data = filtered_data[
                 filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
