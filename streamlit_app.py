@@ -720,7 +720,6 @@ def sales_page():
                 with cols[1]:
                     st.text(f"₹{unit_price:.2f}")
                 with cols[2]:
-                    # Discount input with shaded placeholder
                     prod_discount = st.number_input(
                         f"Discount for {product}",
                         min_value=0.0,
@@ -728,44 +727,17 @@ def sales_page():
                         value=0.0,
                         step=0.1,
                         key=f"discount_{product}",
-                        label_visibility="collapsed",
-                        help="Enter discount %",
-                        placeholder="0.0%"
-                    )
-                    st.markdown(
-                        """
-                        <style>
-                        div[data-baseweb="input"] input::placeholder {
-                            color: #888888;
-                            opacity: 0.7;
-                        }
-                        </style>
-                        """,
-                        unsafe_allow_html=True
+                        label_visibility="collapsed"
                     )
                     product_discounts.append(prod_discount)
                 with cols[3]:
-                    # Quantity input with shaded placeholder
                     qty = st.number_input(
                         f"Qty for {product}",
                         min_value=1,
                         value=1,
                         step=1,
                         key=f"qty_{product}",
-                        label_visibility="collapsed",
-                        help="Enter quantity",
-                        placeholder="1"
-                    )
-                    st.markdown(
-                        """
-                        <style>
-                        div[data-baseweb="input"] input::placeholder {
-                            color: #888888;
-                            opacity: 0.7;
-                        }
-                        </style>
-                        """,
-                        unsafe_allow_html=True
+                        label_visibility="collapsed"
                     )
                     quantities.append(qty)
                 
@@ -882,18 +854,18 @@ def sales_page():
                 sales_data = conn.read(worksheet="Sales", ttl=5)
                 sales_data = sales_data.dropna(how="all")
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-                filtered_data = sales_data[sales_data['Employee Code'] == employee_code].copy()
+                filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
                 
-                # Fix SettingWithCopyWarning by using .loc
-                filtered_data.loc[:, 'Outlet Name'] = filtered_data['Outlet Name'].astype(str)
-                filtered_data.loc[:, 'Invoice Number'] = filtered_data['Invoice Number'].astype(str)
-                filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(filter_data['Invoice Date'], dayfirst=True)
+                # Convert all columns to appropriate types
+                filtered_data['Outlet Name'] = filtered_data['Outlet Name'].astype(str)
+                filtered_data['Invoice Number'] = filtered_data['Invoice Number'].astype(str)
+                filtered_data['Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True)
                 
                 # Convert numeric columns
                 numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
                 for col in numeric_cols:
                     if col in filtered_data.columns:
-                        filtered_data.loc[:, col] = pd.to_numeric(filtered_data[col], errors='coerce')
+                        filtered_data[col] = pd.to_numeric(filtered_data[col], errors='coerce')
                 
                 return filtered_data
             except Exception as e:
