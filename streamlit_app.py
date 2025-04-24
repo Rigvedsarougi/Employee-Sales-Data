@@ -894,8 +894,7 @@ def sales_page():
             'Invoice Date': 'first',
             'Outlet Name': 'first',
             'Grand Total': 'sum',
-            'Payment Status': 'first',
-            'Delivery Status': lambda x: "pending" if "pending" in x.values else "delivered"
+            'Payment Status': 'first'
         }).sort_values('Invoice Date', ascending=False).reset_index()
         
         st.write(f"📄 Showing {len(invoice_summary)} invoices")
@@ -918,7 +917,7 @@ def sales_page():
         invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
         invoice_data = invoice_details.iloc[0]
         
-        detail_tab, delivery_tab, regenerate_tab = st.tabs(["Details", "Delivery Status", "Regenerate"])
+        detail_tab, regenerate_tab = st.tabs(["Details", "Regenerate"])
         
         with detail_tab:
             st.subheader(f"Invoice {selected_invoice}")
@@ -931,8 +930,6 @@ def sales_page():
                 total_amount = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Grand Total'].values[0]
                 st.metric("Total Amount", f"₹{total_amount:.2f}")
                 st.metric("Payment Status", invoice_data['Payment Status'].capitalize())
-                delivery_status = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Delivery Status'].values[0]
-                st.metric("Delivery Status", "✅ Delivered" if delivery_status == "delivered" else "🕒 Pending")
             
             st.subheader("Products")
             st.dataframe(
@@ -957,47 +954,6 @@ def sales_page():
                     )
             else:
                 st.warning("Original invoice PDF not found in storage")
-        
-        with delivery_tab:
-            st.subheader("Update Delivery Status")
-            
-            edited_details = st.data_editor(
-                invoice_details[['Product Name', 'Quantity', 'Delivery Status']],
-                column_config={
-                    "Delivery Status": st.column_config.SelectboxColumn(
-                        "Status",
-                        options=["pending", "delivered"],
-                        required=True
-                    )
-                },
-                disabled=["Product Name", "Quantity"],
-                key=f"delivery_editor_{selected_invoice}",
-                use_container_width=True
-            )
-            
-            if st.button("💾 Save Changes", key=f"save_delivery_{selected_invoice}"):
-                with st.spinner("Saving changes..."):
-                    any_changes = False
-                    for index, row in edited_details.iterrows():
-                        original_status = invoice_details.iloc[index]['Delivery Status']
-                        if row['Delivery Status'] != original_status:
-                            success = update_delivery_status(
-                                conn,
-                                selected_invoice,
-                                row['Product Name'],
-                                row['Delivery Status']
-                            )
-                            if success:
-                                any_changes = True
-                            else:
-                                st.error(f"Failed to update {row['Product Name']}")
-                    
-                    if any_changes:
-                        st.success("Delivery status updated successfully!")
-                        st.cache_data.clear()
-                        st.rerun()
-                    else:
-                        st.info("No changes detected")
         
         with regenerate_tab:
             st.subheader("Regenerate Invoice")
