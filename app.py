@@ -7,6 +7,12 @@ import os
 import uuid
 from PIL import Image
 
+LOCATION_JS = """
+<script>
+// This can be removed since we're not using location anymore
+</script>
+"""
+
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
