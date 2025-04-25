@@ -727,7 +727,7 @@ def sales_page():
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
-        discount_category = Person[Person['Employee Name'] == selected_employee]['Discount Category'].values[0]
+        discount_category = Person.loc[Person['Employee Name'] == selected_employee, 'Discount Category'].values[0]
 
         st.subheader("Transaction Details")
         transaction_type = st.selectbox("Transaction Type", ["Sold", "Return", "Add On", "Damage", "Expired"], key="transaction_type")
@@ -753,7 +753,7 @@ def sales_page():
             
             subtotal = 0
             for product in selected_products:
-                product_data = Products[Products['Product Name'] == product].iloc[0]
+                product_data = Products.loc[Products['Product Name'] == product].iloc[0]
                 
                 if discount_category in product_data:
                     unit_price = float(product_data[discount_category])
@@ -818,7 +818,7 @@ def sales_page():
         if distributor_option == "Select from list":
             distributor_names = Distributors['Firm Name'].tolist()
             selected_distributor = st.selectbox("Select Distributor", distributor_names, key="distributor_select")
-            distributor_details = Distributors[Distributors['Firm Name'] == selected_distributor].iloc[0]
+            distributor_details = Distributors.loc[Distributors['Firm Name'] == selected_distributor].iloc[0]
             
             distributor_firm_name = selected_distributor
             distributor_id = distributor_details['Distributor ID']
@@ -839,7 +839,7 @@ def sales_page():
         if outlet_option == "Select from list":
             outlet_names = Outlet['Shop Name'].tolist()
             selected_outlet = st.selectbox("Select Outlet", outlet_names, key="outlet_select")
-            outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
+            outlet_details = Outlet.loc[Outlet['Shop Name'] == selected_outlet].iloc[0]
             
             customer_name = selected_outlet
             gst_number = outlet_details['GST']
@@ -898,20 +898,25 @@ def sales_page():
         def load_sales_data():
             try:
                 sales_data = conn.read(worksheet="Sales", ttl=5)
-                sales_data = sales_data.dropna(how="all")
-                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-                filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
+                sales_data = sales_data.dropna(how='all').copy()  # Explicit copy
                 
-                # Convert all columns to appropriate types
-                filtered_data['Outlet Name'] = filtered_data['Outlet Name'].astype(str)
-                filtered_data['Invoice Number'] = filtered_data['Invoice Number'].astype(str)
-                filtered_data['Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True)
+                employee_code = Person.loc[Person['Employee Name'] == selected_employee, 'Employee Code'].values[0]
+                filtered_data = sales_data.loc[sales_data['Employee Code'] == employee_code].copy()
+                
+                # Convert all columns to appropriate types using .loc
+                filtered_data.loc[:, 'Outlet Name'] = filtered_data['Outlet Name'].astype(str)
+                filtered_data.loc[:, 'Invoice Number'] = filtered_data['Invoice Number'].astype(str)
+                filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(
+                    filtered_data['Invoice Date'], 
+                    dayfirst=True,
+                    errors='coerce'
+                )
                 
                 # Convert numeric columns
                 numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
                 for col in numeric_cols:
                     if col in filtered_data.columns:
-                        filtered_data[col] = pd.to_numeric(filtered_data[col], errors='coerce')
+                        filtered_data.loc[:, col] = pd.to_numeric(filtered_data[col], errors='coerce')
                 
                 return filtered_data
             except Exception as e:
@@ -936,16 +941,22 @@ def sales_page():
             if st.button("Apply Filters", key="search_sales_button"):
                 st.rerun()
         
+        # Create a filtered copy of the data
         filtered_data = sales_data.copy()
+        
         if invoice_number_search:
-            filtered_data = filtered_data[
+            filtered_data = filtered_data.loc[
                 filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
             ]
+        
         if invoice_date_search:
             date_str = invoice_date_search.strftime("%d-%m-%Y")
-            filtered_data = filtered_data[filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str]
+            filtered_data = filtered_data.loc[
+                filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str
+            ]
+        
         if outlet_name_search:
-            filtered_data = filtered_data[
+            filtered_data = filtered_data.loc[
                 filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
             ]
         
@@ -953,6 +964,7 @@ def sales_page():
             st.warning("No matching records found")
             return
             
+        # Create a summary view
         invoice_summary = filtered_data.groupby('Invoice Number').agg({
             'Invoice Date': 'first',
             'Outlet Name': 'first',
@@ -977,7 +989,7 @@ def sales_page():
             key="invoice_selection"
         )
         
-        invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
+        invoice_details = filtered_data.loc[filtered_data['Invoice Number'] == selected_invoice]
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
             
@@ -988,13 +1000,16 @@ def sales_page():
                 st.metric("Outlet", str(invoice_data['Outlet Name']))
                 st.metric("Contact", str(invoice_data['Outlet Contact']))
             with col2:
-                total_amount = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Grand Total'].values[0]
+                total_amount = invoice_summary.loc[
+                    invoice_summary['Invoice Number'] == selected_invoice, 'Grand Total'
+                ].values[0]
                 st.metric("Total Amount", f"₹{total_amount:.2f}")
                 st.metric("Payment Status", str(invoice_data['Payment Status']).capitalize())
             
             st.subheader("Products")
-            product_display = invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price']].copy()
-            product_display['Product Name'] = product_display['Product Name'].astype(str)
+            product_display = invoice_details[[
+                'Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price'
+            ]].copy()
             
             st.dataframe(
                 product_display,
