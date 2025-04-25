@@ -30,6 +30,11 @@ def display_login_header():
         </div>
         """, unsafe_allow_html=True)
 
+LOCATION_JS = """
+<script>
+// This can be removed since we're not using location anymore
+</script>
+"""
 
 hide_streamlit_style = """
     <style>
@@ -619,6 +624,22 @@ def authenticate_employee(employee_name, passkey):
     except:
         return False
 
+def add_back_button():
+    st.markdown("""
+    <style>
+    .back-button {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        z-index: 1000;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    if st.button("← Back", key="back_button"):
+        st.session_state.authenticated = False
+        st.session_state.selected_mode = None
+        st.rerun()
 
 def main():
     if 'authenticated' not in st.session_state:
@@ -683,6 +704,16 @@ def main():
             if st.button("Attendance", use_container_width=True, key="attendance_mode"):
                 st.session_state.selected_mode = "Attendance"
                 st.rerun()
+        
+        if st.session_state.selected_mode:
+            add_back_button()
+            
+            if st.session_state.selected_mode == "Sales":
+                sales_page()
+            elif st.session_state.selected_mode == "Visit":
+                visit_page()
+            else:
+                attendance_page()
 
 def sales_page():
     st.title("Sales Management")
@@ -1156,6 +1187,7 @@ def attendance_page():
             live_location = st.text_input("Enter your current location (Google Maps link or address)", 
                                         help="Please share your live location for verification",
                                         key="location_input")
+
         
         if st.button("Mark Attendance", key="mark_attendance_button"):
             if not live_location:
