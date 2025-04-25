@@ -8,6 +8,7 @@ import numpy as np
 from fpdf import FPDF
 import os
 import uuid
+from PIL import Image
 
 # Configuration
 st.set_page_config(page_title="Admin Dashboard", layout="wide", page_icon="📊")
@@ -57,6 +58,14 @@ def load_data(worksheet_name, columns):
     try:
         data = conn.read(worksheet=worksheet_name, usecols=list(range(len(columns))), ttl=5)
         data = data.dropna(how='all')
+        
+        # Fix data types for Arrow compatibility
+        for col in data.columns:
+            if data[col].dtype == 'object':
+                data[col] = data[col].astype(str)
+            elif pd.api.types.is_numeric_dtype(data[col]):
+                data[col] = pd.to_numeric(data[col], errors='coerce')
+        
         return data
     except Exception as e:
         st.error(f"Error loading {worksheet_name} data: {e}")
@@ -74,6 +83,27 @@ def get_date_range():
     last_month = today - timedelta(days=30)
     last_quarter = today - timedelta(days=90)
     return today, last_week, last_month, last_quarter
+
+def generate_pdf_report(content, title):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    
+    # Add title
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt=title, ln=True, align='C')
+    pdf.ln(10)
+    
+    # Add content
+    pdf.set_font("Arial", size=10)
+    for line in content.split('\n'):
+        pdf.multi_cell(0, 5, txt=line)
+        pdf.ln(5)
+    
+    # Save to temporary file
+    filename = f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    pdf.output(filename)
+    return filename
 
 # Dashboard layout
 def main():
@@ -105,11 +135,11 @@ def main():
     
     # Convert date columns
     if not sales_data.empty:
-        sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True)
+        sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True, errors='coerce')
     if not visits_data.empty:
-        visits_data['Visit Date'] = pd.to_datetime(visits_data['Visit Date'], dayfirst=True)
+        visits_data['Visit Date'] = pd.to_datetime(visits_data['Visit Date'], dayfirst=True, errors='coerce')
     if not attendance_data.empty:
-        attendance_data['Date'] = pd.to_datetime(attendance_data['Date'], dayfirst=True)
+        attendance_data['Date'] = pd.to_datetime(attendance_data['Date'], dayfirst=True, errors='coerce')
     
     # Date filters
     today, last_week, last_month, last_quarter = get_date_range()
@@ -182,13 +212,13 @@ def main():
             avg_visit_duration = 0
         
         if not attendance_data.empty:
-            present_count = len(attendance_data[attendance_data['Status'] == 'Present'])
-            leave_count = len(attendance_data[attendance_data['Status'] == 'Leave'])
-            attendance_rate = (present_count / len(attendance_data) * 100) if len(attendance_data) > 0 else 0
+            # Get only today's attendance
+            today_attendance = attendance_data[attendance_data['Date'].dt.date == datetime.now().date()]
+            present_count = len(today_attendance[today_attendance['Status'] == 'Present'])
+            leave_count = len(today_attendance[today_attendance['Status'] == 'Leave'])
         else:
             present_count = 0
             leave_count = 0
-            attendance_rate = 0
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -200,15 +230,13 @@ def main():
         with col4:
             st.metric("Payment Completion", format_percentage(payment_completion))
         
-        col5, col6, col7, col8 = st.columns(4)
+        col5, col6, col7 = st.columns(3)
         with col5:
             st.metric("Total Visits", total_visits)
         with col6:
             st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins")
         with col7:
-            st.metric("Present Employees", present_count)
-        with col8:
-            st.metric("Attendance Rate", format_percentage(attendance_rate))
+            st.metric("Present Today", present_count)
         
         # Sales Trend Chart
         st.subheader("Sales Trend")
@@ -254,6 +282,36 @@ def main():
                 use_container_width=True,
                 hide_index=True
             )
+            
+            # PDF Export for Overview
+            overview_content = f"""
+            Business Overview Report
+            ------------------------
+            Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            
+            Key Metrics:
+            - Total Sales: {format_currency(total_sales)}
+            - Total Invoices: {total_invoices}
+            - Average Sale per Invoice: {format_currency(avg_sale_per_invoice)}
+            - Payment Completion: {format_percentage(payment_completion)}
+            - Total Visits: {total_visits}
+            - Average Visit Duration: {avg_visit_duration:.1f} mins
+            - Present Employees Today: {present_count}
+            
+            Top Performing Employees:
+            {employee_performance[['Employee Name', 'Total Sales', 'Invoices']].head(5).to_string(index=False)}
+            """
+            
+            if st.button("📥 Download Overview Report (PDF)"):
+                pdf_file = generate_pdf_report(overview_content, "Business Overview Report")
+                with open(pdf_file, "rb") as f:
+                    st.download_button(
+                        "⬇️ Download Now",
+                        f,
+                        file_name="business_overview_report.pdf",
+                        mime="application/pdf"
+                    )
+                os.remove(pdf_file)
         else:
             st.warning("No performance data available for the selected period")
     
@@ -319,6 +377,40 @@ def main():
                     },
                     use_container_width=True
                 )
+                
+                # Generate PDF report for employee performance
+                performance_content = f"""
+                Employee Performance Report
+                ---------------------------
+                Employee: {selected_employee}
+                Employee Code: {employee_details['Employee Code']}
+                Designation: {employee_details['Designation']}
+                Report Period: {time_period}
+                Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                
+                Sales Performance:
+                - Total Sales: {format_currency(total_sales)}
+                - Total Invoices: {total_invoices}
+                - Average Sale per Invoice: {format_currency(avg_sale_per_invoice)}
+                - Payment Completion: {format_percentage(payment_completion)}
+                
+                Top Selling Products:
+                {top_products.head(5).to_string()}
+                
+                Sales by Category:
+                {sales_by_category.to_string(index=False)}
+                """
+                
+                if st.button("📥 Download Performance Report (PDF)"):
+                    pdf_file = generate_pdf_report(performance_content, f"Employee Performance Report - {selected_employee}")
+                    with open(pdf_file, "rb") as f:
+                        st.download_button(
+                            "⬇️ Download Now",
+                            f,
+                            file_name=f"employee_performance_{selected_employee}.pdf",
+                            mime="application/pdf"
+                        )
+                    os.remove(pdf_file)
             else:
                 st.warning("No sales data available for this employee")
             
@@ -345,17 +437,6 @@ def main():
                     title="Visits by Purpose"
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                
-                # Visit trend
-                visit_trend = employee_visits.groupby(employee_visits['Visit Date'].dt.date)['Visit ID'].count().reset_index()
-                fig = px.line(
-                    visit_trend,
-                    x='Visit Date',
-                    y='Visit ID',
-                    title="Daily Visits Trend",
-                    labels={'Visit Date': 'Date', 'Visit ID': 'Number of Visits'}
-                )
-                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning("No visit data available for this employee")
             
@@ -365,26 +446,12 @@ def main():
                 employee_attendance = attendance_data[attendance_data['Employee Name'] == selected_employee]
                 present_days = len(employee_attendance[employee_attendance['Status'] == 'Present'])
                 leave_days = len(employee_attendance[employee_attendance['Status'] == 'Leave'])
-                attendance_rate = (present_days / len(employee_attendance) * 100) if len(employee_attendance) > 0 else 0
                 
-                col1, col2, col3 = st.columns(3)
+                col1, col2 = st.columns(2)
                 with col1:
                     st.metric("Present Days", present_days)
                 with col2:
                     st.metric("Leave Days", leave_days)
-                with col3:
-                    st.metric("Attendance Rate", format_percentage(attendance_rate))
-                
-                # Attendance calendar
-                st.subheader("Attendance Calendar")
-                attendance_calendar = employee_attendance.pivot_table(
-                    index=employee_attendance['Date'].dt.date,
-                    columns='Status',
-                    values='Attendance ID',
-                    aggfunc='count',
-                    fill_value=0
-                ).reset_index()
-                st.dataframe(attendance_calendar, use_container_width=True)
             else:
                 st.warning("No attendance data available for this employee")
     
