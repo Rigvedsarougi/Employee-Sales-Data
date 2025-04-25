@@ -38,7 +38,7 @@ hide_streamlit_style = """
     .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
     header {visibility: hidden;}
     </style>
-""" + LOCATION_JS
+"""
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 hide_footer_style = """
