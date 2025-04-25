@@ -71,9 +71,6 @@ def load_data(worksheet_name, columns):
         st.error(f"Error loading {worksheet_name} data: {e}")
         return pd.DataFrame(columns=columns)
 
-def format_currency(amount):
-    return f"Rs.{amount:,.2f}"
-
 def format_percentage(value):
     return f"{value:.1f}%"
 
@@ -88,24 +85,29 @@ def generate_pdf_report(content, title):
     pdf = FPDF()
     pdf.add_page()
     
-    # Use built-in font that supports basic characters
-    pdf.set_font("Arial", size=12)
+    # Use standard font that works everywhere
+    pdf.set_font("Helvetica", size=12)
     
     # Add title
-    pdf.set_font("Arial", 'B', 16)
+    pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(200, 10, txt=title, ln=True, align='C')
     pdf.ln(10)
     
-    # Add content - replace any unsupported characters
-    pdf.set_font("Arial", '', 10)
+    # Add content - ensure ASCII-only characters
+    pdf.set_font("Helvetica", '', 10)
     for line in content.split('\n'):
-        # Replace special characters with alternatives
-        line = line.replace('₹', 'Rs.')  # Replace rupee symbol
-        line = line.replace('📊', '')     # Remove emoji
-        line = line.replace('📥', '')     # Remove emoji
-        line = line.replace('⬇️', '->')   # Replace download arrow
+        # Remove any non-ASCII characters
+        line = line.encode('ascii', 'ignore').decode('ascii')
         pdf.multi_cell(0, 5, txt=line)
         pdf.ln(5)
+    
+    # Save to temporary file
+    filename = f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    pdf.output(filename)
+    return filename
+
+def format_currency(amount):
+    return f"INR {amount:,.2f}"  # Changed from ₹ to "INR"
     
     # Save to temporary file
     filename = f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
