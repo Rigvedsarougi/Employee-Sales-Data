@@ -7,13 +7,10 @@ import os
 import uuid
 from PIL import Image
 
-# Add logo display function
 def display_login_header():
-    # Create columns to center the logo and heading
     col1, col2, col3 = st.columns([1, 3, 1])
     
     with col2:
-        # Display centered logo
         try:
             logo = Image.open("logo.png")
             st.image(logo, use_container_width=True)
@@ -22,7 +19,6 @@ def display_login_header():
         except Exception as e:
             st.warning(f"Could not load logo: {str(e)}")
         
-        # Centered heading with custom style
         st.markdown("""
         <div style='text-align: center; margin-bottom: 30px;'>
             <h1 style='margin-bottom: 0;'>Employee Portal</h1>
@@ -30,11 +26,6 @@ def display_login_header():
         </div>
         """, unsafe_allow_html=True)
 
-LOCATION_JS = """
-<script>
-// This can be removed since we're not using location anymore
-</script>
-"""
 
 hide_streamlit_style = """
     <style>
