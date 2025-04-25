@@ -87,19 +87,23 @@ def get_date_range():
 def generate_pdf_report(content, title):
     pdf = FPDF()
     pdf.add_page()
-    pdf.add_font('DejaVu', '', 'DejaVuSansCondensed.ttf', uni=True)
-    pdf.set_font('DejaVu', '', 12)
+    
+    # Use built-in font that supports basic characters
+    pdf.set_font("Arial", size=12)
     
     # Add title
-    pdf.set_font('DejaVu', 'B', 16)
+    pdf.set_font("Arial", 'B', 16)
     pdf.cell(200, 10, txt=title, ln=True, align='C')
     pdf.ln(10)
     
-    # Add content
-    pdf.set_font('DejaVu', '', 10)
+    # Add content - replace any unsupported characters
+    pdf.set_font("Arial", '', 10)
     for line in content.split('\n'):
-        # Replace ₹ with "Rs." to avoid encoding issues
-        line = line.replace('₹', 'Rs.')
+        # Replace special characters with alternatives
+        line = line.replace('₹', 'Rs.')  # Replace rupee symbol
+        line = line.replace('📊', '')     # Remove emoji
+        line = line.replace('📥', '')     # Remove emoji
+        line = line.replace('⬇️', '->')   # Replace download arrow
         pdf.multi_cell(0, 5, txt=line)
         pdf.ln(5)
     
