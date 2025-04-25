@@ -8,3 +8,4 @@ fpdf
 pandas
 PyPDF2
 pdfplumber
+numpy
