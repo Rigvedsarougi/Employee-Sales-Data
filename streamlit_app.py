@@ -626,23 +626,6 @@ def authenticate_employee(employee_name, passkey):
     except:
         return False
 
-def add_back_button():
-    st.markdown("""
-    <style>
-    .back-button {
-        position: fixed;
-        bottom: 20px;
-        left: 20px;
-        z-index: 1000;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    if st.button("← Back", key="back_button"):
-        st.session_state.authenticated = False
-        st.session_state.selected_mode = None
-        st.rerun()
-
 def main():
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
