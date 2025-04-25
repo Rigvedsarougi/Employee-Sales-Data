@@ -72,7 +72,7 @@ def load_data(worksheet_name, columns):
         return pd.DataFrame(columns=columns)
 
 def format_currency(amount):
-    return f"₹{amount:,.2f}"
+    return f"Rs.{amount:,.2f}"
 
 def format_percentage(value):
     return f"{value:.1f}%"
@@ -87,16 +87,19 @@ def get_date_range():
 def generate_pdf_report(content, title):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
+    pdf.add_font('DejaVu', '', 'DejaVuSansCondensed.ttf', uni=True)
+    pdf.set_font('DejaVu', '', 12)
     
     # Add title
-    pdf.set_font("Arial", 'B', 16)
+    pdf.set_font('DejaVu', 'B', 16)
     pdf.cell(200, 10, txt=title, ln=True, align='C')
     pdf.ln(10)
     
     # Add content
-    pdf.set_font("Arial", size=10)
+    pdf.set_font('DejaVu', '', 10)
     for line in content.split('\n'):
+        # Replace ₹ with "Rs." to avoid encoding issues
+        line = line.replace('₹', 'Rs.')
         pdf.multi_cell(0, 5, txt=line)
         pdf.ln(5)
     
@@ -104,7 +107,6 @@ def generate_pdf_report(content, title):
     filename = f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     pdf.output(filename)
     return filename
-
 # Dashboard layout
 def main():
     st.title("📊 Employee Portal Admin Dashboard")
