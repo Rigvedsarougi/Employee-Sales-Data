@@ -727,7 +727,11 @@ def sales_page():
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
-        discount_category = Person.loc[Person['Employee Name'] == selected_employee, 'Discount Category'].values[0]
+        try:
+            discount_category = Person.loc[Person['Employee Name'] == selected_employee, 'Discount Category'].values[0]
+        except IndexError:
+            st.error("Employee not found in records")
+            return
 
         st.subheader("Transaction Details")
         transaction_type = st.selectbox("Transaction Type", ["Sold", "Return", "Add On", "Damage", "Expired"], key="transaction_type")
@@ -753,42 +757,46 @@ def sales_page():
             
             subtotal = 0
             for product in selected_products:
-                product_data = Products.loc[Products['Product Name'] == product].iloc[0]
-                
-                if discount_category in product_data:
-                    unit_price = float(product_data[discount_category])
-                else:
-                    unit_price = float(product_data['Price'])
-                
-                cols = st.columns(4)
-                with cols[0]:
-                    st.text(product)
-                with cols[1]:
-                    st.text(f"₹{unit_price:.2f}")
-                with cols[2]:
-                    prod_discount = st.number_input(
-                        f"Discount for {product}",
-                        min_value=0.0,
-                        max_value=100.0,
-                        value=0.0,
-                        step=0.1,
-                        key=f"discount_{product}",
-                        label_visibility="collapsed"
-                    )
-                    product_discounts.append(prod_discount)
-                with cols[3]:
-                    qty = st.number_input(
-                        f"Qty for {product}",
-                        min_value=1,
-                        value=1,
-                        step=1,
-                        key=f"qty_{product}",
-                        label_visibility="collapsed"
-                    )
-                    quantities.append(qty)
-                
-                item_total = unit_price * (1 - prod_discount/100) * qty
-                subtotal += item_total
+                try:
+                    product_data = Products.loc[Products['Product Name'] == product].iloc[0]
+                    
+                    if discount_category in product_data:
+                        unit_price = float(product_data[discount_category])
+                    else:
+                        unit_price = float(product_data['Price'])
+                    
+                    cols = st.columns(4)
+                    with cols[0]:
+                        st.text(product)
+                    with cols[1]:
+                        st.text(f"₹{unit_price:.2f}")
+                    with cols[2]:
+                        prod_discount = st.number_input(
+                            f"Discount for {product}",
+                            min_value=0.0,
+                            max_value=100.0,
+                            value=0.0,
+                            step=0.1,
+                            key=f"discount_{product}",
+                            label_visibility="collapsed"
+                        )
+                        product_discounts.append(prod_discount)
+                    with cols[3]:
+                        qty = st.number_input(
+                            f"Qty for {product}",
+                            min_value=1,
+                            value=1,
+                            step=1,
+                            key=f"qty_{product}",
+                            label_visibility="collapsed"
+                        )
+                        quantities.append(qty)
+                    
+                    item_total = unit_price * (1 - prod_discount/100) * qty
+                    subtotal += item_total
+                except Exception as e:
+                    st.error(f"Error processing product {product}: {str(e)}")
+                    return
             
             # Final amount calculation
             st.markdown("---")
@@ -818,20 +826,23 @@ def sales_page():
         if distributor_option == "Select from list":
             distributor_names = Distributors['Firm Name'].tolist()
             selected_distributor = st.selectbox("Select Distributor", distributor_names, key="distributor_select")
-            distributor_details = Distributors.loc[Distributors['Firm Name'] == selected_distributor].iloc[0]
-            
-            distributor_firm_name = selected_distributor
-            distributor_id = distributor_details['Distributor ID']
-            distributor_contact_person = distributor_details['Contact Person']
-            distributor_contact_number = distributor_details['Contact Number']
-            distributor_email = distributor_details['Email ID']
-            distributor_territory = distributor_details['Territory']
-            
-            st.text_input("Distributor ID", value=distributor_id, disabled=True, key="distributor_id_display")
-            st.text_input("Contact Person", value=distributor_contact_person, disabled=True, key="distributor_contact_person_display")
-            st.text_input("Contact Number", value=distributor_contact_number, disabled=True, key="distributor_contact_number_display")
-            st.text_input("Email", value=distributor_email, disabled=True, key="distributor_email_display")
-            st.text_input("Territory", value=distributor_territory, disabled=True, key="distributor_territory_display")
+            try:
+                distributor_details = Distributors.loc[Distributors['Firm Name'] == selected_distributor].iloc[0]
+                
+                distributor_firm_name = selected_distributor
+                distributor_id = distributor_details['Distributor ID']
+                distributor_contact_person = distributor_details['Contact Person']
+                distributor_contact_number = distributor_details['Contact Number']
+                distributor_email = distributor_details['Email ID']
+                distributor_territory = distributor_details['Territory']
+                
+                st.text_input("Distributor ID", value=distributor_id, disabled=True, key="distributor_id_display")
+                st.text_input("Contact Person", value=distributor_contact_person, disabled=True, key="distributor_contact_person_display")
+                st.text_input("Contact Number", value=distributor_contact_number, disabled=True, key="distributor_contact_number_display")
+                st.text_input("Email", value=distributor_email, disabled=True, key="distributor_email_display")
+                st.text_input("Territory", value=distributor_territory, disabled=True, key="distributor_territory_display")
+            except IndexError:
+                st.error("Selected distributor not found in records")
 
         st.subheader("Outlet Details")
         outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="outlet_option")
@@ -839,20 +850,23 @@ def sales_page():
         if outlet_option == "Select from list":
             outlet_names = Outlet['Shop Name'].tolist()
             selected_outlet = st.selectbox("Select Outlet", outlet_names, key="outlet_select")
-            outlet_details = Outlet.loc[Outlet['Shop Name'] == selected_outlet].iloc[0]
-            
-            customer_name = selected_outlet
-            gst_number = outlet_details['GST']
-            contact_number = outlet_details['Contact']
-            address = outlet_details['Address']
-            state = outlet_details['State']
-            city = outlet_details['City']
-            
-            st.text_input("Outlet Contact", value=contact_number, disabled=True, key="outlet_contact_display")
-            st.text_input("Outlet Address", value=address, disabled=True, key="outlet_address_display")
-            st.text_input("Outlet State", value=state, disabled=True, key="outlet_state_display")
-            st.text_input("Outlet City", value=city, disabled=True, key="outlet_city_display")
-            st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
+            try:
+                outlet_details = Outlet.loc[Outlet['Shop Name'] == selected_outlet].iloc[0]
+                
+                customer_name = selected_outlet
+                gst_number = outlet_details['GST']
+                contact_number = outlet_details['Contact']
+                address = outlet_details['Address']
+                state = outlet_details['State']
+                city = outlet_details['City']
+                
+                st.text_input("Outlet Contact", value=contact_number, disabled=True, key="outlet_contact_display")
+                st.text_input("Outlet Address", value=address, disabled=True, key="outlet_address_display")
+                st.text_input("Outlet State", value=state, disabled=True, key="outlet_state_display")
+                st.text_input("Outlet City", value=city, disabled=True, key="outlet_city_display")
+                st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
+            except IndexError:
+                st.error("Selected outlet not found in records")
         else:
             customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
             gst_number = st.text_input("GST Number", key="manual_gst_number")
@@ -862,34 +876,39 @@ def sales_page():
             city = st.text_input("City", "Noida", key="manual_city")
 
         if st.button("Generate Invoice", key="generate_invoice_button"):
-            if selected_products and customer_name:
-                invoice_number = generate_invoice_number()
-                employee_selfie_path = None
-                payment_receipt_path = None
-
-                pdf, pdf_path = generate_invoice(
-                    customer_name, gst_number, contact_number, address, state, city,
-                    selected_products, quantities, product_discounts, discount_category, 
-                    selected_employee, payment_status, amount_paid, employee_selfie_path, 
-                    payment_receipt_path, invoice_number, transaction_type,
-                    distributor_firm_name, distributor_id, distributor_contact_person,
-                    distributor_contact_number, distributor_email, distributor_territory,
-                    sales_remarks
-                )
-                
-                with open(pdf_path, "rb") as f:
-                    st.download_button(
-                        "Download Invoice", 
-                        f, 
-                        file_name=f"{invoice_number}.pdf",
-                        mime="application/pdf",
-                        key=f"download_{invoice_number}"
-                    )
-                
-                st.success(f"Invoice {invoice_number} generated successfully!")
-                st.balloons()
+            if not selected_products:
+                st.error("Please select at least one product")
+            elif not customer_name:
+                st.error("Please provide outlet details")
             else:
-                st.error("Please fill all required fields and select products.")
+                try:
+                    invoice_number = generate_invoice_number()
+                    employee_selfie_path = None
+                    payment_receipt_path = None
+
+                    pdf, pdf_path = generate_invoice(
+                        customer_name, gst_number, contact_number, address, state, city,
+                        selected_products, quantities, product_discounts, discount_category, 
+                        selected_employee, payment_status, amount_paid, employee_selfie_path, 
+                        payment_receipt_path, invoice_number, transaction_type,
+                        distributor_firm_name, distributor_id, distributor_contact_person,
+                        distributor_contact_number, distributor_email, distributor_territory,
+                        sales_remarks
+                    )
+                    
+                    with open(pdf_path, "rb") as f:
+                        st.download_button(
+                            "Download Invoice", 
+                            f, 
+                            file_name=f"{invoice_number}.pdf",
+                            mime="application/pdf",
+                            key=f"download_{invoice_number}"
+                        )
+                    
+                    st.success(f"Invoice {invoice_number} generated successfully!")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Error generating invoice: {str(e)}")
     
     with tab2:
         st.subheader("Sales History")
@@ -898,19 +917,24 @@ def sales_page():
         def load_sales_data():
             try:
                 sales_data = conn.read(worksheet="Sales", ttl=5)
-                sales_data = sales_data.dropna(how='all').copy()  # Explicit copy
+                sales_data = sales_data.dropna(how='all').copy()
                 
                 employee_code = Person.loc[Person['Employee Name'] == selected_employee, 'Employee Code'].values[0]
                 filtered_data = sales_data.loc[sales_data['Employee Code'] == employee_code].copy()
                 
-                # Convert all columns to appropriate types using .loc
+                # Convert all columns to appropriate types
                 filtered_data.loc[:, 'Outlet Name'] = filtered_data['Outlet Name'].astype(str)
                 filtered_data.loc[:, 'Invoice Number'] = filtered_data['Invoice Number'].astype(str)
+                
+                # Convert Invoice Date to datetime - handle errors and invalid formats
                 filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(
                     filtered_data['Invoice Date'], 
                     dayfirst=True,
                     errors='coerce'
                 )
+                
+                # Drop rows where date conversion failed
+                filtered_data = filtered_data.dropna(subset=['Invoice Date'])
                 
                 # Convert numeric columns
                 numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
@@ -920,7 +944,7 @@ def sales_page():
                 
                 return filtered_data
             except Exception as e:
-                st.error(f"Error loading sales data: {e}")
+                st.error(f"Error loading sales data: {str(e)}")
                 return pd.DataFrame()
 
         sales_data = load_sales_data()
@@ -950,10 +974,13 @@ def sales_page():
             ]
         
         if invoice_date_search:
-            date_str = invoice_date_search.strftime("%d-%m-%Y")
-            filtered_data = filtered_data.loc[
-                filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str
-            ]
+            try:
+                search_date = pd.to_datetime(invoice_date_search)
+                filtered_data = filtered_data.loc[
+                    filtered_data['Invoice Date'].dt.date == search_date.date()
+                ]
+            except Exception as e:
+                st.error(f"Error filtering by date: {str(e)}")
         
         if outlet_name_search:
             filtered_data = filtered_data.loc[
@@ -1063,8 +1090,7 @@ def sales_page():
                         st.success("Invoice regenerated successfully!")
                         st.balloons()
                     except Exception as e:
-                        st.error(f"Error regenerating invoice: {e}")
-
+                        st.error(f"Error regenerating invoice: {str(e)}")
 def visit_page():
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
