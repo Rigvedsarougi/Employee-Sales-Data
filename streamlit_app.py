@@ -627,7 +627,7 @@ def add_back_button():
     </style>
     """, unsafe_allow_html=True)
     
-    if st.button("← Back", key="back_button"):
+    if st.button("← logout", key="back_button"):
         st.session_state.authenticated = False
         st.session_state.selected_mode = None
         st.rerun()
