@@ -888,7 +888,7 @@ def sales_page():
                 # Convert all columns to appropriate types
                 filtered_data.loc[:, 'Outlet Name'] = filtered_data['Outlet Name'].astype(str)
                 filtered_data.loc[:, 'Invoice Number'] = filtered_data['Invoice Number'].astype(str)
-                filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True)
+                filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True, errors='coerce')
                 
                 # Convert numeric columns
                 numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
@@ -924,9 +924,17 @@ def sales_page():
             filtered_data = filtered_data[
                 filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
             ].copy()
+        
         if invoice_date_search:
-            date_str = invoice_date_search.strftime("%d-%m-%Y")
-            filtered_data = filtered_data[filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str].copy()
+            try:
+                date_str = invoice_date_search.strftime("%d-%m-%Y")
+                filtered_data = filtered_data[
+                    filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str
+                ].copy()
+            except Exception as e:
+                st.error(f"Error filtering by date: {e}")
+                filtered_data = pd.DataFrame()  # Empty dataframe if date filter fails
+        
         if outlet_name_search:
             filtered_data = filtered_data[
                 filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
