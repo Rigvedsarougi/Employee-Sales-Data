@@ -13,7 +13,7 @@ def display_login_header():
     with col2:
         try:
             logo = Image.open("logo.png")
-            st.image(logo, use_column_width=True)
+            st.image(logo, use_container_width=True)
         except FileNotFoundError:
             st.warning("Logo image not found. Please ensure 'logo.png' exists in the same directory.")
         except Exception as e:
