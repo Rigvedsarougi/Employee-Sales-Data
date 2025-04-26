@@ -7,11 +7,25 @@ import os
 import uuid
 from PIL import Image
 
-LOCATION_JS = """
-<script>
-// This can be removed since we're not using location anymore
-</script>
-"""
+def display_login_header():
+    col1, col2, col3 = st.columns([1, 3, 1])
+    
+    with col2:
+        try:
+            logo = Image.open("logo.png")
+            st.image(logo, use_container_width=True)
+        except FileNotFoundError:
+            st.warning("Logo image not found. Please ensure 'logo.png' exists in the same directory.")
+        except Exception as e:
+            st.warning(f"Could not load logo: {str(e)}")
+        
+        st.markdown("""
+        <div style='text-align: center; margin-bottom: 30px;'>
+            <h1 style='margin-bottom: 0;'>Employee Portal</h1>
+            <h2 style='margin-top: 0; color: #555;'>Login</h2>
+        </div>
+        """, unsafe_allow_html=True)
+
 
 hide_streamlit_style = """
     <style>
@@ -20,7 +34,7 @@ hide_streamlit_style = """
     .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
     header {visibility: hidden;}
     </style>
-""" + LOCATION_JS
+"""
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 hide_footer_style = """
@@ -39,8 +53,7 @@ hide_footer_style = """
 """
 
 st.markdown(hide_footer_style, unsafe_allow_html=True)
-# Display Title and Description
-st.title("Biolume: Management System")
+
 
 def validate_data_before_write(df, expected_columns):
     """Validate data structure before writing to Google Sheets"""
@@ -103,9 +116,6 @@ def safe_sheet_operation(operation, *args, **kwargs):
                 raise
             time.sleep(1 * (attempt + 1))  # Exponential backoff
 
-
-
-
 # Constants
 SALES_SHEET_COLUMNS = [
     "Invoice Number",
@@ -145,7 +155,8 @@ SALES_SHEET_COLUMNS = [
     "Payment Receipt Path",
     "Employee Selfie Path",
     "Invoice PDF Path",
-    "Remarks"  # Changed from Location to Remarks
+    "Remarks",
+    "Delivery Status"  # Added new column for delivery status
 ]
 
 VISIT_SHEET_COLUMNS = [
@@ -166,7 +177,7 @@ VISIT_SHEET_COLUMNS = [
     "Visit Notes",
     "Visit Selfie Path",
     "Visit Status",
-    "Remarks"  # Changed from Location to Remarks
+    "Remarks"
 ]
 
 ATTENDANCE_SHEET_COLUMNS = [
@@ -191,7 +202,7 @@ Outlet = pd.read_csv('Invoice - Outlet.csv')
 Person = pd.read_csv('Invoice - Person.csv')
 Distributors = pd.read_csv('Invoice - Distributors.csv')
 
-# Company Details
+# Company Details with ALLGEN TRADING logo
 company_name = "BIOLUME SKIN SCIENCE PRIVATE LIMITED"
 company_address = """Ground Floor Rampal Awana Complex,
 Rampal Awana Complex, Indra Market,
@@ -213,13 +224,14 @@ os.makedirs("payment_receipts", exist_ok=True)
 os.makedirs("invoices", exist_ok=True)
 os.makedirs("visit_selfies", exist_ok=True)
 
-
-
 # Custom PDF class
 class PDF(FPDF):
     def header(self):
         if company_logo:
-            self.image(company_logo, 10, 8, 33)
+            try:
+                self.image(company_logo, 10, 8, 33)
+            except:
+                pass
         
         self.set_font('Arial', 'B', 16)
         self.cell(0, 10, company_name, ln=True, align='C')
@@ -267,7 +279,24 @@ def log_sales_to_gsheet(conn, sales_data):
         st.success("Sales data successfully logged to Google Sheets!")
     except Exception as e:
         st.error(f"Error logging sales data: {e}")
-        st.stop()  # Prevent further execution if there's an error
+        st.stop()
+
+def update_delivery_status(conn, invoice_number, product_name, new_status):
+    try:
+        # Read all existing data
+        sales_data = conn.read(worksheet="Sales", ttl=5)
+        sales_data = sales_data.dropna(how="all")
+        
+        # Update the delivery status for the specific record
+        mask = (sales_data['Invoice Number'] == invoice_number) & (sales_data['Product Name'] == product_name)
+        sales_data.loc[mask, 'Delivery Status'] = new_status
+        
+        # Write back the updated data
+        conn.update(worksheet="Sales", data=sales_data)
+        return True
+    except Exception as e:
+        st.error(f"Error updating delivery status: {e}")
+        return False
 
 def log_visit_to_gsheet(conn, visit_data):
     try:
@@ -416,7 +445,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     # Payment Status
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"Payment Status: {payment_status.upper()}", ln=True)
-    if payment_status in ["paid", "partial paid"]:
+    if payment_status == "paid":
         pdf.cell(0, 10, f"Amount Paid: {amount_paid} INR", ln=True)
     pdf.ln(10)
     
@@ -426,40 +455,6 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     pdf.set_font("Arial", '', 10)
     pdf.multi_cell(0, 5, bank_details)
     
-    # Attachments
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, "Attachments", ln=True)
-    pdf.ln(10)
-    
-    if employee_selfie_path:
-        try:
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(0, 10, "Employee Selfie:", ln=True)
-            img = Image.open(employee_selfie_path)
-            img.thumbnail((150, 150))
-            temp_path = f"temp_{os.path.basename(employee_selfie_path)}"
-            img.save(temp_path)
-            pdf.image(temp_path, x=10, y=pdf.get_y(), w=50)
-            pdf.ln(60)
-            os.remove(temp_path)
-        except Exception as e:
-            st.error(f"Error adding employee selfie: {e}")
-    
-    if payment_receipt_path and payment_status in ["paid", "partial paid"]:
-        try:
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(0, 10, "Payment Receipt:", ln=True)
-            img = Image.open(payment_receipt_path)
-            img.thumbnail((150, 150))
-            temp_path = f"temp_{os.path.basename(payment_receipt_path)}"
-            img.save(temp_path)
-            pdf.image(temp_path, x=10, y=pdf.get_y(), w=50)
-            pdf.ln(60)
-            os.remove(temp_path)
-        except Exception as e:
-            st.error(f"Error adding payment receipt: {e}")
-
     # Prepare sales data for logging
     for idx, (product, quantity, prod_discount) in enumerate(zip(selected_products, quantities, product_discounts)):
         product_data = Products[Products['Product Name'] == product].iloc[0]
@@ -505,11 +500,12 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
             "SGST Amount": (item_total * tax_rate) / 2,
             "Grand Total": item_total + (item_total * tax_rate),
             "Payment Status": payment_status,
-            "Amount Paid": amount_paid if payment_status in ["paid", "partial paid"] else 0,
-            "Payment Receipt Path": payment_receipt_path if payment_status in ["paid", "partial paid"] else "",
+            "Amount Paid": amount_paid if payment_status == "paid" else 0,
+            "Payment Receipt Path": payment_receipt_path if payment_status == "paid" else "",
             "Employee Selfie Path": employee_selfie_path,
             "Invoice PDF Path": f"invoices/{invoice_number}.pdf",
-            "Remarks": remarks  # Changed from Location to Remarks
+            "Remarks": remarks,
+            "Delivery Status": "pending"  # Default status is pending
         })
 
     # Save the PDF
@@ -547,7 +543,7 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, out
         "Visit Notes": visit_notes,
         "Visit Selfie Path": visit_selfie_path,
         "Visit Status": "completed",
-        "Remarks": remarks  # Changed from Location to Remarks
+        "Remarks": remarks
     }
     
     visit_df = pd.DataFrame([visit_data])
@@ -631,7 +627,7 @@ def add_back_button():
     </style>
     """, unsafe_allow_html=True)
     
-    if st.button("← Back", key="back_button"):
+    if st.button("← logout", key="back_button"):
         st.session_state.authenticated = False
         st.session_state.selected_mode = None
         st.rerun()
@@ -645,48 +641,81 @@ def main():
         st.session_state.employee_name = None
 
     if not st.session_state.authenticated:
-        st.title("Employee Authentication")
+        # Display the centered logo and heading
+        display_login_header()
         
-        mode = st.radio("Select Mode", ["Sales", "Visit", "Attendance"], key="mode_selection")
         employee_names = Person['Employee Name'].tolist()
-        employee_name = st.selectbox("Select Your Name", employee_names, key="employee_select")
-        passkey = st.text_input("Enter Your Employee Code", type="password", key="passkey_input")
         
-        if st.button("Log in", key="login_button"):
-            if authenticate_employee(employee_name, passkey):
-                st.session_state.authenticated = True
-                st.session_state.selected_mode = mode
-                st.session_state.employee_name = employee_name
-                st.rerun()
-            else:
-                st.error("Invalid Employee Code. Please try again.")
+        # Create centered form
+        form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
+        
+        with form_col2:
+            with st.container():
+                employee_name = st.selectbox(
+                    "Select Your Name", 
+                    employee_names, 
+                    key="employee_select"
+                )
+                passkey = st.text_input(
+                    "Enter Your Employee Code", 
+                    type="password", 
+                    key="passkey_input"
+                )
+                
+                login_button = st.button(
+                    "Log in", 
+                    key="login_button",
+                    use_container_width=True
+                )
+                
+                if login_button:
+                    if authenticate_employee(employee_name, passkey):
+                        st.session_state.authenticated = True
+                        st.session_state.employee_name = employee_name
+                        st.rerun()
+                    else:
+                        st.error("Invalid Password. Please try again.")
     else:
-        add_back_button()
+        # [REST OF YOUR ORIGINAL main() FUNCTION REMAINS EXACTLY THE SAME]
+        # Show three option boxes after login
+        st.title("Select Mode")
+        col1, col2, col3 = st.columns(3)
         
-        if st.session_state.selected_mode == "Sales":
-            sales_page()
-        elif st.session_state.selected_mode == "Visit":
-            visit_page()
-        else:
-            attendance_page()
+        with col1:
+            if st.button("Sales", use_container_width=True, key="sales_mode"):
+                st.session_state.selected_mode = "Sales"
+                st.rerun()
+        
+        with col2:
+            if st.button("Visit", use_container_width=True, key="visit_mode"):
+                st.session_state.selected_mode = "Visit"
+                st.rerun()
+        
+        with col3:
+            if st.button("Attendance", use_container_width=True, key="attendance_mode"):
+                st.session_state.selected_mode = "Attendance"
+                st.rerun()
+        
+        if st.session_state.selected_mode:
+            add_back_button()
+            
+            if st.session_state.selected_mode == "Sales":
+                sales_page()
+            elif st.session_state.selected_mode == "Visit":
+                visit_page()
+            else:
+                attendance_page()
 
 def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
     
-    # Removed location section and added remarks instead
-    st.subheader("Current Location")
-    sales_remarks = st.text_area("Enter the Current Location", 
-                               key="remarks_input_sales",
-                               max_chars=500,
-                               height=100)
+    # Empty remarks since we removed the location input
+    sales_remarks = ""
     
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
-        st.subheader("Employee Verification")
-        employee_selfie = st.file_uploader("Upload Employee Selfie", type=["jpg", "jpeg", "png"], key="employee_selfie")
-
         discount_category = Person[Person['Employee Name'] == selected_employee]['Discount Category'].values[0]
 
         st.subheader("Transaction Details")
@@ -750,7 +779,6 @@ def sales_page():
                 item_total = unit_price * (1 - prod_discount/100) * qty
                 subtotal += item_total
             
-
             # Final amount calculation
             st.markdown("---")
             st.markdown("### Final Amount Calculation")
@@ -758,20 +786,13 @@ def sales_page():
             tax_amount = subtotal * 0.18
             st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
             st.markdown(f"**Grand Total: ₹{subtotal + tax_amount:.2f}**")
-            
 
         st.subheader("Payment Details")
-        payment_status = st.selectbox("Payment Status", ["pending", "paid", "partial paid"], key="payment_status")
+        payment_status = st.selectbox("Payment Status", ["pending", "paid"], key="payment_status")
 
         amount_paid = 0.0
-        payment_receipt = None
-
-        if payment_status == "partial paid":
-            amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid_partial")
-            payment_receipt = st.file_uploader("Upload Payment Receipt", type=["jpg", "jpeg", "png", "pdf"], key="payment_receipt_partial")
-        elif payment_status == "paid":
-            amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid_full")
-            payment_receipt = st.file_uploader("Upload Payment Receipt", type=["jpg", "jpeg", "png", "pdf"], key="payment_receipt_full")
+        if payment_status == "paid":
+            amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid")
 
         st.subheader("Distributor Details")
         distributor_option = st.radio("Distributor Selection", ["Select from list", "None"], key="distributor_option")
@@ -816,7 +837,6 @@ def sales_page():
             state = outlet_details['State']
             city = outlet_details['City']
             
-            # Show outlet details like distributor details
             st.text_input("Outlet Contact", value=contact_number, disabled=True, key="outlet_contact_display")
             st.text_input("Outlet Address", value=address, disabled=True, key="outlet_address_display")
             st.text_input("Outlet State", value=state, disabled=True, key="outlet_state_display")
@@ -833,9 +853,8 @@ def sales_page():
         if st.button("Generate Invoice", key="generate_invoice_button"):
             if selected_products and customer_name:
                 invoice_number = generate_invoice_number()
-                
-                employee_selfie_path = save_uploaded_file(employee_selfie, "employee_selfies") if employee_selfie else None
-                payment_receipt_path = save_uploaded_file(payment_receipt, "payment_receipts") if payment_receipt else None
+                employee_selfie_path = None
+                payment_receipt_path = None
 
                 pdf, pdf_path = generate_invoice(
                     customer_name, gst_number, contact_number, address, state, city,
@@ -844,7 +863,7 @@ def sales_page():
                     payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
                     distributor_contact_number, distributor_email, distributor_territory,
-                    sales_remarks  # Changed from location to remarks
+                    sales_remarks
                 )
                 
                 with open(pdf_path, "rb") as f:
@@ -857,61 +876,175 @@ def sales_page():
                     )
                 
                 st.success(f"Invoice {invoice_number} generated successfully!")
+                st.balloons()
             else:
                 st.error("Please fill all required fields and select products.")
     
     with tab2:
-        st.subheader("Previous Sales")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            invoice_number_search = st.text_input("Invoice Number", key="invoice_search")
-        with col2:
-            invoice_date_search = st.date_input("Invoice Date", key="date_search")
-        with col3:
-            outlet_name_search = st.text_input("Outlet Name", key="outlet_search")
-            
-        if st.button("Search Sales", key="search_sales_button"):
+        st.subheader("Sales History")
+        
+        @st.cache_data(ttl=300)
+        def load_sales_data():
             try:
                 sales_data = conn.read(worksheet="Sales", ttl=5)
                 sales_data = sales_data.dropna(how="all")
-                
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
                 filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
                 
-                if invoice_number_search:
-                    filtered_data = filtered_data[filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False)]
-                if invoice_date_search:
-                    date_str = invoice_date_search.strftime("%d-%m-%Y")
-                    filtered_data = filtered_data[filtered_data['Invoice Date'] == date_str]
-                if outlet_name_search:
-                    filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
+                # Convert all columns to appropriate types
+                filtered_data['Outlet Name'] = filtered_data['Outlet Name'].astype(str)
+                filtered_data['Invoice Number'] = filtered_data['Invoice Number'].astype(str)
+                filtered_data['Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True)
                 
-                if not filtered_data.empty:
-                    st.dataframe(filtered_data[['Invoice Number', 'Invoice Date', 'Outlet Name', 'Product Name', 'Quantity', 'Grand Total', 'Remarks']])
-                    
-                    csv = filtered_data.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        "Download as CSV",
-                        csv,
-                        "sales_history.csv",
-                        "text/csv",
-                        key='download-csv'
-                    )
-                else:
-                    st.warning("No matching sales records found")
+                # Convert numeric columns
+                numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
+                for col in numeric_cols:
+                    if col in filtered_data.columns:
+                        filtered_data[col] = pd.to_numeric(filtered_data[col], errors='coerce')
+                
+                return filtered_data
             except Exception as e:
-                st.error(f"Error retrieving sales data: {e}")
+                st.error(f"Error loading sales data: {e}")
+                return pd.DataFrame()
+
+        sales_data = load_sales_data()
+        
+        if sales_data.empty:
+            st.warning("No sales records found")
+            return
+            
+        with st.expander("🔍 Search Filters", expanded=True):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                invoice_number_search = st.text_input("Invoice Number", key="invoice_search")
+            with col2:
+                invoice_date_search = st.date_input("Invoice Date", key="date_search")
+            with col3:
+                outlet_name_search = st.text_input("Outlet Name", key="outlet_search")
+            
+            if st.button("Apply Filters", key="search_sales_button"):
+                st.rerun()
+        
+        filtered_data = sales_data.copy()
+        if invoice_number_search:
+            filtered_data = filtered_data[
+                filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
+            ]
+        if invoice_date_search:
+            date_str = invoice_date_search.strftime("%d-%m-%Y")
+            filtered_data = filtered_data[filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str]
+        if outlet_name_search:
+            filtered_data = filtered_data[
+                filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
+            ]
+        
+        if filtered_data.empty:
+            st.warning("No matching records found")
+            return
+            
+        invoice_summary = filtered_data.groupby('Invoice Number').agg({
+            'Invoice Date': 'first',
+            'Outlet Name': 'first',
+            'Grand Total': 'sum',
+            'Payment Status': 'first'
+        }).sort_values('Invoice Date', ascending=False).reset_index()
+        
+        st.write(f"📄 Showing {len(invoice_summary)} invoices")
+        st.dataframe(
+            invoice_summary,
+            column_config={
+                "Grand Total": st.column_config.NumberColumn(format="₹%.2f"),
+                "Invoice Date": st.column_config.DateColumn(format="DD/MM/YYYY")
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        selected_invoice = st.selectbox(
+            "Select invoice to view details",
+            invoice_summary['Invoice Number'],
+            key="invoice_selection"
+        )
+        
+        invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
+        if not invoice_details.empty:
+            invoice_data = invoice_details.iloc[0]
+            
+            st.subheader(f"Invoice {selected_invoice}")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Date", invoice_data['Invoice Date'].strftime('%d-%m-%Y'))
+                st.metric("Outlet", str(invoice_data['Outlet Name']))
+                st.metric("Contact", str(invoice_data['Outlet Contact']))
+            with col2:
+                total_amount = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Grand Total'].values[0]
+                st.metric("Total Amount", f"₹{total_amount:.2f}")
+                st.metric("Payment Status", str(invoice_data['Payment Status']).capitalize())
+            
+            st.subheader("Products")
+            product_display = invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price']].copy()
+            product_display['Product Name'] = product_display['Product Name'].astype(str)
+            
+            st.dataframe(
+                product_display,
+                column_config={
+                    "Unit Price": st.column_config.NumberColumn(format="₹%.2f"),
+                    "Total Price": st.column_config.NumberColumn(format="₹%.2f")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            if st.button("🔄 Regenerate Invoice", key=f"regenerate_btn_{selected_invoice}"):
+                with st.spinner("Regenerating invoice..."):
+                    try:
+                        pdf, pdf_path = generate_invoice(
+                            str(invoice_data['Outlet Name']),
+                            str(invoice_data.get('GST Number', '')),
+                            str(invoice_data['Outlet Contact']),
+                            str(invoice_data['Outlet Address']),
+                            str(invoice_data['Outlet State']),
+                            str(invoice_data['Outlet City']),
+                            invoice_details['Product Name'].astype(str).tolist(),
+                            invoice_details['Quantity'].tolist(),
+                            invoice_details['Product Discount (%)'].tolist(),
+                            str(invoice_data['Discount Category']),
+                            str(invoice_data['Employee Name']),
+                            str(invoice_data['Payment Status']),
+                            float(invoice_data['Amount Paid']),
+                            None,
+                            None,
+                            str(selected_invoice),
+                            str(invoice_data['Transaction Type']),
+                            str(invoice_data.get('Distributor Firm Name', '')),
+                            str(invoice_data.get('Distributor ID', '')),
+                            str(invoice_data.get('Distributor Contact Person', '')),
+                            str(invoice_data.get('Distributor Contact Number', '')),
+                            str(invoice_data.get('Distributor Email', '')),
+                            str(invoice_data.get('Distributor Territory', '')),
+                            str(invoice_data.get('Remarks', ''))
+                        )
+                        
+                        with open(pdf_path, "rb") as f:
+                            st.download_button(
+                                "📥 Download Regenerated Invoice", 
+                                f, 
+                                file_name=f"{selected_invoice}.pdf",
+                                mime="application/pdf",
+                                key=f"download_regenerated_{selected_invoice}"
+                            )
+                        
+                        st.success("Invoice regenerated successfully!")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"Error regenerating invoice: {e}")
 
 def visit_page():
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
 
-    # Removed location section and added remarks instead
-    st.subheader("Current Location")
-    visit_remarks = st.text_area("Enter your Current Location", 
-                              key="remarks_input_visit",
-                              max_chars=500,
-                              height=100)
+    # Empty remarks since we removed the location input
+    visit_remarks = ""
 
     tab1, tab2 = st.tabs(["New Visit", "Visit History"])
     
@@ -946,9 +1079,6 @@ def visit_page():
         visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
         visit_notes = st.text_area("Visit Notes", key="visit_notes")
         
-        st.subheader("Visit Verification")
-        visit_selfie = st.file_uploader("Upload Visit Selfie", type=["jpg", "jpeg", "png"], key="visit_selfie")
-
         st.subheader("Time Tracking")
         col1, col2 = st.columns(2)
         with col1:
@@ -968,13 +1098,14 @@ def visit_page():
                 entry_datetime = datetime.combine(today, entry_time)
                 exit_datetime = datetime.combine(today, exit_time)
                 
-                visit_selfie_path = save_uploaded_file(visit_selfie, "visit_selfies") if visit_selfie else None
+                # No visit selfie upload
+                visit_selfie_path = None
                 
                 visit_id = record_visit(
                     selected_employee, outlet_name, outlet_contact, outlet_address,
                     outlet_state, outlet_city, visit_purpose, visit_notes, 
                     visit_selfie_path, entry_datetime, exit_datetime,
-                    visit_remarks  # Changed from location to remarks
+                    visit_remarks
                 )
                 
                 st.success(f"Visit {visit_id} recorded successfully!")
@@ -1038,36 +1169,16 @@ def attendance_page():
         return
     
     st.subheader("Attendance Status")
-    status = st.radio("Select Status", ["Present", "Leave"], index=0, key="attendance_status")
+    status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
     
-    if status == "Present":
+    if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
         col1, col2 = st.columns([3, 1])
         with col1:
             live_location = st.text_input("Enter your current location (Google Maps link or address)", 
                                         help="Please share your live location for verification",
                                         key="location_input")
-        with col2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.button("Get Current Location", 
-                     on_click=lambda: st.markdown(
-                         """
-                         <script>
-                         getLocation(function(location, error) {
-                             if (location) {
-                                 updateLocationInput('location_input', location);
-                                 // Show success message
-                                 window.parent.document.dispatchEvent(new Event('locationCaptured'));
-                             } else {
-                                 alert(error || "Failed to get location");
-                             }
-                         });
-                         </script>
-                         """,
-                         unsafe_allow_html=True
-                     ),
-                     key="get_location",
-                     help="Click to automatically capture your current location")
+
         
         if st.button("Mark Attendance", key="mark_attendance_button"):
             if not live_location:
@@ -1076,7 +1187,7 @@ def attendance_page():
                 with st.spinner("Recording attendance..."):
                     attendance_id, error = record_attendance(
                         selected_employee,
-                        "Present",
+                        status,  # Will be "Present" or "Half Day"
                         location_link=live_location
                     )
                     
