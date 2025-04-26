@@ -156,7 +156,7 @@ SALES_SHEET_COLUMNS = [
     "Employee Selfie Path",
     "Invoice PDF Path",
     "Remarks",
-    "Delivery Status"
+    "Delivery Status"  # Added new column for delivery status
 ]
 
 VISIT_SHEET_COLUMNS = [
@@ -368,13 +368,13 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     pdf.ln(1)
     
     # Invoice number
-    pdf.set_font('Arial', 'B', 10)
+    pdf.set_font("Arial", 'B', 10)
     pdf.cell(0, 10, f"Invoice Number: {invoice_number}", ln=True)
     pdf.ln(5)
     
     # Table header
     pdf.set_fill_color(200, 220, 255)
-    pdf.set_font('Arial', 'B', 10)
+    pdf.set_font("Arial", 'B', 10)
     pdf.cell(10, 10, "S.No", border=1, align='C', fill=True)
     pdf.cell(70, 10, "Product Name", border=1, align='C', fill=True)
     pdf.cell(20, 10, "HSN/SAC", border=1, align='C', fill=True)
@@ -505,7 +505,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
             "Employee Selfie Path": employee_selfie_path,
             "Invoice PDF Path": f"invoices/{invoice_number}.pdf",
             "Remarks": remarks,
-            "Delivery Status": "pending"
+            "Delivery Status": "pending"  # Default status is pending
         })
 
     # Save the PDF
@@ -589,7 +589,7 @@ def record_attendance(employee_name, status, location_link="", leave_reason=""):
 def check_existing_attendance(employee_name):
     try:
         existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
-        existing_data = existing_data.dropna(how="all").copy()
+        existing_data = existing_data.dropna(how="all")
         
         if existing_data.empty:
             return False
@@ -600,7 +600,7 @@ def check_existing_attendance(employee_name):
         existing_records = existing_data[
             (existing_data['Employee Code'] == employee_code) & 
             (existing_data['Date'] == current_date)
-        ].copy()
+        ]
         
         return not existing_records.empty
         
@@ -641,10 +641,12 @@ def main():
         st.session_state.employee_name = None
 
     if not st.session_state.authenticated:
+        # Display the centered logo and heading
         display_login_header()
         
         employee_names = Person['Employee Name'].tolist()
         
+        # Create centered form
         form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
         
         with form_col2:
@@ -674,6 +676,8 @@ def main():
                     else:
                         st.error("Invalid Password. Please try again.")
     else:
+        # [REST OF YOUR ORIGINAL main() FUNCTION REMAINS EXACTLY THE SAME]
+        # Show three option boxes after login
         st.title("Select Mode")
         col1, col2, col3 = st.columns(3)
         
@@ -706,6 +710,7 @@ def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
     
+    # Empty remarks since we removed the location input
     sales_remarks = ""
     
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
@@ -774,6 +779,7 @@ def sales_page():
                 item_total = unit_price * (1 - prod_discount/100) * qty
                 subtotal += item_total
             
+            # Final amount calculation
             st.markdown("---")
             st.markdown("### Final Amount Calculation")
             st.markdown(f"Subtotal: ₹{subtotal:.2f}")
@@ -881,20 +887,20 @@ def sales_page():
         def load_sales_data():
             try:
                 sales_data = conn.read(worksheet="Sales", ttl=5)
-                sales_data = sales_data.dropna(how="all").copy()
+                sales_data = sales_data.dropna(how="all")
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-                filtered_data = sales_data[sales_data['Employee Code'] == employee_code].copy()
+                filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
                 
                 # Convert all columns to appropriate types
-                filtered_data.loc[:, 'Outlet Name'] = filtered_data['Outlet Name'].astype(str)
-                filtered_data.loc[:, 'Invoice Number'] = filtered_data['Invoice Number'].astype(str)
-                filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True, errors='coerce')
+                filtered_data['Outlet Name'] = filtered_data['Outlet Name'].astype(str)
+                filtered_data['Invoice Number'] = filtered_data['Invoice Number'].astype(str)
+                filtered_data['Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True)
                 
                 # Convert numeric columns
                 numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
                 for col in numeric_cols:
                     if col in filtered_data.columns:
-                        filtered_data.loc[:, col] = pd.to_numeric(filtered_data[col], errors='coerce')
+                        filtered_data[col] = pd.to_numeric(filtered_data[col], errors='coerce')
                 
                 return filtered_data
             except Exception as e:
@@ -923,22 +929,14 @@ def sales_page():
         if invoice_number_search:
             filtered_data = filtered_data[
                 filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
-            ].copy()
-        
+            ]
         if invoice_date_search:
-            try:
-                date_str = invoice_date_search.strftime("%d-%m-%Y")
-                filtered_data = filtered_data[
-                    filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str
-                ].copy()
-            except Exception as e:
-                st.error(f"Error filtering by date: {e}")
-                filtered_data = pd.DataFrame()  # Empty dataframe if date filter fails
-        
+            date_str = invoice_date_search.strftime("%d-%m-%Y")
+            filtered_data = filtered_data[filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str]
         if outlet_name_search:
             filtered_data = filtered_data[
                 filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
-            ].copy()
+            ]
         
         if filtered_data.empty:
             st.warning("No matching records found")
@@ -968,7 +966,7 @@ def sales_page():
             key="invoice_selection"
         )
         
-        invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice].copy()
+        invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
             
@@ -1045,6 +1043,7 @@ def visit_page():
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
 
+    # Empty remarks since we removed the location input
     visit_remarks = ""
 
     tab1, tab2 = st.tabs(["New Visit", "Visit History"])
@@ -1064,6 +1063,7 @@ def visit_page():
             outlet_state = outlet_details['State']
             outlet_city = outlet_details['City']
             
+            # Show outlet details like distributor details
             st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display")
             st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
             st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
@@ -1098,6 +1098,7 @@ def visit_page():
                 entry_datetime = datetime.combine(today, entry_time)
                 exit_datetime = datetime.combine(today, exit_time)
                 
+                # No visit selfie upload
                 visit_selfie_path = None
                 
                 visit_id = record_visit(
@@ -1124,26 +1125,28 @@ def visit_page():
         if st.button("Search Visits", key="search_visits_button"):
             try:
                 visit_data = conn.read(worksheet="Visits", ttl=5)
-                visit_data = visit_data.dropna(how="all").copy()
+                visit_data = visit_data.dropna(how="all")
                 
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-                filtered_data = visit_data[visit_data['Employee Code'] == employee_code].copy()
+                filtered_data = visit_data[visit_data['Employee Code'] == employee_code]
                 
                 if visit_id_search:
-                    filtered_data = filtered_data[filtered_data['Visit ID'].str.contains(visit_id_search, case=False)].copy()
+                    filtered_data = filtered_data[filtered_data['Visit ID'].str.contains(visit_id_search, case=False)]
                 if visit_date_search:
                     date_str = visit_date_search.strftime("%d-%m-%Y")
-                    filtered_data = filtered_data[filtered_data['Visit Date'] == date_str].copy()
+                    filtered_data = filtered_data[filtered_data['Visit Date'] == date_str]
                 if outlet_name_search:
-                    filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)].copy()
+                    filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
                 
                 if not filtered_data.empty:
+                    # Display only the most relevant columns
                     display_columns = [
                         'Visit ID', 'Visit Date', 'Outlet Name', 'Visit Purpose', 'Visit Notes',
                         'Entry Time', 'Exit Time', 'Visit Duration (minutes)', 'Remarks'
                     ]
                     st.dataframe(filtered_data[display_columns])
                     
+                    # Add download option
                     csv = filtered_data.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         "Download as CSV",
@@ -1184,7 +1187,7 @@ def attendance_page():
                 with st.spinner("Recording attendance..."):
                     attendance_id, error = record_attendance(
                         selected_employee,
-                        status,
+                        status,  # Will be "Present" or "Half Day"
                         location_link=live_location
                     )
                     
