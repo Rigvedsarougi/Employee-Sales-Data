@@ -7,52 +7,102 @@ import os
 import uuid
 from PIL import Image
 
+# Mobile-friendly settings
+st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
+
 def display_login_header():
-    col1, col2, col3 = st.columns([1, 3, 1])
+    st.markdown("""
+    <style>
+    .login-header {
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .login-header h1 {
+        margin-bottom: 5px;
+        font-size: 24px;
+    }
+    .login-header h2 {
+        margin-top: 0;
+        color: #555;
+        font-size: 18px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
-    with col2:
-        try:
-            logo = Image.open("logo.png")
-            st.image(logo, use_container_width=True)
-        except FileNotFoundError:
-            st.warning("Logo image not found. Please ensure 'logo.png' exists in the same directory.")
-        except Exception as e:
-            st.warning(f"Could not load logo: {str(e)}")
-        
-        st.markdown("""
-        <div style='text-align: center; margin-bottom: 30px;'>
-            <h1 style='margin-bottom: 0;'>Employee Portal</h1>
-            <h2 style='margin-top: 0; color: #555;'>Login</h2>
-        </div>
-        """, unsafe_allow_html=True)
+    try:
+        logo = Image.open("logo.png")
+        # Resize logo for mobile
+        logo.thumbnail((150, 150))
+        st.image(logo, use_container_width=False)
+    except FileNotFoundError:
+        st.warning("Logo image not found. Please ensure 'logo.png' exists in the same directory.")
+    except Exception as e:
+        st.warning(f"Could not load logo: {str(e)}")
+    
+    st.markdown("""
+    <div class="login-header">
+        <h1>Employee Portal</h1>
+        <h2>Login</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-
+# Mobile-friendly styles
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
     header {visibility: hidden;}
+    
+    /* Mobile-specific adjustments */
+    @media (max-width: 768px) {
+        /* Make form elements full width */
+        .stTextInput, .stSelectbox, .stTextArea, .stDateInput, .stTimeInput {
+            width: 100% !important;
+        }
+        
+        /* Adjust column layouts */
+        .stColumns > div {
+            flex-direction: column !important;
+        }
+        
+        /* Reduce padding */
+        .main .block-container {
+            padding: 1rem 1rem 5rem;
+        }
+        
+        /* Make buttons more touch-friendly */
+        .stButton > button {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 16px;
+        }
+        
+        /* Adjust data tables */
+        .stDataFrame {
+            font-size: 14px;
+        }
+        
+        /* Reduce margins in headers */
+        h1, h2, h3 {
+            margin-top: 0.5rem !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* Make tabs more mobile-friendly */
+        .stTabs [role="tablist"] {
+            flex-wrap: wrap;
+        }
+        .stTabs [role="tab"] {
+            padding: 0.5rem 1rem;
+            font-size: 14px;
+            flex-grow: 1;
+            text-align: center;
+        }
+    }
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-hide_footer_style = """
-    <style>
-    footer {
-        visibility: hidden;
-    }
-    footer:after {
-        content: '';
-        display: none;
-    }
-    .css-15tx938.e8zbici2 {  /* This class targets the footer in some Streamlit builds */
-        display: none !important;
-    }
-    </style>
-"""
-
-st.markdown(hide_footer_style, unsafe_allow_html=True)
 
 
 def validate_data_before_write(df, expected_columns):
@@ -646,58 +696,75 @@ def main():
         
         employee_names = Person['Employee Name'].tolist()
         
-        # Create centered form
-        form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
-        
-        with form_col2:
-            with st.container():
-                employee_name = st.selectbox(
-                    "Select Your Name", 
-                    employee_names, 
-                    key="employee_select"
-                )
-                passkey = st.text_input(
-                    "Enter Your Employee Code", 
-                    type="password", 
-                    key="passkey_input"
-                )
-                
-                login_button = st.button(
-                    "Log in", 
-                    key="login_button",
-                    use_container_width=True
-                )
-                
-                if login_button:
-                    if authenticate_employee(employee_name, passkey):
-                        st.session_state.authenticated = True
-                        st.session_state.employee_name = employee_name
-                        st.rerun()
-                    else:
-                        st.error("Invalid Password. Please try again.")
+        # Mobile-friendly login form
+        with st.form("login_form"):
+            employee_name = st.selectbox(
+                "Select Your Name", 
+                employee_names, 
+                key="employee_select"
+            )
+            passkey = st.text_input(
+                "Enter Your Employee Code", 
+                type="password", 
+                key="passkey_input"
+            )
+            
+            login_button = st.form_submit_button(
+                "Log in", 
+                use_container_width=True
+            )
+            
+            if login_button:
+                if authenticate_employee(employee_name, passkey):
+                    st.session_state.authenticated = True
+                    st.session_state.employee_name = employee_name
+                    st.rerun()
+                else:
+                    st.error("Invalid Password. Please try again.")
     else:
-        # [REST OF YOUR ORIGINAL main() FUNCTION REMAINS EXACTLY THE SAME]
-        # Show three option boxes after login
+        # Mobile-friendly mode selection
         st.title("Select Mode")
-        col1, col2, col3 = st.columns(3)
         
-        with col1:
+        # Use columns with full width on mobile
+        mode_col1, mode_col2, mode_col3 = st.columns(3)
+        
+        with mode_col1:
             if st.button("Sales", use_container_width=True, key="sales_mode"):
                 st.session_state.selected_mode = "Sales"
                 st.rerun()
         
-        with col2:
+        with mode_col2:
             if st.button("Visit", use_container_width=True, key="visit_mode"):
                 st.session_state.selected_mode = "Visit"
                 st.rerun()
         
-        with col3:
+        with mode_col3:
             if st.button("Attendance", use_container_width=True, key="attendance_mode"):
                 st.session_state.selected_mode = "Attendance"
                 st.rerun()
         
         if st.session_state.selected_mode:
-            add_back_button()
+            # Mobile-friendly back button at the bottom
+            st.markdown("""
+            <style>
+            .mobile-back-button {
+                position: fixed;
+                bottom: 10px;
+                left: 10px;
+                right: 10px;
+                z-index: 1000;
+                background-color: white;
+                padding: 10px;
+                border-radius: 5px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            if st.button("← Logout", key="back_button", use_container_width=True):
+                st.session_state.authenticated = False
+                st.session_state.selected_mode = None
+                st.rerun()
             
             if st.session_state.selected_mode == "Sales":
                 sales_page()
@@ -705,7 +772,6 @@ def main():
                 visit_page()
             else:
                 attendance_page()
-
 def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
