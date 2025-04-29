@@ -995,9 +995,16 @@ def sales_page():
             filtered_data = filtered_data[
                 filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
             ]
+
         if invoice_date_search:
             date_str = invoice_date_search.strftime("%d-%m-%Y")
+            
+            # Force-convert Invoice Date safely again before using .dt
+            filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], errors='coerce', dayfirst=True)
+            
             filtered_data = filtered_data[filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str]
+
+        
         if outlet_name_search:
             filtered_data = filtered_data[
                 filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
