@@ -5,7 +5,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import numpy as np
-from fpdf import FPDF
 import os
 import uuid
 from PIL import Image
@@ -83,27 +82,6 @@ def get_date_range():
     last_month = today - timedelta(days=30)
     last_quarter = today - timedelta(days=90)
     return today, last_week, last_month, last_quarter
-
-def generate_pdf_report(content, title):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    
-    # Add title
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt=title, ln=True, align='C')
-    pdf.ln(10)
-    
-    # Add content
-    pdf.set_font("Arial", size=10)
-    for line in content.split('\n'):
-        pdf.multi_cell(0, 5, txt=line)
-        pdf.ln(5)
-    
-    # Save to temporary file
-    filename = f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    pdf.output(filename)
-    return filename
 
 # Dashboard layout
 def main():
@@ -282,36 +260,6 @@ def main():
                 use_container_width=True,
                 hide_index=True
             )
-            
-            # PDF Export for Overview
-            overview_content = f"""
-            Business Overview Report
-            ------------------------
-            Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-            
-            Key Metrics:
-            - Total Sales: {format_currency(total_sales)}
-            - Total Invoices: {total_invoices}
-            - Average Sale per Invoice: {format_currency(avg_sale_per_invoice)}
-            - Payment Completion: {format_percentage(payment_completion)}
-            - Total Visits: {total_visits}
-            - Average Visit Duration: {avg_visit_duration:.1f} mins
-            - Present Employees Today: {present_count}
-            
-            Top Performing Employees:
-            {employee_performance[['Employee Name', 'Total Sales', 'Invoices']].head(5).to_string(index=False)}
-            """
-            
-            if st.button("📥 Download Overview Report (PDF)"):
-                pdf_file = generate_pdf_report(overview_content, "Business Overview Report")
-                with open(pdf_file, "rb") as f:
-                    st.download_button(
-                        "⬇️ Download Now",
-                        f,
-                        file_name="business_overview_report.pdf",
-                        mime="application/pdf"
-                    )
-                os.remove(pdf_file)
         else:
             st.warning("No performance data available for the selected period")
     
@@ -377,40 +325,6 @@ def main():
                     },
                     use_container_width=True
                 )
-                
-                # Generate PDF report for employee performance
-                performance_content = f"""
-                Employee Performance Report
-                ---------------------------
-                Employee: {selected_employee}
-                Employee Code: {employee_details['Employee Code']}
-                Designation: {employee_details['Designation']}
-                Report Period: {time_period}
-                Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-                
-                Sales Performance:
-                - Total Sales: {format_currency(total_sales)}
-                - Total Invoices: {total_invoices}
-                - Average Sale per Invoice: {format_currency(avg_sale_per_invoice)}
-                - Payment Completion: {format_percentage(payment_completion)}
-                
-                Top Selling Products:
-                {top_products.head(5).to_string()}
-                
-                Sales by Category:
-                {sales_by_category.to_string(index=False)}
-                """
-                
-                if st.button("📥 Download Performance Report (PDF)"):
-                    pdf_file = generate_pdf_report(performance_content, f"Employee Performance Report - {selected_employee}")
-                    with open(pdf_file, "rb") as f:
-                        st.download_button(
-                            "⬇️ Download Now",
-                            f,
-                            file_name=f"employee_performance_{selected_employee}.pdf",
-                            mime="application/pdf"
-                        )
-                    os.remove(pdf_file)
             else:
                 st.warning("No sales data available for this employee")
             
