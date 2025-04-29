@@ -948,7 +948,7 @@ def sales_page():
     
     with tab2:
         st.subheader("Sales History")
-        
+
         @st.cache_data(ttl=300)
         def load_sales_data():
             try:
@@ -957,16 +957,15 @@ def sales_page():
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
                 filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
                 
-                # Convert all columns to appropriate types
-                filtered_data['Outlet Name'] = filtered_data['Outlet Name'].astype(str)
-                filtered_data['Invoice Number'] = filtered_data['Invoice Number'].astype(str)
-                filtered_data['Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True)
+                # Convert all columns safely
+                filtered_data.loc[:, 'Outlet Name'] = filtered_data['Outlet Name'].astype(str)
+                filtered_data.loc[:, 'Invoice Number'] = filtered_data['Invoice Number'].astype(str)
+                filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True)
                 
-                # Convert numeric columns
                 numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
                 for col in numeric_cols:
                     if col in filtered_data.columns:
-                        filtered_data[col] = pd.to_numeric(filtered_data[col], errors='coerce')
+                        filtered_data.loc[:, col] = pd.to_numeric(filtered_data[col], errors='coerce')
                 
                 return filtered_data
             except Exception as e:
