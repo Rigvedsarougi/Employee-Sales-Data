@@ -71,10 +71,19 @@ def load_data(worksheet_name, columns):
         return pd.DataFrame(columns=columns)
 
 def format_currency(amount):
-    return f"₹{amount:,.2f}"
+    if pd.isna(amount):
+        return "₹0.00"
+    return f"₹{amount:,.2f}".replace(",", " ")  # Replace commas with spaces for better visibility
+
+def format_number(value):
+    if pd.isna(value):
+        return "0"
+    return f"{int(value):,}".replace(",", " ")  # Replace commas with spaces for better visibility
 
 def format_percentage(value):
-    return f"{value:.1f}%"
+    if pd.isna(value):
+        return "0.0%"
+    return f"{float(value):.1f}%"
 
 def get_date_range():
     today = datetime.now().date()
@@ -120,34 +129,14 @@ def main():
         attendance_data['Date'] = pd.to_datetime(attendance_data['Date'], dayfirst=True, errors='coerce')
     
     # Date filters
-    today, last_week, last_month, last_quarter = get_date_range()
-    
     st.sidebar.header("Filters")
-    time_period = st.sidebar.selectbox(
-        "Time Period",
-        ["Today", "Last 7 Days", "Last 30 Days", "Last 90 Days", "All Time"],
-        index=2
-    )
     
-    if time_period == "Today":
-        start_date = today
-    elif time_period == "Last 7 Days":
-        start_date = last_week
-    elif time_period == "Last 30 Days":
-        start_date = last_month
-    elif time_period == "Last 90 Days":
-        start_date = last_quarter
-    else:
-        start_date = None
-    
-    # Filter data based on date range
-    if start_date:
-        if not sales_data.empty:
-            sales_data = sales_data[sales_data['Invoice Date'].dt.date >= start_date]
-        if not visits_data.empty:
-            visits_data = visits_data[visits_data['Visit Date'].dt.date >= start_date]
-        if not attendance_data.empty:
-            attendance_data = attendance_data[attendance_data['Date'].dt.date >= start_date]
+    # Custom date range selector
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        start_date = st.date_input("Start Date", value=datetime.now().date() - timedelta(days=30))
+    with col2:
+        end_date = st.date_input("End Date", value=datetime.now().date())
     
     # Employee filter
     all_employees = Person['Employee Name'].unique().tolist()
@@ -155,6 +144,23 @@ def main():
         "Employee (All)",
         ["All Employees"] + all_employees
     )
+    
+    # Filter data based on date range
+    if not sales_data.empty:
+        sales_data = sales_data[
+            (sales_data['Invoice Date'].dt.date >= start_date) & 
+            (sales_data['Invoice Date'].dt.date <= end_date)
+        ]
+    if not visits_data.empty:
+        visits_data = visits_data[
+            (visits_data['Visit Date'].dt.date >= start_date) & 
+            (visits_data['Visit Date'].dt.date <= end_date)
+        ]
+    if not attendance_data.empty:
+        attendance_data = attendance_data[
+            (attendance_data['Date'].dt.date >= start_date) & 
+            (attendance_data['Date'].dt.date <= end_date)
+        ]
     
     if selected_employee != "All Employees":
         if not sales_data.empty:
@@ -202,7 +208,7 @@ def main():
         with col1:
             st.metric("Total Sales", format_currency(total_sales))
         with col2:
-            st.metric("Total Invoices", total_invoices)
+            st.metric("Total Invoices", format_number(total_invoices))
         with col3:
             st.metric("Avg. Sale/Invoice", format_currency(avg_sale_per_invoice))
         with col4:
@@ -210,11 +216,11 @@ def main():
         
         col5, col6, col7 = st.columns(3)
         with col5:
-            st.metric("Total Visits", total_visits)
+            st.metric("Total Visits", format_number(total_visits))
         with col6:
-            st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins")
+            st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins" if avg_visit_duration else "0 mins")
         with col7:
-            st.metric("Present Today", present_count)
+            st.metric("Present Today", format_number(present_count))
         
         # Sales Trend Chart
         st.subheader("Sales Trend")
@@ -224,10 +230,15 @@ def main():
                 sales_trend,
                 x='Invoice Date',
                 y='Grand Total',
-                title="Daily Sales Trend",
+                title=f"Daily Sales Trend ({start_date} to {end_date})",
                 labels={'Invoice Date': 'Date', 'Grand Total': 'Total Sales (₹)'}
             )
-            fig.update_layout(height=400)
+            fig.update_layout(
+                height=400,
+                yaxis_tickformat=',.0f',
+                yaxis_tickprefix='₹ ',
+                yaxis_tickvals=sales_trend['Grand Total'].tolist()
+            )
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("No sales data available for the selected period")
@@ -254,8 +265,26 @@ def main():
             st.dataframe(
                 employee_performance.sort_values('Total Sales', ascending=False),
                 column_config={
-                    "Total Sales": st.column_config.NumberColumn(format="₹%.2f"),
-                    "Avg. Visit Duration": st.column_config.NumberColumn(format="%.1f mins")
+                    "Total Sales": st.column_config.NumberColumn(
+                        format="₹ %.2f",
+                        help="Total sales amount"
+                    ),
+                    "Invoices": st.column_config.NumberColumn(
+                        format="%d",
+                        help="Number of invoices"
+                    ),
+                    "Products Sold": st.column_config.NumberColumn(
+                        format="%d",
+                        help="Total products sold"
+                    ),
+                    "Total Visits": st.column_config.NumberColumn(
+                        format="%d",
+                        help="Total visits made"
+                    ),
+                    "Avg. Visit Duration": st.column_config.NumberColumn(
+                        format="%.1f mins",
+                        help="Average visit duration in minutes"
+                    )
                 },
                 use_container_width=True,
                 hide_index=True
@@ -295,7 +324,7 @@ def main():
                 with col1:
                     st.metric("Total Sales", format_currency(total_sales))
                 with col2:
-                    st.metric("Total Invoices", total_invoices)
+                    st.metric("Total Invoices", format_number(total_invoices))
                 with col3:
                     st.metric("Avg. Sale/Invoice", format_currency(avg_sale_per_invoice))
                 with col4:
@@ -310,6 +339,7 @@ def main():
                     names='Product Category',
                     title="Sales Distribution by Product Category"
                 )
+                fig.update_traces(textinfo='value+percent', textposition='inside')
                 st.plotly_chart(fig, use_container_width=True)
                 
                 # Top products
@@ -321,7 +351,8 @@ def main():
                 st.dataframe(
                     top_products,
                     column_config={
-                        "Grand Total": st.column_config.NumberColumn(format="₹%.2f")
+                        "Grand Total": st.column_config.NumberColumn(format="₹ %.2f"),
+                        "Quantity": st.column_config.NumberColumn(format="%d")
                     },
                     use_container_width=True
                 )
@@ -339,17 +370,19 @@ def main():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.metric("Total Visits", total_visits)
+                    st.metric("Total Visits", format_number(total_visits))
                 with col2:
-                    st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins")
+                    st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins" if avg_visit_duration else "0 mins")
                 
                 # Visits by purpose
                 fig = px.bar(
                     visits_by_purpose,
                     x='Purpose',
                     y='Count',
-                    title="Visits by Purpose"
+                    title="Visits by Purpose",
+                    text='Count'
                 )
+                fig.update_traces(texttemplate='%{text}', textposition='outside')
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning("No visit data available for this employee")
@@ -363,9 +396,9 @@ def main():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.metric("Present Days", present_days)
+                    st.metric("Present Days", format_number(present_days))
                 with col2:
-                    st.metric("Leave Days", leave_days)
+                    st.metric("Leave Days", format_number(leave_days))
             else:
                 st.warning("No attendance data available for this employee")
     
@@ -378,8 +411,12 @@ def main():
             st.dataframe(
                 sales_data,
                 column_config={
-                    "Grand Total": st.column_config.NumberColumn(format="₹%.2f"),
-                    "Invoice Date": st.column_config.DateColumn(format="DD/MM/YYYY")
+                    "Grand Total": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Invoice Date": st.column_config.DateColumn(format="DD/MM/YYYY"),
+                    "Quantity": st.column_config.NumberColumn(format="%d"),
+                    "Unit Price": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Total Price": st.column_config.NumberColumn(format="₹ %.2f"),
+                    "Amount Paid": st.column_config.NumberColumn(format="₹ %.2f")
                 },
                 use_container_width=True,
                 hide_index=True
@@ -390,7 +427,7 @@ def main():
             st.download_button(
                 "Export Sales Data",
                 csv,
-                "sales_records.csv",
+                f"sales_records_{start_date}_to_{end_date}.csv",
                 "text/csv",
                 key='download-sales-csv'
             )
@@ -403,7 +440,8 @@ def main():
             st.dataframe(
                 visits_data,
                 column_config={
-                    "Visit Date": st.column_config.DateColumn(format="DD/MM/YYYY")
+                    "Visit Date": st.column_config.DateColumn(format="DD/MM/YYYY"),
+                    "Visit Duration (minutes)": st.column_config.NumberColumn(format="%.1f mins")
                 },
                 use_container_width=True,
                 hide_index=True
@@ -413,7 +451,7 @@ def main():
             st.download_button(
                 "Export Visit Data",
                 csv,
-                "visit_records.csv",
+                f"visit_records_{start_date}_to_{end_date}.csv",
                 "text/csv",
                 key='download-visit-csv'
             )
@@ -436,7 +474,7 @@ def main():
             st.download_button(
                 "Export Attendance Data",
                 csv,
-                "attendance_records.csv",
+                f"attendance_records_{start_date}_to_{end_date}.csv",
                 "text/csv",
                 key='download-attendance-csv'
             )
