@@ -2,12 +2,14 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import numpy as np
-import os
-import uuid
-from PIL import Image
+import io
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import inch
 
 # Configuration
 st.set_page_config(page_title="Admin Dashboard", layout="wide", page_icon="📊")
@@ -58,7 +60,6 @@ def load_data(worksheet_name, columns):
         data = conn.read(worksheet=worksheet_name, usecols=list(range(len(columns))), ttl=5)
         data = data.dropna(how='all')
         
-        # Fix data types for Arrow compatibility
         for col in data.columns:
             if data[col].dtype == 'object':
                 data[col] = data[col].astype(str)
@@ -71,19 +72,10 @@ def load_data(worksheet_name, columns):
         return pd.DataFrame(columns=columns)
 
 def format_currency(amount):
-    if pd.isna(amount):
-        return "₹0.00"
-    return f"₹{amount:,.2f}".replace(",", " ")  # Replace commas with spaces for better visibility
-
-def format_number(value):
-    if pd.isna(value):
-        return "0"
-    return f"{int(value):,}".replace(",", " ")  # Replace commas with spaces for better visibility
+    return f"₹{amount:,.2f}"
 
 def format_percentage(value):
-    if pd.isna(value):
-        return "0.0%"
-    return f"{float(value):.1f}%"
+    return f"{value:.1f}%"
 
 def get_date_range():
     today = datetime.now().date()
@@ -92,9 +84,106 @@ def get_date_range():
     last_quarter = today - timedelta(days=90)
     return today, last_week, last_month, last_quarter
 
+def generate_pdf_report(data, title, context=None):
+    """Generate professional PDF report with proper formatting"""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name='Center', alignment=1, fontSize=12, spaceAfter=12))
+    styles.add(ParagraphStyle(name='Right', alignment=2))
+    styles.add(ParagraphStyle(name='Bold', fontName='Helvetica-Bold', fontSize=10))
+    
+    elements = []
+    
+    # Title
+    elements.append(Paragraph(f"<b>{title}</b>", styles['Heading1']))
+    elements.append(Spacer(1, 0.25*inch))
+    
+    # Context information
+    if context:
+        for key, value in context.items():
+            elements.append(Paragraph(f"<b>{key}:</b> {value}", styles['Normal']))
+    
+    elements.append(Paragraph(f"<b>Report Generated:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
+    elements.append(Spacer(1, 0.5*inch))
+    
+    # Add content based on data type
+    if isinstance(data, pd.DataFrame):
+        # Format numeric columns
+        df = data.copy()
+        for col in df.select_dtypes(include=[np.number]).columns:
+            if any(word in col.lower() for word in ['amount', 'price', 'total', 'sales']):
+                df[col] = df[col].apply(lambda x: f"₹{x:,.2f}" if pd.notnull(x) else '')
+            elif '%' in col or 'percentage' in col.lower():
+                df[col] = df[col].apply(lambda x: f"{x:.1f}%" if pd.notnull(x) else '')
+            elif 'duration' in col.lower():
+                df[col] = df[col].apply(lambda x: f"{x:.1f} mins" if pd.notnull(x) else '')
+            else:
+                df[col] = df[col].apply(lambda x: f"{x:,.0f}" if pd.notnull(x) and x == int(x) else f"{x:,.2f}" if pd.notnull(x) else '')
+        
+        # Prepare table data
+        table_data = [df.columns.tolist()] + df.values.tolist()
+        
+        # Create table
+        table = Table(table_data, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#D9E1F2')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        
+        elements.append(table)
+    
+    elif isinstance(data, dict):
+        # For metrics display
+        for section, metrics in data.items():
+            elements.append(Paragraph(f"<b>{section}</b>", styles['Heading2']))
+            elements.append(Spacer(1, 0.1*inch))
+            
+            metric_data = []
+            for name, value in metrics.items():
+                if isinstance(value, (int, float)):
+                    if any(word in name.lower() for word in ['amount', 'price', 'total', 'sales']):
+                        display_value = f"₹{value:,.2f}"
+                    elif '%' in name or 'percentage' in name.lower():
+                        display_value = f"{value:.1f}%"
+                    elif 'duration' in name.lower():
+                        display_value = f"{value:.1f} mins"
+                    else:
+                        display_value = f"{value:,.0f}" if value == int(value) else f"{value:,.2f}"
+                else:
+                    display_value = str(value)
+                
+                metric_data.append([Paragraph(f"<b>{name}</b>", styles['Bold']), display_value])
+            
+            metric_table = Table(metric_data, colWidths=[3*inch, 2*inch], hAlign='LEFT')
+            metric_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            
+            elements.append(metric_table)
+            elements.append(Spacer(1, 0.25*inch))
+    
+    elements.append(Spacer(1, 0.25*inch))
+    elements.append(Paragraph("End of Report", styles['Center']))
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
 # Dashboard layout
 def main():
-    st.title("Biolume Employee Dashboard")
+    st.title("📊 Employee Portal Admin Dashboard")
     
     # Authentication
     if 'authenticated' not in st.session_state:
@@ -107,7 +196,7 @@ def main():
             password = st.text_input("Password", type="password")
             
             if st.form_submit_button("Login"):
-                if username == "admin" and password == "admin123":  # Replace with secure auth
+                if username == "admin" and password == "admin123":
                     st.session_state.authenticated = True
                     st.rerun()
                 else:
@@ -129,14 +218,34 @@ def main():
         attendance_data['Date'] = pd.to_datetime(attendance_data['Date'], dayfirst=True, errors='coerce')
     
     # Date filters
-    st.sidebar.header("Filters")
+    today, last_week, last_month, last_quarter = get_date_range()
     
-    # Custom date range selector
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        start_date = st.date_input("Start Date", value=datetime.now().date() - timedelta(days=30))
-    with col2:
-        end_date = st.date_input("End Date", value=datetime.now().date())
+    st.sidebar.header("Filters")
+    time_period = st.sidebar.selectbox(
+        "Time Period",
+        ["Today", "Last 7 Days", "Last 30 Days", "Last 90 Days", "All Time"],
+        index=2
+    )
+    
+    if time_period == "Today":
+        start_date = today
+    elif time_period == "Last 7 Days":
+        start_date = last_week
+    elif time_period == "Last 30 Days":
+        start_date = last_month
+    elif time_period == "Last 90 Days":
+        start_date = last_quarter
+    else:
+        start_date = None
+    
+    # Filter data based on date range
+    if start_date:
+        if not sales_data.empty:
+            sales_data = sales_data[sales_data['Invoice Date'].dt.date >= start_date]
+        if not visits_data.empty:
+            visits_data = visits_data[visits_data['Visit Date'].dt.date >= start_date]
+        if not attendance_data.empty:
+            attendance_data = attendance_data[attendance_data['Date'].dt.date >= start_date]
     
     # Employee filter
     all_employees = Person['Employee Name'].unique().tolist()
@@ -144,23 +253,6 @@ def main():
         "Employee (All)",
         ["All Employees"] + all_employees
     )
-    
-    # Filter data based on date range
-    if not sales_data.empty:
-        sales_data = sales_data[
-            (sales_data['Invoice Date'].dt.date >= start_date) & 
-            (sales_data['Invoice Date'].dt.date <= end_date)
-        ]
-    if not visits_data.empty:
-        visits_data = visits_data[
-            (visits_data['Visit Date'].dt.date >= start_date) & 
-            (visits_data['Visit Date'].dt.date <= end_date)
-        ]
-    if not attendance_data.empty:
-        attendance_data = attendance_data[
-            (attendance_data['Date'].dt.date >= start_date) & 
-            (attendance_data['Date'].dt.date <= end_date)
-        ]
     
     if selected_employee != "All Employees":
         if not sales_data.empty:
@@ -196,7 +288,6 @@ def main():
             avg_visit_duration = 0
         
         if not attendance_data.empty:
-            # Get only today's attendance
             today_attendance = attendance_data[attendance_data['Date'].dt.date == datetime.now().date()]
             present_count = len(today_attendance[today_attendance['Status'] == 'Present'])
             leave_count = len(today_attendance[today_attendance['Status'] == 'Leave'])
@@ -208,7 +299,7 @@ def main():
         with col1:
             st.metric("Total Sales", format_currency(total_sales))
         with col2:
-            st.metric("Total Invoices", format_number(total_invoices))
+            st.metric("Total Invoices", total_invoices)
         with col3:
             st.metric("Avg. Sale/Invoice", format_currency(avg_sale_per_invoice))
         with col4:
@@ -216,11 +307,11 @@ def main():
         
         col5, col6, col7 = st.columns(3)
         with col5:
-            st.metric("Total Visits", format_number(total_visits))
+            st.metric("Total Visits", total_visits)
         with col6:
-            st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins" if avg_visit_duration else "0 mins")
+            st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins")
         with col7:
-            st.metric("Present Today", format_number(present_count))
+            st.metric("Present Today", present_count)
         
         # Sales Trend Chart
         st.subheader("Sales Trend")
@@ -230,15 +321,10 @@ def main():
                 sales_trend,
                 x='Invoice Date',
                 y='Grand Total',
-                title=f"Daily Sales Trend ({start_date} to {end_date})",
+                title="Daily Sales Trend",
                 labels={'Invoice Date': 'Date', 'Grand Total': 'Total Sales (₹)'}
             )
-            fig.update_layout(
-                height=400,
-                yaxis_tickformat=',.0f',
-                yaxis_tickprefix='₹ ',
-                yaxis_tickvals=sales_trend['Grand Total'].tolist()
-            )
+            fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("No sales data available for the selected period")
@@ -253,7 +339,6 @@ def main():
             }).reset_index()
             employee_performance.columns = ['Employee Name', 'Employee Code', 'Designation', 'Total Sales', 'Invoices', 'Products Sold']
             
-            # Add visit data if available
             if not visits_data.empty:
                 visits_summary = visits_data.groupby('Employee Name').agg({
                     'Visit ID': 'count',
@@ -265,30 +350,42 @@ def main():
             st.dataframe(
                 employee_performance.sort_values('Total Sales', ascending=False),
                 column_config={
-                    "Total Sales": st.column_config.NumberColumn(
-                        format="₹ %.2f",
-                        help="Total sales amount"
-                    ),
-                    "Invoices": st.column_config.NumberColumn(
-                        format="%d",
-                        help="Number of invoices"
-                    ),
-                    "Products Sold": st.column_config.NumberColumn(
-                        format="%d",
-                        help="Total products sold"
-                    ),
-                    "Total Visits": st.column_config.NumberColumn(
-                        format="%d",
-                        help="Total visits made"
-                    ),
-                    "Avg. Visit Duration": st.column_config.NumberColumn(
-                        format="%.1f mins",
-                        help="Average visit duration in minutes"
-                    )
+                    "Total Sales": st.column_config.NumberColumn(format="₹%.2f"),
+                    "Avg. Visit Duration": st.column_config.NumberColumn(format="%.1f mins")
                 },
                 use_container_width=True,
                 hide_index=True
             )
+            
+            # PDF Export for Overview
+            if st.button("📥 Download Overview Report (PDF)"):
+                report_data = {
+                    "Key Metrics": {
+                        "Total Sales": total_sales,
+                        "Total Invoices": total_invoices,
+                        "Average Sale per Invoice": avg_sale_per_invoice,
+                        "Payment Completion": payment_completion,
+                        "Total Visits": total_visits,
+                        "Average Visit Duration (mins)": avg_visit_duration,
+                        "Employees Present Today": present_count
+                    }
+                }
+                
+                pdf_buffer = generate_pdf_report(
+                    employee_performance.head(10),
+                    "Business Overview Report",
+                    context={
+                        "Time Period": time_period,
+                        "Employee Filter": selected_employee
+                    }
+                )
+                
+                st.download_button(
+                    "⬇️ Download PDF Report",
+                    pdf_buffer,
+                    file_name="business_overview_report.pdf",
+                    mime="application/pdf"
+                )
         else:
             st.warning("No performance data available for the selected period")
     
@@ -313,7 +410,6 @@ def main():
             # Sales performance
             st.subheader("Sales Performance")
             if not sales_data.empty:
-                # Sales metrics
                 employee_sales = sales_data[sales_data['Employee Name'] == selected_employee]
                 total_sales = employee_sales['Grand Total'].sum()
                 total_invoices = employee_sales['Invoice Number'].nunique()
@@ -324,7 +420,7 @@ def main():
                 with col1:
                     st.metric("Total Sales", format_currency(total_sales))
                 with col2:
-                    st.metric("Total Invoices", format_number(total_invoices))
+                    st.metric("Total Invoices", total_invoices)
                 with col3:
                     st.metric("Avg. Sale/Invoice", format_currency(avg_sale_per_invoice))
                 with col4:
@@ -339,7 +435,6 @@ def main():
                     names='Product Category',
                     title="Sales Distribution by Product Category"
                 )
-                fig.update_traces(textinfo='value+percent', textposition='inside')
                 st.plotly_chart(fig, use_container_width=True)
                 
                 # Top products
@@ -351,11 +446,55 @@ def main():
                 st.dataframe(
                     top_products,
                     column_config={
-                        "Grand Total": st.column_config.NumberColumn(format="₹ %.2f"),
-                        "Quantity": st.column_config.NumberColumn(format="%d")
+                        "Grand Total": st.column_config.NumberColumn(format="₹%.2f")
                     },
                     use_container_width=True
                 )
+                
+                # PDF Export for Employee Performance
+                if st.button("📥 Download Performance Report (PDF)"):
+                    report_data = {
+                        "Employee Information": {
+                            "Name": selected_employee,
+                            "Employee Code": employee_details['Employee Code'],
+                            "Designation": employee_details['Designation'],
+                            "Discount Category": employee_details['Discount Category']
+                        },
+                        "Sales Performance": {
+                            "Total Sales": total_sales,
+                            "Total Invoices": total_invoices,
+                            "Average Sale per Invoice": avg_sale_per_invoice,
+                            "Payment Completion": payment_completion
+                        }
+                    }
+                    
+                    if not visits_data.empty:
+                        report_data["Visit Performance"] = {
+                            "Total Visits": total_visits,
+                            "Average Visit Duration (mins)": avg_visit_duration
+                        }
+                    
+                    if not attendance_data.empty:
+                        report_data["Attendance"] = {
+                            "Present Days": present_days,
+                            "Leave Days": leave_days
+                        }
+                    
+                    pdf_buffer = generate_pdf_report(
+                        report_data,
+                        f"Employee Performance Report - {selected_employee}",
+                        context={
+                            "Time Period": time_period,
+                            "Report Date": datetime.now().strftime('%Y-%m-%d')
+                        }
+                    )
+                    
+                    st.download_button(
+                        "⬇️ Download PDF Report",
+                        pdf_buffer,
+                        file_name=f"employee_performance_{selected_employee}.pdf",
+                        mime="application/pdf"
+                    )
             else:
                 st.warning("No sales data available for this employee")
             
@@ -370,19 +509,17 @@ def main():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.metric("Total Visits", format_number(total_visits))
+                    st.metric("Total Visits", total_visits)
                 with col2:
-                    st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins" if avg_visit_duration else "0 mins")
+                    st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins")
                 
                 # Visits by purpose
                 fig = px.bar(
                     visits_by_purpose,
                     x='Purpose',
                     y='Count',
-                    title="Visits by Purpose",
-                    text='Count'
+                    title="Visits by Purpose"
                 )
-                fig.update_traces(texttemplate='%{text}', textposition='outside')
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning("No visit data available for this employee")
@@ -396,9 +533,9 @@ def main():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.metric("Present Days", format_number(present_days))
+                    st.metric("Present Days", present_days)
                 with col2:
-                    st.metric("Leave Days", format_number(leave_days))
+                    st.metric("Leave Days", leave_days)
             else:
                 st.warning("No attendance data available for this employee")
     
@@ -411,12 +548,8 @@ def main():
             st.dataframe(
                 sales_data,
                 column_config={
-                    "Grand Total": st.column_config.NumberColumn(format="₹ %.2f"),
-                    "Invoice Date": st.column_config.DateColumn(format="DD/MM/YYYY"),
-                    "Quantity": st.column_config.NumberColumn(format="%d"),
-                    "Unit Price": st.column_config.NumberColumn(format="₹ %.2f"),
-                    "Total Price": st.column_config.NumberColumn(format="₹ %.2f"),
-                    "Amount Paid": st.column_config.NumberColumn(format="₹ %.2f")
+                    "Grand Total": st.column_config.NumberColumn(format="₹%.2f"),
+                    "Invoice Date": st.column_config.DateColumn(format="DD/MM/YYYY")
                 },
                 use_container_width=True,
                 hide_index=True
@@ -425,12 +558,31 @@ def main():
             # Export options
             csv = sales_data.to_csv(index=False).encode('utf-8')
             st.download_button(
-                "Export Sales Data",
+                "Export Sales Data (CSV)",
                 csv,
-                f"sales_records_{start_date}_to_{end_date}.csv",
+                "sales_records.csv",
                 "text/csv",
                 key='download-sales-csv'
             )
+            
+            # PDF Export
+            if st.button("Export Sales Data (PDF)"):
+                pdf_buffer = generate_pdf_report(
+                    sales_data.head(100),
+                    "Detailed Sales Records",
+                    context={
+                        "Time Period": time_period,
+                        "Employee Filter": selected_employee,
+                        "Total Records": len(sales_data)
+                    }
+                )
+                
+                st.download_button(
+                    "⬇️ Download PDF Report",
+                    pdf_buffer,
+                    file_name="detailed_sales_records.pdf",
+                    mime="application/pdf"
+                )
         else:
             st.warning("No sales data available for the selected period")
         
@@ -440,8 +592,7 @@ def main():
             st.dataframe(
                 visits_data,
                 column_config={
-                    "Visit Date": st.column_config.DateColumn(format="DD/MM/YYYY"),
-                    "Visit Duration (minutes)": st.column_config.NumberColumn(format="%.1f mins")
+                    "Visit Date": st.column_config.DateColumn(format="DD/MM/YYYY")
                 },
                 use_container_width=True,
                 hide_index=True
@@ -449,12 +600,31 @@ def main():
             
             csv = visits_data.to_csv(index=False).encode('utf-8')
             st.download_button(
-                "Export Visit Data",
+                "Export Visit Data (CSV)",
                 csv,
-                f"visit_records_{start_date}_to_{end_date}.csv",
+                "visit_records.csv",
                 "text/csv",
                 key='download-visit-csv'
             )
+            
+            # PDF Export
+            if st.button("Export Visit Data (PDF)"):
+                pdf_buffer = generate_pdf_report(
+                    visits_data.head(100),
+                    "Detailed Visit Records",
+                    context={
+                        "Time Period": time_period,
+                        "Employee Filter": selected_employee,
+                        "Total Records": len(visits_data)
+                    }
+                )
+                
+                st.download_button(
+                    "⬇️ Download PDF Report",
+                    pdf_buffer,
+                    file_name="detailed_visit_records.pdf",
+                    mime="application/pdf"
+                )
         else:
             st.warning("No visit data available for the selected period")
         
@@ -472,12 +642,31 @@ def main():
             
             csv = attendance_data.to_csv(index=False).encode('utf-8')
             st.download_button(
-                "Export Attendance Data",
+                "Export Attendance Data (CSV)",
                 csv,
-                f"attendance_records_{start_date}_to_{end_date}.csv",
+                "attendance_records.csv",
                 "text/csv",
                 key='download-attendance-csv'
             )
+            
+            # PDF Export
+            if st.button("Export Attendance Data (PDF)"):
+                pdf_buffer = generate_pdf_report(
+                    attendance_data.head(100),
+                    "Detailed Attendance Records",
+                    context={
+                        "Time Period": time_period,
+                        "Employee Filter": selected_employee,
+                        "Total Records": len(attendance_data)
+                    }
+                )
+                
+                st.download_button(
+                    "⬇️ Download PDF Report",
+                    pdf_buffer,
+                    file_name="detailed_attendance_records.pdf",
+                    mime="application/pdf"
+                )
         else:
             st.warning("No attendance data available for the selected period")
 
