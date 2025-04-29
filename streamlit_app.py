@@ -7,102 +7,52 @@ import os
 import uuid
 from PIL import Image
 
-# Mobile-friendly settings
-st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
-
 def display_login_header():
-    st.markdown("""
-    <style>
-    .login-header {
-        text-align: center;
-        margin-bottom: 20px;
-    }
-    .login-header h1 {
-        margin-bottom: 5px;
-        font-size: 24px;
-    }
-    .login-header h2 {
-        margin-top: 0;
-        color: #555;
-        font-size: 18px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 3, 1])
     
-    try:
-        logo = Image.open("logo.png")
-        # Resize logo for mobile
-        logo.thumbnail((150, 150))
-        st.image(logo, use_container_width=False)
-    except FileNotFoundError:
-        st.warning("Logo image not found. Please ensure 'logo.png' exists in the same directory.")
-    except Exception as e:
-        st.warning(f"Could not load logo: {str(e)}")
-    
-    st.markdown("""
-    <div class="login-header">
-        <h1>Employee Portal</h1>
-        <h2>Login</h2>
-    </div>
-    """, unsafe_allow_html=True)
+    with col2:
+        try:
+            logo = Image.open("logo.png")
+            st.image(logo, use_container_width=True)
+        except FileNotFoundError:
+            st.warning("Logo image not found. Please ensure 'logo.png' exists in the same directory.")
+        except Exception as e:
+            st.warning(f"Could not load logo: {str(e)}")
+        
+        st.markdown("""
+        <div style='text-align: center; margin-bottom: 30px;'>
+            <h1 style='margin-bottom: 0;'>Employee Portal</h1>
+            <h2 style='margin-top: 0; color: #555;'>Login</h2>
+        </div>
+        """, unsafe_allow_html=True)
 
-# Mobile-friendly styles
+
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
     header {visibility: hidden;}
-    
-    /* Mobile-specific adjustments */
-    @media (max-width: 768px) {
-        /* Make form elements full width */
-        .stTextInput, .stSelectbox, .stTextArea, .stDateInput, .stTimeInput {
-            width: 100% !important;
-        }
-        
-        /* Adjust column layouts */
-        .stColumns > div {
-            flex-direction: column !important;
-        }
-        
-        /* Reduce padding */
-        .main .block-container {
-            padding: 1rem 1rem 5rem;
-        }
-        
-        /* Make buttons more touch-friendly */
-        .stButton > button {
-            width: 100%;
-            padding: 0.75rem;
-            font-size: 16px;
-        }
-        
-        /* Adjust data tables */
-        .stDataFrame {
-            font-size: 14px;
-        }
-        
-        /* Reduce margins in headers */
-        h1, h2, h3 {
-            margin-top: 0.5rem !important;
-            margin-bottom: 0.5rem !important;
-        }
-        
-        /* Make tabs more mobile-friendly */
-        .stTabs [role="tablist"] {
-            flex-wrap: wrap;
-        }
-        .stTabs [role="tab"] {
-            padding: 0.5rem 1rem;
-            font-size: 14px;
-            flex-grow: 1;
-            text-align: center;
-        }
-    }
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+hide_footer_style = """
+    <style>
+    footer {
+        visibility: hidden;
+    }
+    footer:after {
+        content: '';
+        display: none;
+    }
+    .css-15tx938.e8zbici2 {  /* This class targets the footer in some Streamlit builds */
+        display: none !important;
+    }
+    </style>
+"""
+
+st.markdown(hide_footer_style, unsafe_allow_html=True)
 
 
 def validate_data_before_write(df, expected_columns):
@@ -696,75 +646,58 @@ def main():
         
         employee_names = Person['Employee Name'].tolist()
         
-        # Mobile-friendly login form
-        with st.form("login_form"):
-            employee_name = st.selectbox(
-                "Select Your Name", 
-                employee_names, 
-                key="employee_select"
-            )
-            passkey = st.text_input(
-                "Enter Your Employee Code", 
-                type="password", 
-                key="passkey_input"
-            )
-            
-            login_button = st.form_submit_button(
-                "Log in", 
-                use_container_width=True
-            )
-            
-            if login_button:
-                if authenticate_employee(employee_name, passkey):
-                    st.session_state.authenticated = True
-                    st.session_state.employee_name = employee_name
-                    st.rerun()
-                else:
-                    st.error("Invalid Password. Please try again.")
+        # Create centered form
+        form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
+        
+        with form_col2:
+            with st.container():
+                employee_name = st.selectbox(
+                    "Select Your Name", 
+                    employee_names, 
+                    key="employee_select"
+                )
+                passkey = st.text_input(
+                    "Enter Your Employee Code", 
+                    type="password", 
+                    key="passkey_input"
+                )
+                
+                login_button = st.button(
+                    "Log in", 
+                    key="login_button",
+                    use_container_width=True
+                )
+                
+                if login_button:
+                    if authenticate_employee(employee_name, passkey):
+                        st.session_state.authenticated = True
+                        st.session_state.employee_name = employee_name
+                        st.rerun()
+                    else:
+                        st.error("Invalid Password. Please try again.")
     else:
-        # Mobile-friendly mode selection
+        # [REST OF YOUR ORIGINAL main() FUNCTION REMAINS EXACTLY THE SAME]
+        # Show three option boxes after login
         st.title("Select Mode")
+        col1, col2, col3 = st.columns(3)
         
-        # Use columns with full width on mobile
-        mode_col1, mode_col2, mode_col3 = st.columns(3)
-        
-        with mode_col1:
+        with col1:
             if st.button("Sales", use_container_width=True, key="sales_mode"):
                 st.session_state.selected_mode = "Sales"
                 st.rerun()
         
-        with mode_col2:
+        with col2:
             if st.button("Visit", use_container_width=True, key="visit_mode"):
                 st.session_state.selected_mode = "Visit"
                 st.rerun()
         
-        with mode_col3:
+        with col3:
             if st.button("Attendance", use_container_width=True, key="attendance_mode"):
                 st.session_state.selected_mode = "Attendance"
                 st.rerun()
         
         if st.session_state.selected_mode:
-            # Mobile-friendly back button at the bottom
-            st.markdown("""
-            <style>
-            .mobile-back-button {
-                position: fixed;
-                bottom: 10px;
-                left: 10px;
-                right: 10px;
-                z-index: 1000;
-                background-color: white;
-                padding: 10px;
-                border-radius: 5px;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            
-            if st.button("← Logout", key="back_button", use_container_width=True):
-                st.session_state.authenticated = False
-                st.session_state.selected_mode = None
-                st.rerun()
+            add_back_button()
             
             if st.session_state.selected_mode == "Sales":
                 sales_page()
@@ -773,105 +706,151 @@ def main():
             else:
                 attendance_page()
 
-
 def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
-
-    # Remarks default
+    
+    # Empty remarks since we removed the location input
     sales_remarks = ""
-
-    tab1, tab2 = st.tabs(["➕ New Sale", "📜 Sales History"])
-
-    ### TAB 1: New Sale
+    
+    tab1, tab2 = st.tabs(["New Sale", "Sales History"])
+    
     with tab1:
         discount_category = Person[Person['Employee Name'] == selected_employee]['Discount Category'].values[0]
 
         st.subheader("Transaction Details")
-        transaction_type = st.selectbox("Transaction Type", ["Sold", "Return", "Add On", "Damage", "Expired"])
+        transaction_type = st.selectbox("Transaction Type", ["Sold", "Return", "Add On", "Damage", "Expired"], key="transaction_type")
 
         st.subheader("Product Details")
         product_names = Products['Product Name'].tolist()
-        selected_products = st.multiselect("Select Products", product_names)
+        selected_products = st.multiselect("Select Products", product_names, key="product_selection")
 
         quantities = []
         product_discounts = []
 
         if selected_products:
             st.markdown("### Product Prices & Discounts")
+            price_cols = st.columns(4)
+            with price_cols[0]:
+                st.markdown("**Product**")
+            with price_cols[1]:
+                st.markdown("**Price (INR)**")
+            with price_cols[2]:
+                st.markdown("**Discount %**")
+            with price_cols[3]:
+                st.markdown("**Quantity**")
+            
+            subtotal = 0
             for product in selected_products:
                 product_data = Products[Products['Product Name'] == product].iloc[0]
-
+                
                 if discount_category in product_data:
                     unit_price = float(product_data[discount_category])
                 else:
                     unit_price = float(product_data['Price'])
-
+                
                 cols = st.columns(4)
                 with cols[0]:
-                    st.markdown(f"**{product}**")
+                    st.text(product)
                 with cols[1]:
-                    st.markdown(f"₹{unit_price:.2f}")
+                    st.text(f"₹{unit_price:.2f}")
                 with cols[2]:
-                    prod_discount = st.number_input(f"Discount for {product}", 0.0, 100.0, 0.0, 0.1, key=f"disc_{product}")
+                    prod_discount = st.number_input(
+                        f"Discount for {product}",
+                        min_value=0.0,
+                        max_value=100.0,
+                        value=0.0,
+                        step=0.1,
+                        key=f"discount_{product}",
+                        label_visibility="collapsed"
+                    )
                     product_discounts.append(prod_discount)
                 with cols[3]:
-                    qty = st.number_input(f"Qty for {product}", 1, 999, 1, 1, key=f"qty_{product}")
+                    qty = st.number_input(
+                        f"Qty for {product}",
+                        min_value=1,
+                        value=1,
+                        step=1,
+                        key=f"qty_{product}",
+                        label_visibility="collapsed"
+                    )
                     quantities.append(qty)
+                
+                item_total = unit_price * (1 - prod_discount/100) * qty
+                subtotal += item_total
+            
+            # Final amount calculation
+            st.markdown("---")
+            st.markdown("### Final Amount Calculation")
+            st.markdown(f"Subtotal: ₹{subtotal:.2f}")
+            tax_amount = subtotal * 0.18
+            st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
+            st.markdown(f"**Grand Total: ₹{subtotal + tax_amount:.2f}**")
 
-        st.markdown("---")
         st.subheader("Payment Details")
-        payment_status = st.selectbox("Payment Status", ["pending", "paid"])
+        payment_status = st.selectbox("Payment Status", ["pending", "paid"], key="payment_status")
 
         amount_paid = 0.0
         if payment_status == "paid":
-            amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, step=1.0)
+            amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid")
 
         st.subheader("Distributor Details")
-        distributor_option = st.radio("Distributor Selection", ["Select from list", "None"])
-
+        distributor_option = st.radio("Distributor Selection", ["Select from list", "None"], key="distributor_option")
+        
         distributor_firm_name = ""
         distributor_id = ""
         distributor_contact_person = ""
         distributor_contact_number = ""
         distributor_email = ""
         distributor_territory = ""
-
+        
         if distributor_option == "Select from list":
             distributor_names = Distributors['Firm Name'].tolist()
-            selected_distributor = st.selectbox("Select Distributor", distributor_names)
+            selected_distributor = st.selectbox("Select Distributor", distributor_names, key="distributor_select")
             distributor_details = Distributors[Distributors['Firm Name'] == selected_distributor].iloc[0]
-
+            
             distributor_firm_name = selected_distributor
             distributor_id = distributor_details['Distributor ID']
             distributor_contact_person = distributor_details['Contact Person']
             distributor_contact_number = distributor_details['Contact Number']
             distributor_email = distributor_details['Email ID']
             distributor_territory = distributor_details['Territory']
+            
+            st.text_input("Distributor ID", value=distributor_id, disabled=True, key="distributor_id_display")
+            st.text_input("Contact Person", value=distributor_contact_person, disabled=True, key="distributor_contact_person_display")
+            st.text_input("Contact Number", value=distributor_contact_number, disabled=True, key="distributor_contact_number_display")
+            st.text_input("Email", value=distributor_email, disabled=True, key="distributor_email_display")
+            st.text_input("Territory", value=distributor_territory, disabled=True, key="distributor_territory_display")
 
         st.subheader("Outlet Details")
-        outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"])
-
+        outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="outlet_option")
+        
         if outlet_option == "Select from list":
             outlet_names = Outlet['Shop Name'].tolist()
-            selected_outlet = st.selectbox("Select Outlet", outlet_names)
+            selected_outlet = st.selectbox("Select Outlet", outlet_names, key="outlet_select")
             outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
-
+            
             customer_name = selected_outlet
             gst_number = outlet_details['GST']
             contact_number = outlet_details['Contact']
             address = outlet_details['Address']
             state = outlet_details['State']
             city = outlet_details['City']
+            
+            st.text_input("Outlet Contact", value=contact_number, disabled=True, key="outlet_contact_display")
+            st.text_input("Outlet Address", value=address, disabled=True, key="outlet_address_display")
+            st.text_input("Outlet State", value=state, disabled=True, key="outlet_state_display")
+            st.text_input("Outlet City", value=city, disabled=True, key="outlet_city_display")
+            st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
         else:
-            customer_name = st.text_input("Outlet Name")
-            gst_number = st.text_input("GST Number")
-            contact_number = st.text_input("Contact Number")
-            address = st.text_area("Address")
-            state = st.text_input("State", "Uttar Pradesh")
-            city = st.text_input("City", "Noida")
+            customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
+            gst_number = st.text_input("GST Number", key="manual_gst_number")
+            contact_number = st.text_input("Contact Number", key="manual_contact_number")
+            address = st.text_area("Address", key="manual_address")
+            state = st.text_input("State", "Uttar Pradesh", key="manual_state")
+            city = st.text_input("City", "Noida", key="manual_city")
 
-        if st.button("🚀 Generate Invoice"):
+        if st.button("Generate Invoice", key="generate_invoice_button"):
             if selected_products and customer_name:
                 invoice_number = generate_invoice_number()
                 employee_selfie_path = None
@@ -879,88 +858,98 @@ def sales_page():
 
                 pdf, pdf_path = generate_invoice(
                     customer_name, gst_number, contact_number, address, state, city,
-                    selected_products, quantities, product_discounts, discount_category,
-                    selected_employee, payment_status, amount_paid,
-                    employee_selfie_path, payment_receipt_path, invoice_number, transaction_type,
+                    selected_products, quantities, product_discounts, discount_category, 
+                    selected_employee, payment_status, amount_paid, employee_selfie_path, 
+                    payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
                     distributor_contact_number, distributor_email, distributor_territory,
                     sales_remarks
                 )
-
+                
                 with open(pdf_path, "rb") as f:
-                    st.download_button("📥 Download Invoice", f, file_name=f"{invoice_number}.pdf", mime="application/pdf")
-
+                    st.download_button(
+                        "Download Invoice", 
+                        f, 
+                        file_name=f"{invoice_number}.pdf",
+                        mime="application/pdf",
+                        key=f"download_{invoice_number}"
+                    )
+                
                 st.success(f"Invoice {invoice_number} generated successfully!")
                 st.balloons()
             else:
                 st.error("Please fill all required fields and select products.")
-
-    ### TAB 2: Sales History
+    
     with tab2:
         st.subheader("Sales History")
-
+        
         @st.cache_data(ttl=300)
         def load_sales_data():
             try:
                 sales_data = conn.read(worksheet="Sales", ttl=5)
                 sales_data = sales_data.dropna(how="all")
-                return sales_data
+                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+                filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
+                
+                # Convert all columns to appropriate types
+                filtered_data['Outlet Name'] = filtered_data['Outlet Name'].astype(str)
+                filtered_data['Invoice Number'] = filtered_data['Invoice Number'].astype(str)
+                filtered_data['Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True)
+                
+                # Convert numeric columns
+                numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
+                for col in numeric_cols:
+                    if col in filtered_data.columns:
+                        filtered_data[col] = pd.to_numeric(filtered_data[col], errors='coerce')
+                
+                return filtered_data
             except Exception as e:
-                st.error(f"Failed to load sales data: {e}")
+                st.error(f"Error loading sales data: {e}")
                 return pd.DataFrame()
 
-        all_sales = load_sales_data()
-
-        if all_sales.empty:
-            st.warning("No sales records found.")
+        sales_data = load_sales_data()
+        
+        if sales_data.empty:
+            st.warning("No sales records found")
             return
-
-        employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-        filtered_data = all_sales[all_sales['Employee Code'] == employee_code].copy()
-
-        # Force datetime safely
-        if 'Invoice Date' in filtered_data.columns:
-            filtered_data.loc[:, 'Invoice Date'] = pd.to_datetime(
-                filtered_data['Invoice Date'], errors='coerce', dayfirst=True
-            )
-            filtered_data = filtered_data.dropna(subset=['Invoice Date'])
-
-        # Filters
+            
         with st.expander("🔍 Search Filters", expanded=True):
             col1, col2, col3 = st.columns(3)
             with col1:
-                invoice_number_search = st.text_input("Search Invoice Number")
+                invoice_number_search = st.text_input("Invoice Number", key="invoice_search")
             with col2:
-                invoice_date_search = st.date_input("Search Invoice Date")
+                invoice_date_search = st.date_input("Invoice Date", key="date_search")
             with col3:
-                outlet_name_search = st.text_input("Search Outlet Name")
-
-            if st.button("Apply Filters"):
-                if invoice_number_search:
-                    filtered_data = filtered_data[
-                        filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
-                    ]
-                if outlet_name_search:
-                    filtered_data = filtered_data[
-                        filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
-                    ]
-                if invoice_date_search:
-                    date_str = invoice_date_search.strftime("%d-%m-%Y")
-                    filtered_data = filtered_data[
-                        filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str
-                    ]
-
+                outlet_name_search = st.text_input("Outlet Name", key="outlet_search")
+            
+            if st.button("Apply Filters", key="search_sales_button"):
+                st.rerun()
+        
+        filtered_data = sales_data.copy()
+        if invoice_number_search:
+            filtered_data = filtered_data[
+                filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
+            ]
+        if invoice_date_search:
+            date_str = invoice_date_search.strftime("%d-%m-%Y")
+            filtered_data = filtered_data[filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str]
+        if outlet_name_search:
+            filtered_data = filtered_data[
+                filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
+            ]
+        
         if filtered_data.empty:
-            st.warning("No matching records found.")
+            st.warning("No matching records found")
             return
-
+            
         invoice_summary = filtered_data.groupby('Invoice Number').agg({
             'Invoice Date': 'first',
             'Outlet Name': 'first',
             'Grand Total': 'sum',
             'Payment Status': 'first'
         }).sort_values('Invoice Date', ascending=False).reset_index()
-
+        
+        st.write(f"📄 Showing {len(invoice_summary)} invoices")
         st.dataframe(
             invoice_summary,
             column_config={
@@ -970,68 +959,85 @@ def sales_page():
             use_container_width=True,
             hide_index=True
         )
-
-        selected_invoice = st.selectbox("Select Invoice to View Details", invoice_summary['Invoice Number'])
-
+        
+        selected_invoice = st.selectbox(
+            "Select invoice to view details",
+            invoice_summary['Invoice Number'],
+            key="invoice_selection"
+        )
+        
         invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
-
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
-
-            st.subheader(f"🧾 Invoice {selected_invoice}")
+            
+            st.subheader(f"Invoice {selected_invoice}")
             col1, col2 = st.columns(2)
             with col1:
                 st.metric("Date", invoice_data['Invoice Date'].strftime('%d-%m-%Y'))
-                st.metric("Outlet", invoice_data['Outlet Name'])
+                st.metric("Outlet", str(invoice_data['Outlet Name']))
+                st.metric("Contact", str(invoice_data['Outlet Contact']))
             with col2:
-                st.metric("Grand Total", f"₹{invoice_data['Grand Total']:.2f}")
-                st.metric("Payment Status", invoice_data['Payment Status'])
-
+                total_amount = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Grand Total'].values[0]
+                st.metric("Total Amount", f"₹{total_amount:.2f}")
+                st.metric("Payment Status", str(invoice_data['Payment Status']).capitalize())
+            
             st.subheader("Products")
+            product_display = invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price']].copy()
+            product_display['Product Name'] = product_display['Product Name'].astype(str)
+            
             st.dataframe(
-                invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price']],
+                product_display,
+                column_config={
+                    "Unit Price": st.column_config.NumberColumn(format="₹%.2f"),
+                    "Total Price": st.column_config.NumberColumn(format="₹%.2f")
+                },
                 use_container_width=True,
                 hide_index=True
             )
-
-            if st.button("🔄 Regenerate Invoice", key=f"regen_btn_{selected_invoice}"):
-                with st.spinner("Regenerating..."):
-                    pdf, pdf_path = generate_invoice(
-                        invoice_data['Outlet Name'],
-                        invoice_data.get('GST Number', ''),
-                        invoice_data['Outlet Contact'],
-                        invoice_data['Outlet Address'],
-                        invoice_data['Outlet State'],
-                        invoice_data['Outlet City'],
-                        invoice_details['Product Name'].tolist(),
-                        invoice_details['Quantity'].tolist(),
-                        invoice_details['Product Discount (%)'].tolist(),
-                        invoice_data['Discount Category'],
-                        invoice_data['Employee Name'],
-                        invoice_data['Payment Status'],
-                        invoice_data['Amount Paid'],
-                        None,
-                        None,
-                        selected_invoice,
-                        invoice_data['Transaction Type'],
-                        invoice_data.get('Distributor Firm Name', ''),
-                        invoice_data.get('Distributor ID', ''),
-                        invoice_data.get('Distributor Contact Person', ''),
-                        invoice_data.get('Distributor Contact Number', ''),
-                        invoice_data.get('Distributor Email', ''),
-                        invoice_data.get('Distributor Territory', ''),
-                        invoice_data.get('Remarks', '')
-                    )
-
-                    with open(pdf_path, "rb") as f:
-                        st.download_button(
-                            "📥 Download Regenerated Invoice",
-                            f,
-                            file_name=f"{selected_invoice}.pdf",
-                            mime="application/pdf"
+            
+            if st.button("🔄 Regenerate Invoice", key=f"regenerate_btn_{selected_invoice}"):
+                with st.spinner("Regenerating invoice..."):
+                    try:
+                        pdf, pdf_path = generate_invoice(
+                            str(invoice_data['Outlet Name']),
+                            str(invoice_data.get('GST Number', '')),
+                            str(invoice_data['Outlet Contact']),
+                            str(invoice_data['Outlet Address']),
+                            str(invoice_data['Outlet State']),
+                            str(invoice_data['Outlet City']),
+                            invoice_details['Product Name'].astype(str).tolist(),
+                            invoice_details['Quantity'].tolist(),
+                            invoice_details['Product Discount (%)'].tolist(),
+                            str(invoice_data['Discount Category']),
+                            str(invoice_data['Employee Name']),
+                            str(invoice_data['Payment Status']),
+                            float(invoice_data['Amount Paid']),
+                            None,
+                            None,
+                            str(selected_invoice),
+                            str(invoice_data['Transaction Type']),
+                            str(invoice_data.get('Distributor Firm Name', '')),
+                            str(invoice_data.get('Distributor ID', '')),
+                            str(invoice_data.get('Distributor Contact Person', '')),
+                            str(invoice_data.get('Distributor Contact Number', '')),
+                            str(invoice_data.get('Distributor Email', '')),
+                            str(invoice_data.get('Distributor Territory', '')),
+                            str(invoice_data.get('Remarks', ''))
                         )
-                    st.success("Invoice regenerated!")
-
+                        
+                        with open(pdf_path, "rb") as f:
+                            st.download_button(
+                                "📥 Download Regenerated Invoice", 
+                                f, 
+                                file_name=f"{selected_invoice}.pdf",
+                                mime="application/pdf",
+                                key=f"download_regenerated_{selected_invoice}"
+                            )
+                        
+                        st.success("Invoice regenerated successfully!")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"Error regenerating invoice: {e}")
 
 def visit_page():
     st.title("Visit Management")
