@@ -94,7 +94,7 @@ def get_date_range():
 
 # Dashboard layout
 def main():
-    st.title("📊 Employee Portal Admin Dashboard")
+    st.title("Biolume Employee Dashboard")
     
     # Authentication
     if 'authenticated' not in st.session_state:
