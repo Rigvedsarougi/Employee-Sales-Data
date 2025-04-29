@@ -230,7 +230,7 @@ def main():
                 sales_trend,
                 x='Invoice Date',
                 y='Grand Total',
-                title=f"Daily Sales Trend ({start_date} to {end_date})",
+                title=f"Daily Sales ({start_date} to {end_date})",
                 labels={'Invoice Date': 'Date', 'Grand Total': 'Total Sales (₹)'}
             )
             fig.update_layout(
