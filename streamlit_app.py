@@ -806,7 +806,7 @@ def sales_page():
         )
         
         # Delivery Status Section
-        st.subheader("Delivery Status")
+        st.subheader("Delivery Status Management")
         
         # Get all products for the selected invoice
         invoice_products = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
@@ -814,39 +814,40 @@ def sales_page():
         if not invoice_products.empty:
             # Create a form for delivery status updates
             with st.form(key='delivery_status_form'):
-                # Create a dictionary to store status for each product
-                status_dict = {}
+                # Get current status for all products in this invoice
+                current_status = invoice_products.iloc[0]['Delivery Status'] if 'Delivery Status' in invoice_products.columns else 'pending'
                 
-                # Display each product with its current status
-                for idx, row in invoice_products.iterrows():
-                    current_status = row.get('Delivery Status', 'pending')
-                    col1, col2 = st.columns([3, 2])
-                    with col1:
-                        st.text(f"{row['Product Name']} (Qty: {row['Quantity']})")
-                    with col2:
-                        status_dict[row['Product Name']] = st.selectbox(
-                            f"Status for {row['Product Name']}",
-                            ["pending", "processing", "shipped", "delivered", "cancelled"],
-                            index=["pending", "processing", "shipped", "delivered", "cancelled"].index(current_status),
-                            key=f"status_{row['Product Name']}_{selected_invoice}"
-                        )
+                # Display status selection
+                new_status = st.selectbox(
+                    "Update Delivery Status for Entire Invoice",
+                    ["Pending", "Order Done", "Delivery Done"],
+                    index=["Pending", "Order Done", "Delivery Done"].index(current_status) if current_status in ["Pending", "Order Done", "Delivery Done"] else 0,
+                    key=f"status_{selected_invoice}"
+                )
                 
                 # Submit button for the form
-                submitted = st.form_submit_button("Update Delivery Status")
+                submitted = st.form_submit_button("Update Status")
                 
                 if submitted:
                     with st.spinner("Updating delivery status..."):
-                        success_count = 0
-                        for product_name, new_status in status_dict.items():
-                            if update_delivery_status(conn, selected_invoice, product_name, new_status):
-                                success_count += 1
-                        
-                        if success_count == len(status_dict):
-                            st.success("Delivery status updated successfully!")
+                        try:
+                            # Update all products in this invoice with the new status
+                            sales_data = conn.read(worksheet="Sales", ttl=5)
+                            sales_data = sales_data.dropna(how="all")
+                            
+                            # Update the status for all rows with this invoice number
+                            mask = sales_data['Invoice Number'] == selected_invoice
+                            sales_data.loc[mask, 'Delivery Status'] = new_status
+                            
+                            # Write back the updated data
+                            conn.update(worksheet="Sales", data=sales_data)
+                            
+                            st.success(f"Delivery status updated to '{new_status}' for invoice {selected_invoice}!")
                             st.rerun()
-                        else:
-                            st.error("Some updates failed. Please try again.")
+                        except Exception as e:
+                            st.error(f"Error updating delivery status: {e}")
         
+        # Display invoice details
         invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
@@ -861,20 +862,17 @@ def sales_page():
                 total_amount = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Grand Total'].values[0]
                 st.metric("Total Amount", f"₹{total_amount:.2f}")
                 st.metric("Payment Status", str(invoice_data['Payment Status']).capitalize())
+                st.metric("Delivery Status", str(invoice_data.get('Delivery Status', 'Pending')).capitalize())
             
             st.subheader("Products")
-            product_display = invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price', 'Delivery Status']].copy()
+            product_display = invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price']].copy()
             product_display['Product Name'] = product_display['Product Name'].astype(str)
             
             st.dataframe(
                 product_display,
                 column_config={
                     "Unit Price": st.column_config.NumberColumn(format="₹%.2f"),
-                    "Total Price": st.column_config.NumberColumn(format="₹%.2f"),
-                    "Delivery Status": st.column_config.SelectboxColumn(
-                        options=["pending", "processing", "shipped", "delivered", "cancelled"],
-                        editable=False
-                    )
+                    "Total Price": st.column_config.NumberColumn(format="₹%.2f")
                 },
                 use_container_width=True,
                 hide_index=True
