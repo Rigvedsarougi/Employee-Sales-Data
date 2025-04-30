@@ -36,18 +36,63 @@ def track_location(employee_name, status="active"):
         current_date = datetime.now().strftime("%d-%m-%Y")
         current_time = datetime.now().strftime("%H:%M:%S")
         
-        # Try to get current location
+        # Get location using browser's geolocation API
         try:
-            g = geocoder.ip('me')
-            if g.latlng:
-                lat, lng = g.latlng
-                address = g.address
-                accuracy = 50  # Default accuracy in meters
+            # This JavaScript will get the location and send it back to Python
+            js = """
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const locationData = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                        accuracy: position.coords.accuracy,
+                        timestamp: new Date().getTime()
+                    };
+                    Streamlit.setComponentValue(locationData);
+                },
+                function(error) {
+                    console.error("Geolocation error:", error);
+                    Streamlit.setComponentValue({
+                        lat: null,
+                        lng: null,
+                        accuracy: null,
+                        timestamp: null
+                    });
+                }
+            );
+            """
+            
+            # Execute JavaScript and get the result
+            location_data = streamlit_js_eval(
+                js_expressions=[js],
+                want_expr=False,
+                key=f"loc_{datetime.now().timestamp()}"
+            )
+            
+            if location_data and location_data.get('lat'):
+                lat = location_data['lat']
+                lng = location_data['lng']
+                accuracy = location_data['accuracy']
+                
+                # Reverse geocode to get address
+                try:
+                    response = requests.get(
+                        f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lng}&zoom=18&addressdetails=1"
+                    )
+                    if response.status_code == 200:
+                        address_data = response.json()
+                        address = address_data.get('display_name', 'Address not available')
+                    else:
+                        address = "Address lookup failed"
+                except:
+                    address = "Address lookup error"
             else:
-                raise Exception("Could not get location")
-        except:
-            lat, lng, address, accuracy = None, None, "Unknown", None
-        
+                lat, lng, accuracy, address = None, None, None, "Location not available"
+                
+        except Exception as e:
+            st.error(f"Location error: {str(e)}")
+            lat, lng, accuracy, address = None, None, None, "Location error"
+
         tracking_id = f"LOC-{datetime.now().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
         
         tracking_data = {
