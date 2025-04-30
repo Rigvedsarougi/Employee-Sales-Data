@@ -971,13 +971,13 @@ def sales_page():
         st.subheader("Delivery Status Management")
         
         # Get all products for the selected invoice
-        invoice_products = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
+        invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
         
-        if not invoice_products.empty:
+        if not invoice_details.empty:
             # Create a form for delivery status updates
             with st.form(key='delivery_status_form'):
                 # Get current status for the invoice
-                current_status = invoice_products.iloc[0].get('Delivery Status', 'Pending')
+                current_status = invoice_details.iloc[0].get('Delivery Status', 'Pending')
                 
                 # Display status selection
                 new_status = st.selectbox(
@@ -1011,14 +1011,14 @@ def sales_page():
                             st.error(f"Error updating delivery status: {e}")
         
         # Display invoice details
-        invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
+            original_invoice_date = invoice_data['Invoice Date'].strftime('%d-%m-%Y')  # Store original date
             
             st.subheader(f"Invoice {selected_invoice}")
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("Date", invoice_data['Invoice Date'].strftime('%d-%m-%Y'))
+                st.metric("Date", original_invoice_date)  # Use original date
                 st.metric("Outlet", str(invoice_data['Outlet Name']))
                 st.metric("Contact", str(invoice_data['Outlet Contact']))
             with col2:
@@ -1044,6 +1044,7 @@ def sales_page():
             if st.button("🔄 Regenerate Invoice", key=f"regenerate_btn_{selected_invoice}"):
                 with st.spinner("Regenerating invoice..."):
                     try:
+                        # Use the original invoice date instead of current date
                         pdf, pdf_path = generate_invoice(
                             str(invoice_data['Outlet Name']),
                             str(invoice_data.get('GST Number', '')),
@@ -1068,7 +1069,8 @@ def sales_page():
                             str(invoice_data.get('Distributor Contact Number', '')),
                             str(invoice_data.get('Distributor Email', '')),
                             str(invoice_data.get('Distributor Territory', '')),
-                            str(invoice_data.get('Remarks', ''))
+                            str(invoice_data.get('Remarks', '')),
+                            original_invoice_date  # Pass the original date to preserve it
                         )
                         
                         with open(pdf_path, "rb") as f:
@@ -1080,7 +1082,7 @@ def sales_page():
                                 key=f"download_regenerated_{selected_invoice}"
                             )
                         
-                        st.success("Invoice regenerated successfully!")
+                        st.success("Invoice regenerated successfully with original date!")
                         st.balloons()
                     except Exception as e:
                         st.error(f"Error regenerating invoice: {e}")
