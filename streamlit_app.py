@@ -713,48 +713,87 @@ def sales_page():
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
-        st.subheader("New Sale Entry")
-        
-        # Transaction Type
-        transaction_type = st.radio(
-            "Transaction Type",
-            ["Retail", "Distributor"],
-            horizontal=True,
-            key="transaction_type"
-        )
-        
-        # Customer/Outlet Details
-        st.subheader("Customer Details")
-        outlet_option = st.radio(
-            "Outlet Selection", 
-            ["Select from list", "Enter manually"], 
-            key="outlet_option"
-        )
-        
-        if outlet_option == "Select from list":
-            outlet_names = Outlet['Shop Name'].tolist()
-            selected_outlet = st.selectbox(
-                "Select Outlet", 
-                outlet_names, 
-                key="outlet_select"
-            )
-            outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
+        discount_category = Person[Person['Employee Name'] == selected_employee]['Discount Category'].values[0]
+
+        st.subheader("Transaction Details")
+        transaction_type = st.selectbox("Transaction Type", ["Sold", "Return", "Add On", "Damage", "Expired"], key="transaction_type")
+
+        st.subheader("Product Details")
+        product_names = Products['Product Name'].tolist()
+        selected_products = st.multiselect("Select Products", product_names, key="product_selection")
+
+        quantities = []
+        product_discounts = []
+
+        if selected_products:
+            st.markdown("### Product Prices & Discounts")
+            price_cols = st.columns(4)
+            with price_cols[0]:
+                st.markdown("**Product**")
+            with price_cols[1]:
+                st.markdown("**Price (INR)**")
+            with price_cols[2]:
+                st.markdown("**Discount %**")
+            with price_cols[3]:
+                st.markdown("**Quantity**")
             
-            customer_name = selected_outlet
-            contact_number = outlet_details['Contact']
-            address = outlet_details['Address']
-            state = outlet_details['State']
-            city = outlet_details['City']
-            gst_number = outlet_details.get('GST Number', '')
-        else:
-            customer_name = st.text_input("Outlet Name", key="outlet_name")
-            contact_number = st.text_input("Contact Number", key="outlet_contact")
-            address = st.text_area("Address", key="outlet_address")
-            state = st.text_input("State", "Uttar Pradesh", key="outlet_state")
-            city = st.text_input("City", "Noida", key="outlet_city")
-            gst_number = st.text_input("GST Number (optional)", key="outlet_gst")
+            subtotal = 0
+            for product in selected_products:
+                product_data = Products[Products['Product Name'] == product].iloc[0]
+                
+                if discount_category in product_data:
+                    unit_price = float(product_data[discount_category])
+                else:
+                    unit_price = float(product_data['Price'])
+                
+                cols = st.columns(4)
+                with cols[0]:
+                    st.text(product)
+                with cols[1]:
+                    st.text(f"₹{unit_price:.2f}")
+                with cols[2]:
+                    prod_discount = st.number_input(
+                        f"Discount for {product}",
+                        min_value=0.0,
+                        max_value=100.0,
+                        value=0.0,
+                        step=0.1,
+                        key=f"discount_{product}",
+                        label_visibility="collapsed"
+                    )
+                    product_discounts.append(prod_discount)
+                with cols[3]:
+                    qty = st.number_input(
+                        f"Qty for {product}",
+                        min_value=1,
+                        value=1,
+                        step=1,
+                        key=f"qty_{product}",
+                        label_visibility="collapsed"
+                    )
+                    quantities.append(qty)
+                
+                item_total = unit_price * (1 - prod_discount/100) * qty
+                subtotal += item_total
+            
+            # Final amount calculation
+            st.markdown("---")
+            st.markdown("### Final Amount Calculation")
+            st.markdown(f"Subtotal: ₹{subtotal:.2f}")
+            tax_amount = subtotal * 0.18
+            st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
+            st.markdown(f"**Grand Total: ₹{subtotal + tax_amount:.2f}**")
+
+        st.subheader("Payment Details")
+        payment_status = st.selectbox("Payment Status", ["pending", "paid"], key="payment_status")
+
+        amount_paid = 0.0
+        if payment_status == "paid":
+            amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid")
+
+        st.subheader("Distributor Details")
+        distributor_option = st.radio("Distributor Selection", ["Select from list", "None"], key="distributor_option")
         
-        # Distributor Details (only shown for distributor transactions)
         distributor_firm_name = ""
         distributor_id = ""
         distributor_contact_person = ""
@@ -762,180 +801,81 @@ def sales_page():
         distributor_email = ""
         distributor_territory = ""
         
-        if transaction_type == "Distributor":
-            st.subheader("Distributor Details")
-            distributor_option = st.radio(
-                "Distributor Selection",
-                ["Select from list", "Enter manually"],
-                key="distributor_option"
-            )
+        if distributor_option == "Select from list":
+            distributor_names = Distributors['Firm Name'].tolist()
+            selected_distributor = st.selectbox("Select Distributor", distributor_names, key="distributor_select")
+            distributor_details = Distributors[Distributors['Firm Name'] == selected_distributor].iloc[0]
             
-            if distributor_option == "Select from list":
-                distributor_names = Distributors['Firm Name'].tolist()
-                selected_distributor = st.selectbox(
-                    "Select Distributor",
-                    distributor_names,
-                    key="distributor_select"
+            distributor_firm_name = selected_distributor
+            distributor_id = distributor_details['Distributor ID']
+            distributor_contact_person = distributor_details['Contact Person']
+            distributor_contact_number = distributor_details['Contact Number']
+            distributor_email = distributor_details['Email ID']
+            distributor_territory = distributor_details['Territory']
+            
+            st.text_input("Distributor ID", value=distributor_id, disabled=True, key="distributor_id_display")
+            st.text_input("Contact Person", value=distributor_contact_person, disabled=True, key="distributor_contact_person_display")
+            st.text_input("Contact Number", value=distributor_contact_number, disabled=True, key="distributor_contact_number_display")
+            st.text_input("Email", value=distributor_email, disabled=True, key="distributor_email_display")
+            st.text_input("Territory", value=distributor_territory, disabled=True, key="distributor_territory_display")
+
+        st.subheader("Outlet Details")
+        outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="outlet_option")
+        
+        if outlet_option == "Select from list":
+            outlet_names = Outlet['Shop Name'].tolist()
+            selected_outlet = st.selectbox("Select Outlet", outlet_names, key="outlet_select")
+            outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
+            
+            customer_name = selected_outlet
+            gst_number = outlet_details['GST']
+            contact_number = outlet_details['Contact']
+            address = outlet_details['Address']
+            state = outlet_details['State']
+            city = outlet_details['City']
+            
+            st.text_input("Outlet Contact", value=contact_number, disabled=True, key="outlet_contact_display")
+            st.text_input("Outlet Address", value=address, disabled=True, key="outlet_address_display")
+            st.text_input("Outlet State", value=state, disabled=True, key="outlet_state_display")
+            st.text_input("Outlet City", value=city, disabled=True, key="outlet_city_display")
+            st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
+        else:
+            customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
+            gst_number = st.text_input("GST Number", key="manual_gst_number")
+            contact_number = st.text_input("Contact Number", key="manual_contact_number")
+            address = st.text_area("Address", key="manual_address")
+            state = st.text_input("State", "Uttar Pradesh", key="manual_state")
+            city = st.text_input("City", "Noida", key="manual_city")
+
+        if st.button("Generate Invoice", key="generate_invoice_button"):
+            if selected_products and customer_name:
+                invoice_number = generate_invoice_number()
+                employee_selfie_path = None
+                payment_receipt_path = None
+
+                pdf, pdf_path = generate_invoice(
+                    customer_name, gst_number, contact_number, address, state, city,
+                    selected_products, quantities, product_discounts, discount_category, 
+                    selected_employee, payment_status, amount_paid, employee_selfie_path, 
+                    payment_receipt_path, invoice_number, transaction_type,
+                    distributor_firm_name, distributor_id, distributor_contact_person,
+                    distributor_contact_number, distributor_email, distributor_territory,
+                    sales_remarks
                 )
-                distributor_details = Distributors[Distributors['Firm Name'] == selected_distributor].iloc[0]
                 
-                distributor_firm_name = selected_distributor
-                distributor_id = distributor_details['Distributor ID']
-                distributor_contact_person = distributor_details['Contact Person']
-                distributor_contact_number = distributor_details['Contact Number']
-                distributor_email = distributor_details['Email']
-                distributor_territory = distributor_details['Territory']
+                with open(pdf_path, "rb") as f:
+                    st.download_button(
+                        "Download Invoice", 
+                        f, 
+                        file_name=f"{invoice_number}.pdf",
+                        mime="application/pdf",
+                        key=f"download_{invoice_number}"
+                    )
+                
+                st.success(f"Invoice {invoice_number} generated successfully!")
+                st.balloons()
             else:
-                distributor_firm_name = st.text_input("Distributor Firm Name", key="distributor_name")
-                distributor_id = st.text_input("Distributor ID", key="distributor_id")
-                distributor_contact_person = st.text_input("Contact Person", key="distributor_contact_person")
-                distributor_contact_number = st.text_input("Contact Number", key="distributor_contact_number")
-                distributor_email = st.text_input("Email", key="distributor_email")
-                distributor_territory = st.text_input("Territory", key="distributor_territory")
-        
-        # Product Selection
-        st.subheader("Product Details")
-        product_list = Products['Product Name'].tolist()
-        
-        # Initialize session state for products if not exists
-        if 'selected_products' not in st.session_state:
-            st.session_state.selected_products = []
-            st.session_state.quantities = []
-            st.session_state.product_discounts = []
-        
-        # Product selection interface
-        col1, col2, col3 = st.columns([3, 1, 1])
-        with col1:
-            new_product = st.selectbox("Select Product", product_list, key="product_select")
-        with col2:
-            quantity = st.number_input("Quantity", min_value=1, value=1, step=1, key="product_qty")
-        with col3:
-            discount = st.number_input("Discount (%)", min_value=0, max_value=100, value=0, key="product_discount")
-        
-        if st.button("Add Product", key="add_product"):
-            st.session_state.selected_products.append(new_product)
-            st.session_state.quantities.append(quantity)
-            st.session_state.product_discounts.append(discount)
-            st.success(f"Added {quantity} x {new_product} with {discount}% discount")
-        
-        # Show selected products
-        if st.session_state.selected_products:
-            st.subheader("Selected Products")
-            product_display = pd.DataFrame({
-                "Product": st.session_state.selected_products,
-                "Quantity": st.session_state.quantities,
-                "Discount (%)": st.session_state.product_discounts
-            })
-            st.dataframe(product_display, use_container_width=True, hide_index=True)
-            
-            if st.button("Clear All Products", key="clear_products"):
-                st.session_state.selected_products = []
-                st.session_state.quantities = []
-                st.session_state.product_discounts = []
-                st.rerun()
-        
-        # Discount Category
-        st.subheader("Discount Settings")
-        discount_category = st.selectbox(
-            "Discount Category",
-            ["MRP", "Trade Price", "Distributor Price"],
-            key="discount_category"
-        )
-        
-        # Payment Details
-        st.subheader("Payment Details")
-        payment_status = st.radio(
-            "Payment Status",
-            ["Paid", "Unpaid"],
-            horizontal=True,
-            key="payment_status"
-        )
-        
-        amount_paid = 0
-        payment_receipt_path = None
-        if payment_status == "Paid":
-            amount_paid = st.number_input(
-                "Amount Paid (INR)",
-                min_value=0.0,
-                value=0.0,
-                step=100.0,
-                key="amount_paid"
-            )
-            payment_receipt = st.file_uploader(
-                "Upload Payment Receipt (optional)",
-                type=['jpg', 'jpeg', 'png', 'pdf'],
-                key="payment_receipt"
-            )
-            if payment_receipt:
-                payment_receipt_path = save_uploaded_file(payment_receipt, "payment_receipts")
-        
-        # Employee Selfie
-        st.subheader("Verification")
-        employee_selfie = st.camera_input("Take a selfie for verification", key="employee_selfie")
-        employee_selfie_path = None
-        if employee_selfie:
-            employee_selfie_path = save_uploaded_file(employee_selfie, "employee_selfies")
-        
-        # Remarks
-        remarks = st.text_area("Remarks (optional)", key="remarks")
-        
-        # Submit Button
-        if st.button("Generate Invoice", key="generate_invoice"):
-            if not st.session_state.selected_products:
-                st.error("Please add at least one product")
-            elif not customer_name:
-                st.error("Please enter customer/outlet details")
-            else:
-                with st.spinner("Generating invoice..."):
-                    try:
-                        invoice_number = generate_invoice_number()
-                        
-                        pdf, pdf_path = generate_invoice(
-                            customer_name,
-                            gst_number,
-                            contact_number,
-                            address,
-                            state,
-                            city,
-                            st.session_state.selected_products,
-                            st.session_state.quantities,
-                            st.session_state.product_discounts,
-                            discount_category,
-                            selected_employee,
-                            payment_status.lower(),
-                            amount_paid,
-                            employee_selfie_path,
-                            payment_receipt_path,
-                            invoice_number,
-                            transaction_type,
-                            distributor_firm_name,
-                            distributor_id,
-                            distributor_contact_person,
-                            distributor_contact_number,
-                            distributor_email,
-                            distributor_territory,
-                            remarks
-                        )
-                        
-                        # Clear products after successful submission
-                        st.session_state.selected_products = []
-                        st.session_state.quantities = []
-                        st.session_state.product_discounts = []
-                        
-                        # Show success message and download button
-                        st.success("Invoice generated successfully!")
-                        st.balloons()
-                        
-                        with open(pdf_path, "rb") as f:
-                            st.download_button(
-                                "📥 Download Invoice", 
-                                f, 
-                                file_name=f"{invoice_number}.pdf",
-                                mime="application/pdf",
-                                key=f"download_{invoice_number}"
-                            )
-                    except Exception as e:
-                        st.error(f"Error generating invoice: {e}")
+                st.error("Please fill all required fields and select products.")
     
     with tab2:
         st.subheader("Sales History")
