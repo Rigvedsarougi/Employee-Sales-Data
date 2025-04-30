@@ -987,8 +987,9 @@ def sales_page():
                     if current_status in ["Pending", "Order Done", "Delivery Done"] else 0,
                     key=f"status_{selected_invoice}"
                 )
-    
-                 submitted = st.form_submit_button("Update Status")
+                
+                # Submit button for the form
+                submitted = st.form_submit_button("Update Status")
                 
                 if submitted:
                     with st.spinner("Updating delivery status..."):
