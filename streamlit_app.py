@@ -7,127 +7,6 @@ import os
 import uuid
 from PIL import Image
 
-import time
-from streamlit_js_eval import streamlit_js_eval
-import geocoder
-import requests
-
-# Add these new constants
-LOCATION_TRACKING_SHEET = "LocationTracking"
-LOCATION_TRACKING_COLUMNS = [
-    "Tracking ID",
-    "Employee Name",
-    "Employee Code",
-    "Designation",
-    "Date",
-    "Time",
-    "Latitude",
-    "Longitude",
-    "Address",
-    "Accuracy (m)",
-    "Status"  # "active" or "inactive"
-]
-
-# Add this new function
-def track_location(employee_name, status="active"):
-    try:
-        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
-        designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
-        current_date = datetime.now().strftime("%d-%m-%Y")
-        current_time = datetime.now().strftime("%H:%M:%S")
-        
-        # Get location using browser's geolocation API
-        try:
-            # This JavaScript will get the location and send it back to Python
-            js = """
-            navigator.geolocation.getCurrentPosition(
-                function(position) {
-                    const locationData = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                        accuracy: position.coords.accuracy,
-                        timestamp: new Date().getTime()
-                    };
-                    Streamlit.setComponentValue(locationData);
-                },
-                function(error) {
-                    console.error("Geolocation error:", error);
-                    Streamlit.setComponentValue({
-                        lat: null,
-                        lng: null,
-                        accuracy: null,
-                        timestamp: null
-                    });
-                }
-            );
-            """
-            
-            # Execute JavaScript and get the result
-            location_data = streamlit_js_eval(
-                js_expressions=[js],
-                want_expr=False,
-                key=f"loc_{datetime.now().timestamp()}"
-            )
-            
-            if location_data and location_data.get('lat'):
-                lat = location_data['lat']
-                lng = location_data['lng']
-                accuracy = location_data['accuracy']
-                
-                # Reverse geocode to get address
-                try:
-                    response = requests.get(
-                        f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lng}&zoom=18&addressdetails=1"
-                    )
-                    if response.status_code == 200:
-                        address_data = response.json()
-                        address = address_data.get('display_name', 'Address not available')
-                    else:
-                        address = "Address lookup failed"
-                except:
-                    address = "Address lookup error"
-            else:
-                lat, lng, accuracy, address = None, None, None, "Location not available"
-                
-        except Exception as e:
-            st.error(f"Location error: {str(e)}")
-            lat, lng, accuracy, address = None, None, None, "Location error"
-
-        tracking_id = f"LOC-{datetime.now().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
-        
-        tracking_data = {
-            "Tracking ID": tracking_id,
-            "Employee Name": employee_name,
-            "Employee Code": employee_code,
-            "Designation": designation,
-            "Date": current_date,
-            "Time": current_time,
-            "Latitude": lat,
-            "Longitude": lng,
-            "Address": address,
-            "Accuracy (m)": accuracy,
-            "Status": status
-        }
-        
-        # Log to Google Sheets
-        try:
-            existing_data = conn.read(worksheet=LOCATION_TRACKING_SHEET, ttl=5)
-            existing_data = existing_data.dropna(how="all")
-            
-            tracking_df = pd.DataFrame([tracking_data])
-            if not existing_data.empty:
-                tracking_df = pd.concat([existing_data, tracking_df], ignore_index=True)
-            
-            conn.update(worksheet=LOCATION_TRACKING_SHEET, data=tracking_df)
-            return True
-        except Exception as e:
-            st.error(f"Error logging location: {e}")
-            return False
-            
-    except Exception as e:
-        st.error(f"Error in track_location: {e}")
-        return False
-
 def display_login_header():
     col1, col2, col3 = st.columns([1, 3, 1])
     
@@ -762,10 +641,6 @@ def main():
         st.session_state.selected_mode = None
     if 'employee_name' not in st.session_state:
         st.session_state.employee_name = None
-    if 'location_tracking' not in st.session_state:
-        st.session_state.location_tracking = False
-    if 'last_tracked' not in st.session_state:
-        st.session_state.last_tracked = 0
 
     if not st.session_state.authenticated:
         # Display the centered logo and heading
@@ -789,13 +664,6 @@ def main():
                     key="passkey_input"
                 )
                 
-                # Add location permission checkbox
-                location_permission = st.checkbox(
-                    "Enable live location tracking during session",
-                    value=True,
-                    key="location_permission"
-                )
-                
                 login_button = st.button(
                     "Log in", 
                     key="login_button",
@@ -806,32 +674,11 @@ def main():
                     if authenticate_employee(employee_name, passkey):
                         st.session_state.authenticated = True
                         st.session_state.employee_name = employee_name
-                        
-                        # Start location tracking if permission granted
-                        if location_permission:
-                            st.session_state.location_tracking = True
-                            track_location(employee_name, "active")
-                            
-                            # JavaScript to track tab close
-                            js = """
-                            window.addEventListener('beforeunload', function() {
-                                fetch('/track_close', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                    },
-                                    body: JSON.stringify({
-                                        employee_name: '%s'
-                                    })
-                                });
-                            });
-                            """ % employee_name
-                            streamlit_js_eval(js=js)
-                            
                         st.rerun()
                     else:
                         st.error("Invalid Password. Please try again.")
     else:
+        # [REST OF YOUR ORIGINAL main() FUNCTION REMAINS EXACTLY THE SAME]
         # Show three option boxes after login
         st.title("Select Mode")
         col1, col2, col3 = st.columns(3)
@@ -853,13 +700,6 @@ def main():
         
         if st.session_state.selected_mode:
             add_back_button()
-            
-            # Periodic location tracking if enabled
-            if st.session_state.location_tracking:
-                current_time = time.time()
-                if current_time - st.session_state.last_tracked > 300:  # 5 minutes
-                    if track_location(st.session_state.employee_name, "active"):
-                        st.session_state.last_tracked = current_time
             
             if st.session_state.selected_mode == "Sales":
                 sales_page()
