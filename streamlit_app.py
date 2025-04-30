@@ -329,14 +329,16 @@ def log_attendance_to_gsheet(conn, attendance_data):
     except Exception as e:
         return False, str(e)
 
+
 def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, product_discounts,
                     discount_category, employee_name, payment_status, amount_paid, employee_selfie_path, payment_receipt_path, invoice_number,
                     transaction_type, distributor_firm_name="", distributor_id="", distributor_contact_person="",
-                    distributor_contact_number="", distributor_email="", distributor_territory="", remarks=""):
+                    distributor_contact_number="", distributor_email="", distributor_territory="", remarks="", invoice_date=None):
     pdf = PDF()
     pdf.alias_nb_pages()
     pdf.add_page()
-    current_date = datetime.now().strftime("%d-%m-%Y")
+    current_date = invoice_date if invoice_date else datetime.now().strftime("%d-%m-%Y")  # Use provided date or current date
+
 
     # Transaction Type
     pdf.set_font("Arial", 'B', 12)
@@ -1044,7 +1046,7 @@ def sales_page():
             if st.button("🔄 Regenerate Invoice", key=f"regenerate_btn_{selected_invoice}"):
                 with st.spinner("Regenerating invoice..."):
                     try:
-                        # Use the original invoice date instead of current date
+
                         pdf, pdf_path = generate_invoice(
                             str(invoice_data['Outlet Name']),
                             str(invoice_data.get('GST Number', '')),
@@ -1070,7 +1072,7 @@ def sales_page():
                             str(invoice_data.get('Distributor Email', '')),
                             str(invoice_data.get('Distributor Territory', '')),
                             str(invoice_data.get('Remarks', '')),
-                            original_invoice_date  # Pass the original date to preserve it
+                            original_invoice_date 
                         )
                         
                         with open(pdf_path, "rb") as f:
