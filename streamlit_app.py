@@ -982,9 +982,9 @@ def sales_page():
                 # Display status selection
                 new_status = st.selectbox(
                     "Update Delivery Status",
-                    ["Pending", "Order Done", "Cancelled", "Delivery Done"],
-                    index=["Pending", "Order Done", "Cancelled", "Delivery Done"].index(current_status) 
-                    if current_status in ["Pending", "Order Done", "Cancelled", "Delivery Done"] else 0,
+                    ["Pending", "Order Done", "Delivery Done"],
+                    index=["Pending", "Order Done", "Delivery Done"].index(current_status) 
+                    if current_status in ["Pending", "Order Done", "Delivery Done"] else 0,
                     key=f"status_{selected_invoice}"
                 )
     
