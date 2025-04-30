@@ -709,7 +709,7 @@ def main():
 def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
-    
+    sales_remarks = ""
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
