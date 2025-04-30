@@ -710,14 +710,232 @@ def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
     
-    # Empty remarks since we removed the location input
-    sales_remarks = ""
-    
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
-        # [Previous tab1 content remains exactly the same]
-        pass
+        st.subheader("New Sale Entry")
+        
+        # Transaction Type
+        transaction_type = st.radio(
+            "Transaction Type",
+            ["Retail", "Distributor"],
+            horizontal=True,
+            key="transaction_type"
+        )
+        
+        # Customer/Outlet Details
+        st.subheader("Customer Details")
+        outlet_option = st.radio(
+            "Outlet Selection", 
+            ["Select from list", "Enter manually"], 
+            key="outlet_option"
+        )
+        
+        if outlet_option == "Select from list":
+            outlet_names = Outlet['Shop Name'].tolist()
+            selected_outlet = st.selectbox(
+                "Select Outlet", 
+                outlet_names, 
+                key="outlet_select"
+            )
+            outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
+            
+            customer_name = selected_outlet
+            contact_number = outlet_details['Contact']
+            address = outlet_details['Address']
+            state = outlet_details['State']
+            city = outlet_details['City']
+            gst_number = outlet_details.get('GST Number', '')
+        else:
+            customer_name = st.text_input("Outlet Name", key="outlet_name")
+            contact_number = st.text_input("Contact Number", key="outlet_contact")
+            address = st.text_area("Address", key="outlet_address")
+            state = st.text_input("State", "Uttar Pradesh", key="outlet_state")
+            city = st.text_input("City", "Noida", key="outlet_city")
+            gst_number = st.text_input("GST Number (optional)", key="outlet_gst")
+        
+        # Distributor Details (only shown for distributor transactions)
+        distributor_firm_name = ""
+        distributor_id = ""
+        distributor_contact_person = ""
+        distributor_contact_number = ""
+        distributor_email = ""
+        distributor_territory = ""
+        
+        if transaction_type == "Distributor":
+            st.subheader("Distributor Details")
+            distributor_option = st.radio(
+                "Distributor Selection",
+                ["Select from list", "Enter manually"],
+                key="distributor_option"
+            )
+            
+            if distributor_option == "Select from list":
+                distributor_names = Distributors['Firm Name'].tolist()
+                selected_distributor = st.selectbox(
+                    "Select Distributor",
+                    distributor_names,
+                    key="distributor_select"
+                )
+                distributor_details = Distributors[Distributors['Firm Name'] == selected_distributor].iloc[0]
+                
+                distributor_firm_name = selected_distributor
+                distributor_id = distributor_details['Distributor ID']
+                distributor_contact_person = distributor_details['Contact Person']
+                distributor_contact_number = distributor_details['Contact Number']
+                distributor_email = distributor_details['Email']
+                distributor_territory = distributor_details['Territory']
+            else:
+                distributor_firm_name = st.text_input("Distributor Firm Name", key="distributor_name")
+                distributor_id = st.text_input("Distributor ID", key="distributor_id")
+                distributor_contact_person = st.text_input("Contact Person", key="distributor_contact_person")
+                distributor_contact_number = st.text_input("Contact Number", key="distributor_contact_number")
+                distributor_email = st.text_input("Email", key="distributor_email")
+                distributor_territory = st.text_input("Territory", key="distributor_territory")
+        
+        # Product Selection
+        st.subheader("Product Details")
+        product_list = Products['Product Name'].tolist()
+        
+        # Initialize session state for products if not exists
+        if 'selected_products' not in st.session_state:
+            st.session_state.selected_products = []
+            st.session_state.quantities = []
+            st.session_state.product_discounts = []
+        
+        # Product selection interface
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            new_product = st.selectbox("Select Product", product_list, key="product_select")
+        with col2:
+            quantity = st.number_input("Quantity", min_value=1, value=1, step=1, key="product_qty")
+        with col3:
+            discount = st.number_input("Discount (%)", min_value=0, max_value=100, value=0, key="product_discount")
+        
+        if st.button("Add Product", key="add_product"):
+            st.session_state.selected_products.append(new_product)
+            st.session_state.quantities.append(quantity)
+            st.session_state.product_discounts.append(discount)
+            st.success(f"Added {quantity} x {new_product} with {discount}% discount")
+        
+        # Show selected products
+        if st.session_state.selected_products:
+            st.subheader("Selected Products")
+            product_display = pd.DataFrame({
+                "Product": st.session_state.selected_products,
+                "Quantity": st.session_state.quantities,
+                "Discount (%)": st.session_state.product_discounts
+            })
+            st.dataframe(product_display, use_container_width=True, hide_index=True)
+            
+            if st.button("Clear All Products", key="clear_products"):
+                st.session_state.selected_products = []
+                st.session_state.quantities = []
+                st.session_state.product_discounts = []
+                st.rerun()
+        
+        # Discount Category
+        st.subheader("Discount Settings")
+        discount_category = st.selectbox(
+            "Discount Category",
+            ["MRP", "Trade Price", "Distributor Price"],
+            key="discount_category"
+        )
+        
+        # Payment Details
+        st.subheader("Payment Details")
+        payment_status = st.radio(
+            "Payment Status",
+            ["Paid", "Unpaid"],
+            horizontal=True,
+            key="payment_status"
+        )
+        
+        amount_paid = 0
+        payment_receipt_path = None
+        if payment_status == "Paid":
+            amount_paid = st.number_input(
+                "Amount Paid (INR)",
+                min_value=0.0,
+                value=0.0,
+                step=100.0,
+                key="amount_paid"
+            )
+            payment_receipt = st.file_uploader(
+                "Upload Payment Receipt (optional)",
+                type=['jpg', 'jpeg', 'png', 'pdf'],
+                key="payment_receipt"
+            )
+            if payment_receipt:
+                payment_receipt_path = save_uploaded_file(payment_receipt, "payment_receipts")
+        
+        # Employee Selfie
+        st.subheader("Verification")
+        employee_selfie = st.camera_input("Take a selfie for verification", key="employee_selfie")
+        employee_selfie_path = None
+        if employee_selfie:
+            employee_selfie_path = save_uploaded_file(employee_selfie, "employee_selfies")
+        
+        # Remarks
+        remarks = st.text_area("Remarks (optional)", key="remarks")
+        
+        # Submit Button
+        if st.button("Generate Invoice", key="generate_invoice"):
+            if not st.session_state.selected_products:
+                st.error("Please add at least one product")
+            elif not customer_name:
+                st.error("Please enter customer/outlet details")
+            else:
+                with st.spinner("Generating invoice..."):
+                    try:
+                        invoice_number = generate_invoice_number()
+                        
+                        pdf, pdf_path = generate_invoice(
+                            customer_name,
+                            gst_number,
+                            contact_number,
+                            address,
+                            state,
+                            city,
+                            st.session_state.selected_products,
+                            st.session_state.quantities,
+                            st.session_state.product_discounts,
+                            discount_category,
+                            selected_employee,
+                            payment_status.lower(),
+                            amount_paid,
+                            employee_selfie_path,
+                            payment_receipt_path,
+                            invoice_number,
+                            transaction_type,
+                            distributor_firm_name,
+                            distributor_id,
+                            distributor_contact_person,
+                            distributor_contact_number,
+                            distributor_email,
+                            distributor_territory,
+                            remarks
+                        )
+                        
+                        # Clear products after successful submission
+                        st.session_state.selected_products = []
+                        st.session_state.quantities = []
+                        st.session_state.product_discounts = []
+                        
+                        # Show success message and download button
+                        st.success("Invoice generated successfully!")
+                        st.balloons()
+                        
+                        with open(pdf_path, "rb") as f:
+                            st.download_button(
+                                "📥 Download Invoice", 
+                                f, 
+                                file_name=f"{invoice_number}.pdf",
+                                mime="application/pdf",
+                                key=f"download_{invoice_number}"
+                            )
+                    except Exception as e:
+                        st.error(f"Error generating invoice: {e}")
     
     with tab2:
         st.subheader("Sales History")
@@ -726,20 +944,23 @@ def sales_page():
         def load_sales_data():
             try:
                 sales_data = conn.read(worksheet="Sales", ttl=5)
-                sales_data = sales_data.dropna(how="all")
-                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-                filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
+                sales_data = sales_data.dropna(how='all')
                 
-                # Convert all columns to appropriate types
-                filtered_data['Outlet Name'] = filtered_data['Outlet Name'].astype(str)
-                filtered_data['Invoice Number'] = filtered_data['Invoice Number'].astype(str)
-                filtered_data['Invoice Date'] = pd.to_datetime(filtered_data['Invoice Date'], dayfirst=True)
+                # Convert columns to proper types
+                sales_data = sales_data.copy()  # Avoid SettingWithCopyWarning
+                sales_data['Outlet Name'] = sales_data['Outlet Name'].astype(str)
+                sales_data['Invoice Number'] = sales_data['Invoice Number'].astype(str)
+                sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True)
                 
                 # Convert numeric columns
                 numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
                 for col in numeric_cols:
-                    if col in filtered_data.columns:
-                        filtered_data[col] = pd.to_numeric(filtered_data[col], errors='coerce')
+                    if col in sales_data.columns:
+                        sales_data[col] = pd.to_numeric(sales_data[col], errors='coerce')
+                
+                # Filter for current employee
+                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+                filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
                 
                 return filtered_data
             except Exception as e:
@@ -785,7 +1006,8 @@ def sales_page():
             'Invoice Date': 'first',
             'Outlet Name': 'first',
             'Grand Total': 'sum',
-            'Payment Status': 'first'
+            'Payment Status': 'first',
+            'Delivery Status': 'first'
         }).sort_values('Invoice Date', ascending=False).reset_index()
         
         st.write(f"📄 Showing {len(invoice_summary)} invoices")
@@ -814,14 +1036,15 @@ def sales_page():
         if not invoice_products.empty:
             # Create a form for delivery status updates
             with st.form(key='delivery_status_form'):
-                # Get current status for all products in this invoice
-                current_status = invoice_products.iloc[0]['Delivery Status'] if 'Delivery Status' in invoice_products.columns else 'pending'
+                # Get current status for the invoice
+                current_status = invoice_products.iloc[0].get('Delivery Status', 'Pending')
                 
                 # Display status selection
                 new_status = st.selectbox(
-                    "Update Delivery Status for Entire Invoice",
+                    "Update Delivery Status",
                     ["Pending", "Order Done", "Delivery Done"],
-                    index=["Pending", "Order Done", "Delivery Done"].index(current_status) if current_status in ["Pending", "Order Done", "Delivery Done"] else 0,
+                    index=["Pending", "Order Done", "Delivery Done"].index(current_status) 
+                    if current_status in ["Pending", "Order Done", "Delivery Done"] else 0,
                     key=f"status_{selected_invoice}"
                 )
                 
@@ -833,7 +1056,7 @@ def sales_page():
                         try:
                             # Update all products in this invoice with the new status
                             sales_data = conn.read(worksheet="Sales", ttl=5)
-                            sales_data = sales_data.dropna(how="all")
+                            sales_data = sales_data.dropna(how='all')
                             
                             # Update the status for all rows with this invoice number
                             mask = sales_data['Invoice Number'] == selected_invoice
