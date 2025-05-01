@@ -6,40 +6,6 @@ from datetime import datetime, time
 import os
 import uuid
 from PIL import Image
-from extra_streamlit_components import CookieManager
-import time
-
-# Initialize cookie manager (add this after your other constants)
-cookies = CookieManager()
-
-# Modify the authenticate_employee function to set cookies
-def authenticate_employee(employee_name, passkey, remember_me=False):
-    try:
-        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
-        if str(passkey) == str(employee_code):
-            if remember_me:
-                # Set cookie to expire in 30 days
-                cookies.set('auth_token', f"{employee_name}:{passkey}", max_age=30*24*60*60)
-            return True
-        return False
-    except:
-        return False
-
-# Add a function to check for existing auth cookie
-def check_auth_cookie():
-    try:
-        auth_token = cookies.get('auth_token')
-        if auth_token:
-            employee_name, passkey = auth_token.split(':')
-            if authenticate_employee(employee_name, passkey):
-                st.session_state.authenticated = True
-                st.session_state.employee_name = employee_name
-                return True
-    except:
-        pass
-    return False
-
-
 
 def display_login_header():
     col1, col2, col3 = st.columns([1, 3, 1])
@@ -669,40 +635,12 @@ def add_back_button():
         st.rerun()
 
 def main():
-    # Initialize cookie manager
-    try:
-        cookies = CookieManager()
-    except:
-        # Fallback if cookie manager fails to initialize
-        cookies = None
-
-    # Initialize session state
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
     if 'selected_mode' not in st.session_state:
         st.session_state.selected_mode = None
     if 'employee_name' not in st.session_state:
         st.session_state.employee_name = None
-    if 'cookie_checked' not in st.session_state:
-        st.session_state.cookie_checked = False
-
-    # Check for auth cookie if not already authenticated
-    if not st.session_state.authenticated and not st.session_state.cookie_checked and cookies:
-        try:
-            auth_token = cookies.get('auth_token')
-            if auth_token:
-                try:
-                    employee_name, passkey = auth_token.split(':')
-                    if authenticate_employee(employee_name, passkey):
-                        st.session_state.authenticated = True
-                        st.session_state.employee_name = employee_name
-                        st.session_state.cookie_checked = True
-                        st.rerun()
-                except:
-                    pass
-            st.session_state.cookie_checked = True
-        except:
-            st.session_state.cookie_checked = True
 
     if not st.session_state.authenticated:
         # Display the centered logo and heading
@@ -726,9 +664,6 @@ def main():
                     key="passkey_input"
                 )
                 
-                # Add remember me checkbox
-                remember_me = st.checkbox("Remember me", key="remember_me")
-                
                 login_button = st.button(
                     "Log in", 
                     key="login_button",
@@ -736,54 +671,30 @@ def main():
                 )
                 
                 if login_button:
-                    if authenticate_employee(employee_name, passkey, remember_me):
+                    if authenticate_employee(employee_name, passkey):
                         st.session_state.authenticated = True
                         st.session_state.employee_name = employee_name
-                        
-                        # Set cookie if "Remember me" was checked
-                        if remember_me and cookies:
-                            try:
-                                cookies.set('auth_token', f"{employee_name}:{passkey}", max_age=30*24*60*60)
-                            except:
-                                pass
-                        
                         st.rerun()
                     else:
-                        st.error("Invalid credentials. Please try again.")
+                        st.error("Invalid Password. Please try again.")
     else:
-        # Add logout button to sidebar
-        with st.sidebar:
-            if st.button("🚪 Logout", use_container_width=True):
-                try:
-                    if cookies:
-                        cookies.delete('auth_token')
-                except:
-                    pass
-                
-                st.session_state.authenticated = False
-                st.session_state.selected_mode = None
-                st.session_state.employee_name = None
-                st.rerun()
-        
-        # Main app interface
-        st.title(f"Welcome, {st.session_state.employee_name}!")
-        
+        # [REST OF YOUR ORIGINAL main() FUNCTION REMAINS EXACTLY THE SAME]
         # Show three option boxes after login
-        st.subheader("Select Mode")
+        st.title("Select Mode")
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("📊 Sales", use_container_width=True, key="sales_mode"):
+            if st.button("Sales", use_container_width=True, key="sales_mode"):
                 st.session_state.selected_mode = "Sales"
                 st.rerun()
         
         with col2:
-            if st.button("📍 Visit", use_container_width=True, key="visit_mode"):
+            if st.button("Visit", use_container_width=True, key="visit_mode"):
                 st.session_state.selected_mode = "Visit"
                 st.rerun()
         
         with col3:
-            if st.button("🕒 Attendance", use_container_width=True, key="attendance_mode"):
+            if st.button("Attendance", use_container_width=True, key="attendance_mode"):
                 st.session_state.selected_mode = "Attendance"
                 st.rerun()
         
