@@ -1109,11 +1109,11 @@ def visit_page():
     
     with tab1:
         st.subheader("Outlet Details")
-        outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="visit_outlet_option_new")
+        outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="visit_outlet_option")
         
         if outlet_option == "Select from list":
             outlet_names = Outlet['Shop Name'].tolist()
-            selected_outlet = st.selectbox("Select Outlet", outlet_names, key="visit_outlet_select_new")
+            selected_outlet = st.selectbox("Select Outlet", outlet_names, key="visit_outlet_select")
             outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
             
             outlet_name = selected_outlet
@@ -1123,41 +1123,29 @@ def visit_page():
             outlet_city = outlet_details['City']
             
             # Show outlet details like distributor details
-            st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display_new")
-            st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display_new")
-            st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display_new")
-            st.text_input("Outlet City", value=outlet_city, disabled=True, key="outlet_city_display_new")
+            st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display")
+            st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
+            st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
+            st.text_input("Outlet City", value=outlet_city, disabled=True, key="outlet_city_display")
         else:
-            outlet_name = st.text_input("Outlet Name", key="visit_outlet_name_new")
-            outlet_contact = st.text_input("Outlet Contact", key="visit_outlet_contact_new")
-            outlet_address = st.text_area("Outlet Address", key="visit_outlet_address_new")
-            outlet_state = st.text_input("Outlet State", "Uttar Pradesh", key="visit_outlet_state_new")
-            outlet_city = st.text_input("Outlet City", "Noida", key="visit_outlet_city_new")
+            outlet_name = st.text_input("Outlet Name", key="visit_outlet_name")
+            outlet_contact = st.text_input("Outlet Contact", key="visit_outlet_contact")
+            outlet_address = st.text_area("Outlet Address", key="visit_outlet_address")
+            outlet_state = st.text_input("Outlet State", "Uttar Pradesh", key="visit_outlet_state")
+            outlet_city = st.text_input("Outlet City", "Noida", key="visit_outlet_city")
 
         st.subheader("Visit Details")
-        visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose_new")
-        visit_notes = st.text_area("Visit Notes", key="visit_notes_new")
+        visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
+        visit_notes = st.text_area("Visit Notes", key="visit_notes")
         
         st.subheader("Time Tracking")
         col1, col2 = st.columns(2)
         with col1:
-            # Entry time with AM/PM format (7:00 AM to 11:30 PM)
-            entry_time = st.time_input(
-                "Entry Time", 
-                value=datetime.strptime("09:00 AM", "%I:%M %p").time(),
-                key="visit_entry_time_new",
-                step=1800  # 30 minute increments
-            )
+            entry_time = st.time_input("Entry Time", value=None, key="visit_entry_time")
         with col2:
-            # Exit time with AM/PM format (7:00 AM to 11:30 PM)
-            exit_time = st.time_input(
-                "Exit Time", 
-                value=datetime.strptime("05:00 PM", "%I:%M %p").time(),
-                key="visit_exit_time_new",
-                step=1800  # 30 minute increments
-            )
+            exit_time = st.time_input("Exit Time", value=None, key="visit_exit_time")
 
-        if st.button("Record Visit", key="record_visit_button_new"):
+        if st.button("Record Visit", key="record_visit_button"):
             if outlet_name:
                 today = get_ist_time().date()
                 
@@ -1166,22 +1154,6 @@ def visit_page():
                 if exit_time is None:
                     exit_time = get_ist_time().time()
                     
-                # Validate times
-                min_time = datetime.strptime("07:00 AM", "%I:%M %p").time()
-                max_time = datetime.strptime("11:30 PM", "%I:%M %p").time()
-                
-                if entry_time < min_time or entry_time > max_time:
-                    st.error("Entry time must be between 7:00 AM and 11:30 PM")
-                    return
-                
-                if exit_time < min_time or exit_time > max_time:
-                    st.error("Exit time must be between 7:00 AM and 11:30 PM")
-                    return
-                    
-                if exit_time <= entry_time:
-                    st.error("Exit time must be after entry time")
-                    return
-                
                 entry_datetime = datetime.combine(today, entry_time)
                 exit_datetime = datetime.combine(today, exit_time)
                 
@@ -1203,13 +1175,13 @@ def visit_page():
         st.subheader("Previous Visits")
         col1, col2, col3 = st.columns(3)
         with col1:
-            visit_id_search = st.text_input("Visit ID", key="visit_id_search_history")
+            visit_id_search = st.text_input("Visit ID", key="visit_id_search")
         with col2:
-            visit_date_search = st.date_input("Visit Date", key="visit_date_search_history")
+            visit_date_search = st.date_input("Visit Date", key="visit_date_search")
         with col3:
-            outlet_name_search = st.text_input("Outlet Name", key="visit_outlet_search_history")
+            outlet_name_search = st.text_input("Outlet Name", key="visit_outlet_search")
             
-        if st.button("Search Visits", key="search_visits_button_history"):
+        if st.button("Search Visits", key="search_visits_button"):
             try:
                 visit_data = conn.read(worksheet="Visits", ttl=5)
                 visit_data = visit_data.dropna(how="all")
@@ -1226,11 +1198,6 @@ def visit_page():
                     filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
                 
                 if not filtered_data.empty:
-                    # Format times in AM/PM format for display
-                    filtered_data = filtered_data.copy()
-                    filtered_data['Entry Time'] = pd.to_datetime(filtered_data['Entry Time']).dt.strftime('%I:%M %p')
-                    filtered_data['Exit Time'] = pd.to_datetime(filtered_data['Exit Time']).dt.strftime('%I:%M %p')
-                    
                     # Display only the most relevant columns
                     display_columns = [
                         'Visit ID', 'Visit Date', 'Outlet Name', 'Visit Purpose', 'Visit Notes',
@@ -1245,7 +1212,7 @@ def visit_page():
                         csv,
                         "visit_history.csv",
                         "text/csv",
-                        key='download-visit-csv-history'
+                        key='download-visit-csv'
                     )
                 else:
                     st.warning("No matching visit records found")
