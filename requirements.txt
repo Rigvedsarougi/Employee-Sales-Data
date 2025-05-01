@@ -15,4 +15,3 @@ geocoder
 plotly
 requests
 streamlit-js-eval
-extra-streamlit-cookie-manager
