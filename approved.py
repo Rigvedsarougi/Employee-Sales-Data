@@ -6,6 +6,14 @@ from datetime import datetime, time
 import os
 import uuid
 from PIL import Image
+from datetime import datetime, time, timedelta
+import pytz
+
+def get_ist_time():
+    """Get current time in Indian Standard Time (IST)"""
+    utc_now = datetime.now(pytz.utc)
+    ist = pytz.timezone('Asia/Kolkata')
+    return utc_now.astimezone(ist)
 
 def display_login_header():
     col1, col2, col3 = st.columns([1, 3, 1])
@@ -73,7 +81,7 @@ def backup_sheet(conn, worksheet_name):
     """Create a timestamped backup of the worksheet"""
     try:
         data = conn.read(worksheet=worksheet_name, ttl=1)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = get_ist_time().strftime("%Y%m%d_%H%M%S")
         backup_name = f"{worksheet_name}_backup_{timestamp}"
         conn.update(worksheet=backup_name, data=data)
     except Exception as e:
@@ -244,13 +252,13 @@ class PDF(FPDF):
         self.ln(1)
 
 def generate_invoice_number():
-    return f"INV-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+    return f"INV-{get_ist_time().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
 
 def generate_visit_id():
-    return f"VISIT-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+    return f"VISIT-{get_ist_time().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
 
 def generate_attendance_id():
-    return f"ATT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
+    return f"ATT-{get_ist_time().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
 
 def save_uploaded_file(uploaded_file, folder):
     if uploaded_file is not None:
@@ -337,7 +345,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     pdf = PDF()
     pdf.alias_nb_pages()
     pdf.add_page()
-    current_date = invoice_date if invoice_date else datetime.now().strftime("%d-%m-%Y")  # Use provided date or current date
+    current_date = invoice_date if invoice_date else get_ist_time().strftime("%d-%m-%Y")  # Use provided date or current date
 
 
     # Transaction Type
@@ -523,7 +531,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
 def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, outlet_state, outlet_city, 
                  visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time, remarks=""):
     visit_id = generate_visit_id()
-    visit_date = datetime.now().strftime("%d-%m-%Y")
+    visit_date = get_ist_time().strftime("%d-%m-%Y")
     
     duration = (exit_time - entry_time).total_seconds() / 60
     
@@ -557,9 +565,9 @@ def record_attendance(employee_name, status, location_link="", leave_reason=""):
     try:
         employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
         designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
-        current_date = datetime.now().strftime("%d-%m-%Y")
-        current_datetime = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-        check_in_time = datetime.now().strftime("%H:%M:%S")
+        current_date = get_ist_time().strftime("%d-%m-%Y")
+        current_datetime = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
+        check_in_time = get_ist_time().strftime("%H:%M:%S")
         
         attendance_id = generate_attendance_id()
         
@@ -596,7 +604,7 @@ def check_existing_attendance(employee_name):
         if existing_data.empty:
             return False
         
-        current_date = datetime.now().strftime("%d-%m-%Y")
+        current_date = get_ist_time().strftime("%d-%m-%Y")
         employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
         
         existing_records = existing_data[
@@ -1030,14 +1038,15 @@ def sales_page():
                 st.metric("Delivery Status", str(invoice_data.get('Delivery Status', 'Pending')).capitalize())
             
             st.subheader("Products")
-            product_display = invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price']].copy()
+            product_display = invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price', 'Grand Total']].copy()
             product_display['Product Name'] = product_display['Product Name'].astype(str)
             
             st.dataframe(
                 product_display,
                 column_config={
                     "Unit Price": st.column_config.NumberColumn(format="₹%.2f"),
-                    "Total Price": st.column_config.NumberColumn(format="₹%.2f")
+                    "Total Price": st.column_config.NumberColumn(format="₹%.2f"),
+                    "Grand Total": st.column_config.NumberColumn(format="₹%.2f")
                 },
                 use_container_width=True,
                 hide_index=True
@@ -1138,12 +1147,12 @@ def visit_page():
 
         if st.button("Record Visit", key="record_visit_button"):
             if outlet_name:
-                today = datetime.now().date()
+                today = get_ist_time().date()
                 
                 if entry_time is None:
-                    entry_time = datetime.now().time()
+                    entry_time = get_ist_time().time()
                 if exit_time is None:
-                    exit_time = datetime.now().time()
+                    exit_time = get_ist_time().time()
                     
                 entry_datetime = datetime.combine(today, entry_time)
                 exit_datetime = datetime.combine(today, exit_time)
