@@ -1030,14 +1030,15 @@ def sales_page():
                 st.metric("Delivery Status", str(invoice_data.get('Delivery Status', 'Pending')).capitalize())
             
             st.subheader("Products")
-            product_display = invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price']].copy()
+            product_display = invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price', 'Grand Total']].copy()
             product_display['Product Name'] = product_display['Product Name'].astype(str)
             
             st.dataframe(
                 product_display,
                 column_config={
                     "Unit Price": st.column_config.NumberColumn(format="₹%.2f"),
-                    "Total Price": st.column_config.NumberColumn(format="₹%.2f")
+                    "Total Price": st.column_config.NumberColumn(format="₹%.2f"),
+                    "Grand Total": st.column_config.NumberColumn(format="₹%.2f")
                 },
                 use_container_width=True,
                 hide_index=True
