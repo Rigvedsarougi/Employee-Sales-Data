@@ -660,7 +660,7 @@ def resources_page():
                     st.download_button(
                         label=f"Download {resource['name']}",
                         data=file,
-                        file_name=os.path.basename(resource["file_path"]),
+                        file_name=resource["file_path"],
                         mime="application/pdf",
                         key=f"download_{resource['name'].replace(' ', '_')}"
                     )
