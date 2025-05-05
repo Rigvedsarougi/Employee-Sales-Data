@@ -727,6 +727,41 @@ def demo_page():
     st.title("Demo Management")
     selected_employee = st.session_state.employee_name
     
+    # Initialize session state for products if not exists
+    if 'demo_products' not in st.session_state:
+        st.session_state.demo_products = []
+    if 'demo_product_quantities' not in st.session_state:
+        st.session_state.demo_product_quantities = {}
+
+    # Product selection outside the form
+    st.subheader("Product Usage Details")
+    product_names = Products['Product Name'].tolist()
+    selected_products = st.multiselect(
+        "Select Products Used", 
+        product_names, 
+        key="demo_products_selector"
+    )
+    
+    # Update session state when products change
+    if selected_products != st.session_state.demo_products:
+        st.session_state.demo_products = selected_products
+        # Initialize quantities for new products
+        for product in selected_products:
+            if product not in st.session_state.demo_product_quantities:
+                st.session_state.demo_product_quantities[product] = 1
+    
+    # Display quantity inputs for selected products
+    if st.session_state.demo_products:
+        st.markdown("**Product Quantities**")
+        for product in st.session_state.demo_products:
+            st.session_state.demo_product_quantities[product] = st.number_input(
+                f"Quantity used for {product}",
+                min_value=1,
+                value=st.session_state.demo_product_quantities[product],
+                step=1,
+                key=f"qty_{product}"
+            )
+
     # Demo Form
     with st.form("demo_form"):
         st.subheader("Demo Details")
@@ -744,23 +779,6 @@ def demo_page():
             ["Demo", "Product Demonstration", "Training", "Owner Meeting", "Revisit"],
             key="demo_type"
         )
-        
-        st.subheader("Product Usage Details")
-        product_names = Products['Product Name'].tolist()
-        selected_products = st.multiselect("Select Products Used", product_names, key="demo_products")
-        
-        # Product quantities
-        product_quantities = {}
-        if selected_products:
-            st.markdown("**Product Quantities**")
-            for product in selected_products:
-                product_quantities[product] = st.number_input(
-                    f"Quantity used for {product}",
-                    min_value=1,
-                    value=1,
-                    step=1,
-                    key=f"qty_{product}"
-                )
         
         st.subheader("Outlet Details")
         outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="demo_outlet_option")
@@ -837,7 +855,7 @@ def demo_page():
         if submitted:
             if not outlet_name:
                 st.error("Please provide outlet details")
-            elif not selected_products:
+            elif not st.session_state.demo_products:
                 st.error("Please select at least one product used in the demo")
             else:
                 # Create demo record
@@ -855,7 +873,8 @@ def demo_page():
                 
                 # Prepare product usage details
                 product_details = []
-                for product, qty in product_quantities.items():
+                for product in st.session_state.demo_products:
+                    qty = st.session_state.demo_product_quantities[product]
                     product_data = Products[Products['Product Name'] == product].iloc[0]
                     product_details.append({
                         "Product ID": product_data['Product ID'],
@@ -909,8 +928,14 @@ def demo_page():
                     
                     st.success(f"Demo record {demo_id} submitted successfully!")
                     st.balloons()
+                    
+                    # Clear product selections after successful submission
+                    st.session_state.demo_products = []
+                    st.session_state.demo_product_quantities = {}
                 except Exception as e:
                     st.error(f"Error submitting demo record: {e}")
+
+    # Rest of the demo page code (history section) remains the same...
 
     # Demo History Section
     st.markdown("---")
