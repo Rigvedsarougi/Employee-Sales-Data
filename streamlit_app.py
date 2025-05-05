@@ -655,16 +655,16 @@ def resources_page():
             st.markdown(resource["description"])
             
             # Check if file exists before creating download button
-            if os.path.exists(resource["file_path"]):  # This is line 697
+            if os.path.exists(resource["file_path"]):
                 with open(resource["file_path"], "rb") as file:
                     st.download_button(
                         label=f"Download {resource['name']}",
                         data=file,
-                        file_name=resource["file_path"],
+                        file_name=os.path.basename(resource["file_path"]),
                         mime="application/pdf",
                         key=f"download_{resource['name'].replace(' ', '_')}"
                     )
-            else:  # This is line 706
+            else:
                 st.warning(f"File not found: {resource['file_path']}")
             
             st.markdown("---")
