@@ -627,9 +627,9 @@ def authenticate_employee(employee_name, passkey):
 
 def resources_page():
     st.title("Company Resources")
-    st.markdown("Download useful documents and resources below.")
+    st.markdown("Download important company documents and product catalogs.")
     
-    # Define the resources with their display names and file paths
+    # Define the resources
     resources = [
         {
             "name": "Product Catalogue",
@@ -654,20 +654,20 @@ def resources_page():
             st.subheader(resource["name"])
             st.markdown(resource["description"])
             
-            # Check if file exists before creating download button
+            # Check if file exists
             if os.path.exists(resource["file_path"]):
                 with open(resource["file_path"], "rb") as file:
-                    st.download_button(
+                    btn = st.download_button(
                         label=f"Download {resource['name']}",
                         data=file,
                         file_name=resource["file_path"],
                         mime="application/pdf",
-                        key=f"download_{resource['name'].replace(' ', '_')}"
+                        key=f"download_{resource['name']}"
                     )
             else:
-                st.warning(f"File not found: {resource['file_path']}")
+                st.error(f"File not found: {resource['file_path']}")
             
-            st.markdown("---")
+            st.markdown("---")  # Divider between resources
 
 def add_back_button():
     st.markdown("""
@@ -695,11 +695,44 @@ def main():
         st.session_state.employee_name = None
 
     if not st.session_state.authenticated:
-        # [Existing login code remains the same]
+        # Display the centered logo and heading
+        display_login_header()
+        
+        employee_names = Person['Employee Name'].tolist()
+        
+        # Create centered form
+        form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
+        
+        with form_col2:
+            with st.container():
+                employee_name = st.selectbox(
+                    "Select Your Name", 
+                    employee_names, 
+                    key="employee_select"
+                )
+                passkey = st.text_input(
+                    "Enter Your Employee Code", 
+                    type="password", 
+                    key="passkey_input"
+                )
+                
+                login_button = st.button(
+                    "Log in", 
+                    key="login_button",
+                    use_container_width=True
+                )
+                
+                if login_button:
+                    if authenticate_employee(employee_name, passkey):
+                        st.session_state.authenticated = True
+                        st.session_state.employee_name = employee_name
+                        st.rerun()
+                    else:
+                        st.error("Invalid Password. Please try again.")
     else:
         # Show four option boxes after login
         st.title("Select Mode")
-        col1, col2, col3, col4 = st.columns(4)  # Changed to 4 columns
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             if st.button("Sales", use_container_width=True, key="sales_mode"):
