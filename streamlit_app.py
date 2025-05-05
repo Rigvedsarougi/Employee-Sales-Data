@@ -675,6 +675,11 @@ def resources_page():
             "name": "Facial Treatment Catalogue",
             "description": "Complete list of all Facial products with specifications",
             "file_path": "Biolume's Facial Treatment Catalogue.pdf"
+        },
+        {
+            "name": "Employee Monthly Expense Sheet Format",
+            "description": "Expense Sheet",
+            "file_path": "Employee-Sale-Entry (6).xlsx"
         }
     ]
     
