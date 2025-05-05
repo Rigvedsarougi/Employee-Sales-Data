@@ -721,17 +721,18 @@ def add_back_button():
         st.session_state.selected_mode = None
         st.rerun()
 
-# Add this to your existing app.py file
-
 def demo_page():
     st.title("Demo Management")
     selected_employee = st.session_state.employee_name
     
-    # Initialize session state for products if not exists
-    if 'demo_products' not in st.session_state:
-        st.session_state.demo_products = []
-    if 'demo_product_quantities' not in st.session_state:
-        st.session_state.demo_product_quantities = {}
+    # Initialize session state for form data
+    if 'demo_form_data' not in st.session_state:
+        st.session_state.demo_form_data = {
+            'products': [],
+            'quantities': {},
+            'outlet_option': "Select from list",
+            'distributor_option': "None"
+        }
 
     # Product selection outside the form
     st.subheader("Product Usage Details")
@@ -739,25 +740,26 @@ def demo_page():
     selected_products = st.multiselect(
         "Select Products Used", 
         product_names, 
+        default=st.session_state.demo_form_data['products'],
         key="demo_products_selector"
     )
     
     # Update session state when products change
-    if selected_products != st.session_state.demo_products:
-        st.session_state.demo_products = selected_products
+    if selected_products != st.session_state.demo_form_data['products']:
+        st.session_state.demo_form_data['products'] = selected_products
         # Initialize quantities for new products
         for product in selected_products:
-            if product not in st.session_state.demo_product_quantities:
-                st.session_state.demo_product_quantities[product] = 1
+            if product not in st.session_state.demo_form_data['quantities']:
+                st.session_state.demo_form_data['quantities'][product] = 1
     
     # Display quantity inputs for selected products
-    if st.session_state.demo_products:
+    if st.session_state.demo_form_data['products']:
         st.markdown("**Product Quantities**")
-        for product in st.session_state.demo_products:
-            st.session_state.demo_product_quantities[product] = st.number_input(
+        for product in st.session_state.demo_form_data['products']:
+            st.session_state.demo_form_data['quantities'][product] = st.number_input(
                 f"Quantity used for {product}",
                 min_value=1,
-                value=st.session_state.demo_product_quantities[product],
+                value=st.session_state.demo_form_data['quantities'][product],
                 step=1,
                 key=f"qty_{product}"
             )
@@ -781,9 +783,20 @@ def demo_page():
         )
         
         st.subheader("Outlet Details")
-        outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="demo_outlet_option")
+        # Store outlet option in session state
+        outlet_option = st.radio(
+            "Outlet Selection", 
+            ["Select from list", "Enter manually"], 
+            index=0 if st.session_state.demo_form_data['outlet_option'] == "Select from list" else 1,
+            key="demo_outlet_option_radio"
+        )
         
-        if outlet_option == "Select from list":
+        # Update session state
+        if outlet_option != st.session_state.demo_form_data['outlet_option']:
+            st.session_state.demo_form_data['outlet_option'] = outlet_option
+            st.rerun()
+        
+        if st.session_state.demo_form_data['outlet_option'] == "Select from list":
             outlet_names = Outlet['Shop Name'].tolist()
             selected_outlet = st.selectbox("Select Outlet", outlet_names, key="demo_outlet_select")
             outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
@@ -801,13 +814,14 @@ def demo_page():
             st.text_input("Outlet City", value=outlet_city, disabled=True, key="demo_outlet_city")
             st.text_input("Outlet GST", value=outlet_gst, disabled=True, key="demo_outlet_gst")
         else:
+            # Manual entry fields - these will now work properly
             outlet_name = st.text_input("Outlet Name", key="demo_outlet_name")
-            outlet_contact = st.text_input("Outlet Contact", key="demo_outlet_contact")
-            outlet_address = st.text_area("Outlet Address", key="demo_outlet_address")
-            outlet_state = st.text_input("Outlet State", "Uttar Pradesh", key="demo_outlet_state")
-            outlet_city = st.text_input("Outlet City", "Noida", key="demo_outlet_city")
-            outlet_gst = st.text_input("Outlet GST", key="demo_outlet_gst")
-        
+            outlet_contact = st.text_input("Outlet Contact", key="demo_outlet_contact_manual")
+            outlet_address = st.text_area("Outlet Address", key="demo_outlet_address_manual")
+            outlet_state = st.text_input("Outlet State", "Uttar Pradesh", key="demo_outlet_state_manual")
+            outlet_city = st.text_input("Outlet City", "Noida", key="demo_outlet_city_manual")
+            outlet_gst = st.text_input("Outlet GST", key="demo_outlet_gst_manual")
+
         # Outlet Feedback
         outlet_feedback = st.text_area("Outlet Feedback", key="demo_feedback")
         
@@ -815,7 +829,18 @@ def demo_page():
         person_remarks = st.text_area("Your Remarks", key="demo_remarks")
         
         st.subheader("Distributor Details")
-        distributor_option = st.radio("Distributor", ["Select from list", "None"], key="demo_distributor_option")
+        # Store distributor option in session state
+        distributor_option = st.radio(
+            "Distributor", 
+            ["Select from list", "None"], 
+            index=0 if st.session_state.demo_form_data['distributor_option'] == "Select from list" else 1,
+            key="demo_distributor_option_radio"
+        )
+        
+        # Update session state
+        if distributor_option != st.session_state.demo_form_data['distributor_option']:
+            st.session_state.demo_form_data['distributor_option'] = distributor_option
+            st.rerun()
         
         distributor_firm_name = ""
         distributor_id = ""
@@ -824,17 +849,37 @@ def demo_page():
         distributor_email = ""
         distributor_territory = ""
         
-        if distributor_option == "Select from list":
-            distributor_names = Distributors['Firm Name'].tolist()
-            selected_distributor = st.selectbox("Select Distributor", distributor_names, key="demo_distributor_select")
-            distributor_details = Distributors[Distributors['Firm Name'] == selected_distributor].iloc[0]
+        if st.session_state.demo_form_data['distributor_option'] == "Select from list":
+            # Cache distributor names for better performance
+            if 'distributor_names' not in st.session_state:
+                st.session_state.distributor_names = Distributors['Firm Name'].tolist()
+            
+            selected_distributor = st.selectbox(
+                "Select Distributor", 
+                st.session_state.distributor_names, 
+                key="demo_distributor_select"
+            )
+            
+            # Cache distributor details for better performance
+            if 'distributor_details' not in st.session_state:
+                st.session_state.distributor_details = {}
+            
+            if selected_distributor not in st.session_state.distributor_details:
+                distributor_details = Distributors[Distributors['Firm Name'] == selected_distributor].iloc[0]
+                st.session_state.distributor_details[selected_distributor] = {
+                    'Distributor ID': distributor_details['Distributor ID'],
+                    'Contact Person': distributor_details['Contact Person'],
+                    'Contact Number': distributor_details['Contact Number'],
+                    'Email ID': distributor_details['Email ID'],
+                    'Territory': distributor_details['Territory']
+                }
             
             distributor_firm_name = selected_distributor
-            distributor_id = distributor_details['Distributor ID']
-            distributor_contact_person = distributor_details['Contact Person']
-            distributor_contact_number = distributor_details['Contact Number']
-            distributor_email = distributor_details['Email ID']
-            distributor_territory = distributor_details['Territory']
+            distributor_id = st.session_state.distributor_details[selected_distributor]['Distributor ID']
+            distributor_contact_person = st.session_state.distributor_details[selected_distributor]['Contact Person']
+            distributor_contact_number = st.session_state.distributor_details[selected_distributor]['Contact Number']
+            distributor_email = st.session_state.distributor_details[selected_distributor]['Email ID']
+            distributor_territory = st.session_state.distributor_details[selected_distributor]['Territory']
             
             st.text_input("Distributor ID", value=distributor_id, disabled=True, key="demo_distributor_id")
             st.text_input("Contact Person", value=distributor_contact_person, disabled=True, key="demo_distributor_contact_person")
@@ -855,7 +900,7 @@ def demo_page():
         if submitted:
             if not outlet_name:
                 st.error("Please provide outlet details")
-            elif not st.session_state.demo_products:
+            elif not st.session_state.demo_form_data['products']:
                 st.error("Please select at least one product used in the demo")
             else:
                 # Create demo record
@@ -873,8 +918,8 @@ def demo_page():
                 
                 # Prepare product usage details
                 product_details = []
-                for product in st.session_state.demo_products:
-                    qty = st.session_state.demo_product_quantities[product]
+                for product in st.session_state.demo_form_data['products']:
+                    qty = st.session_state.demo_form_data['quantities'][product]
                     product_data = Products[Products['Product Name'] == product].iloc[0]
                     product_details.append({
                         "Product ID": product_data['Product ID'],
@@ -929,13 +974,76 @@ def demo_page():
                     st.success(f"Demo record {demo_id} submitted successfully!")
                     st.balloons()
                     
-                    # Clear product selections after successful submission
-                    st.session_state.demo_products = []
-                    st.session_state.demo_product_quantities = {}
+                    # Clear form data after successful submission
+                    st.session_state.demo_form_data = {
+                        'products': [],
+                        'quantities': {},
+                        'outlet_option': "Select from list",
+                        'distributor_option': "None"
+                    }
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Error submitting demo record: {e}")
 
-    # Rest of the demo page code (history section) remains the same...
+    # Demo History Section
+    st.markdown("---")
+    st.subheader("Demo History")
+    
+    # Search filters
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        demo_id_search = st.text_input("Search by Demo ID", key="demo_id_search")
+    with col2:
+        demo_date_search = st.date_input("Search by Date", key="demo_date_search")
+    with col3:
+        outlet_search = st.text_input("Search by Outlet", key="demo_outlet_search")
+    
+    if st.button("Search Demos", key="search_demos_button"):
+        try:
+            # Read demo data
+            demo_data = conn.read(worksheet="Demos", ttl=5)
+            demo_data = demo_data.dropna(how="all")
+            
+            # Filter for current employee
+            employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+            filtered_data = demo_data[demo_data['Employee Code'] == employee_code]
+            
+            # Apply filters
+            if demo_id_search:
+                filtered_data = filtered_data[filtered_data['Demo ID'].str.contains(demo_id_search, case=False)]
+            if demo_date_search:
+                date_str = demo_date_search.strftime("%d-%m-%Y")
+                filtered_data = filtered_data[filtered_data['Demo Date'] == date_str]
+            if outlet_search:
+                filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_search, case=False)]
+            
+            if not filtered_data.empty:
+                # Display relevant columns
+                display_cols = [
+                    'Demo ID', 'Demo Date', 'Demo Type', 'Outlet Name', 
+                    'Partner Employee Name', 'Check-in Time', 'Check-out Time',
+                    'Duration (minutes)', 'Outlet Feedback'
+                ]
+                
+                st.dataframe(
+                    filtered_data[display_cols],
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # Add download option
+                csv = filtered_data.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    "Download as CSV",
+                    csv,
+                    "demo_history.csv",
+                    "text/csv",
+                    key='download-demo-csv'
+                )
+            else:
+                st.warning("No matching demo records found")
+        except Exception as e:
+            st.error(f"Error retrieving demo data: {e}")
 
     # Demo History Section
     st.markdown("---")
