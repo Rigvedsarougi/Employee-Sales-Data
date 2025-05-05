@@ -634,17 +634,17 @@ def resources_page():
         {
             "name": "Product Catalogue",
             "description": "Complete list of all available products with specifications",
-            "file_path": "productcatalogue.pdf"
+            "file_path": "Biolume Salon Prices Catalogue.pdf"
         },
         {
             "name": "Employee Handbook",
             "description": "Company policies, procedures, and guidelines for employees",
-            "file_path": "handbook.pdf"
+            "file_path": "Biolume Employee Handbook.pdf"
         },
         {
-            "name": "Monthly Expense Report",
-            "description": "Template for submitting monthly expense reports",
-            "file_path": "monthlyexpense.pdf"
+            "name": "Facial Treatment Catalogue",
+            "description": "Complete list of all Facial products with specifications",
+            "file_path": "Biolume's Facial Treatment Catalogue.pdf"
         }
     ]
     
