@@ -655,7 +655,7 @@ def resources_page():
             st.markdown(resource["description"])
             
             # Check if file exists before creating download button
-            if os.path.exists(resource["file_path"]):
+            if os.path.exists(resource["file_path"]):  # This is line 697
                 with open(resource["file_path"], "rb") as file:
                     st.download_button(
                         label=f"Download {resource['name']}",
@@ -664,7 +664,7 @@ def resources_page():
                         mime="application/pdf",
                         key=f"download_{resource['name'].replace(' ', '_')}"
                     )
-            else:
+            else:  # This is line 706
                 st.warning(f"File not found: {resource['file_path']}")
             
             st.markdown("---")
