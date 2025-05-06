@@ -1181,8 +1181,8 @@ def visit_page():
             outlet_name = st.text_input("Outlet Name", key="visit_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="visit_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="visit_outlet_address")
-            outlet_state = st.text_input("Outlet State", "Uttar Pradesh", key="visit_outlet_state")
-            outlet_city = st.text_input("Outlet City", "Noida", key="visit_outlet_city")
+            outlet_state = st.text_input("Outlet State", "", key="visit_outlet_state")
+            outlet_city = st.text_input("Outlet City", "", key="visit_outlet_city")
 
         st.subheader("Visit Details")
         visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
