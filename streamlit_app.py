@@ -950,10 +950,16 @@ def sales_page():
                 sales_data = sales_data.copy()
                 sales_data['Outlet Name'] = sales_data['Outlet Name'].astype(str)
                 sales_data['Invoice Number'] = sales_data['Invoice Number'].astype(str)
-                sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True)
                 
-                # Convert numeric columns
-                numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
+                # Convert Invoice Date properly
+                try:
+                    sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True, errors='coerce')
+                except:
+                    # Fallback if date parsing fails
+                    sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], errors='coerce')
+                
+                # Convert numeric columns properly
+                numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)', 'Quantity']
                 for col in numeric_cols:
                     if col in sales_data.columns:
                         sales_data[col] = pd.to_numeric(sales_data[col], errors='coerce')
@@ -961,6 +967,9 @@ def sales_page():
                 # Filter for current employee
                 employee_code = Person[Person['Employee Name'] == st.session_state.employee_name]['Employee Code'].values[0]
                 filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
+                
+                # Ensure we have valid dates
+                filtered_data = filtered_data[filtered_data['Invoice Date'].notna()]
                 
                 return filtered_data
             except Exception as e:
@@ -986,13 +995,19 @@ def sales_page():
                 st.rerun()
         
         filtered_data = sales_data.copy()
+        
+        # Apply filters
         if invoice_number_search:
             filtered_data = filtered_data[
                 filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
             ]
+        
         if invoice_date_search:
             date_str = invoice_date_search.strftime("%d-%m-%Y")
-            filtered_data = filtered_data[filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str]
+            filtered_data = filtered_data[
+                filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str
+            ]
+        
         if outlet_name_search:
             filtered_data = filtered_data[
                 filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
@@ -1002,20 +1017,32 @@ def sales_page():
             st.warning("No matching records found")
             return
             
+        # Calculate correct grand total by invoice
         invoice_summary = filtered_data.groupby('Invoice Number').agg({
             'Invoice Date': 'first',
             'Outlet Name': 'first',
             'Grand Total': 'sum',
             'Payment Status': 'first',
             'Delivery Status': 'first'
-        }).sort_values('Invoice Date', ascending=False).reset_index()
+        }).reset_index()
+        
+        # Sort by date descending
+        invoice_summary = invoice_summary.sort_values('Invoice Date', ascending=False)
         
         st.write(f"📄 Showing {len(invoice_summary)} of your invoices")
+        
+        # Display the summary table
         st.dataframe(
             invoice_summary,
             column_config={
-                "Grand Total": st.column_config.NumberColumn(format="₹%.2f"),
-                "Invoice Date": st.column_config.DateColumn(format="DD/MM/YYYY")
+                "Grand Total": st.column_config.NumberColumn(
+                    format="₹%.2f",
+                    help="Sum of all products in the invoice including taxes"
+                ),
+                "Invoice Date": st.column_config.DateColumn(
+                    format="DD/MM/YYYY",
+                    help="Date when invoice was generated"
+                )
             },
             use_container_width=True,
             hide_index=True
@@ -1054,16 +1081,16 @@ def sales_page():
                 if submitted:
                     with st.spinner("Updating delivery status..."):
                         try:
-                            # Update all products in this invoice with the new status
-                            sales_data = conn.read(worksheet="Sales", ttl=5)
-                            sales_data = sales_data.dropna(how='all')
+                            # Get all sales data
+                            all_sales_data = conn.read(worksheet="Sales", ttl=5)
+                            all_sales_data = all_sales_data.dropna(how='all')
                             
                             # Update the status for all rows with this invoice number
-                            mask = sales_data['Invoice Number'] == selected_invoice
-                            sales_data.loc[mask, 'Delivery Status'] = new_status
+                            mask = all_sales_data['Invoice Number'] == selected_invoice
+                            all_sales_data.loc[mask, 'Delivery Status'] = new_status
                             
                             # Write back the updated data
-                            conn.update(worksheet="Sales", data=sales_data)
+                            conn.update(worksheet="Sales", data=all_sales_data)
                             
                             st.success(f"Delivery status updated to '{new_status}' for invoice {selected_invoice}!")
                             st.rerun()
@@ -1073,23 +1100,34 @@ def sales_page():
         # Display invoice details
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
-            original_invoice_date = invoice_data['Invoice Date'].strftime('%d-%m-%Y')  # Store original date
+            original_invoice_date = invoice_data['Invoice Date'].strftime('%d-%m-%Y')
             
             st.subheader(f"Invoice {selected_invoice}")
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("Date", original_invoice_date)  # Use original date
+                st.metric("Date", original_invoice_date)
                 st.metric("Outlet", str(invoice_data['Outlet Name']))
                 st.metric("Contact", str(invoice_data['Outlet Contact']))
             with col2:
-                total_amount = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Grand Total'].values[0]
-                st.metric("Total Amount", f"₹{total_amount:.2f}")
+                # Calculate correct total for this invoice
+                invoice_total = invoice_details['Grand Total'].sum()
+                st.metric("Total Amount", f"₹{invoice_total:.2f}")
                 st.metric("Payment Status", str(invoice_data['Payment Status']).capitalize())
                 st.metric("Delivery Status", str(invoice_data.get('Delivery Status', 'Pending')).capitalize())
             
             st.subheader("Products")
-            product_display = invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price', 'Grand Total']].copy()
+            product_display = invoice_details[[
+                'Product Name', 
+                'Quantity', 
+                'Unit Price', 
+                'Product Discount (%)', 
+                'Total Price', 
+                'Grand Total'
+            ]].copy()
+            
+            # Format display
             product_display['Product Name'] = product_display['Product Name'].astype(str)
+            product_display['Quantity'] = product_display['Quantity'].astype(int)
             
             st.dataframe(
                 product_display,
