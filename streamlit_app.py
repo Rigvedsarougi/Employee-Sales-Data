@@ -904,8 +904,8 @@ def sales_page():
             gst_number = st.text_input("GST Number", key="manual_gst_number")
             contact_number = st.text_input("Contact Number", key="manual_contact_number")
             address = st.text_area("Address", key="manual_address")
-            state = st.text_input("State", "Uttar Pradesh", key="manual_state")
-            city = st.text_input("City", "Noida", key="manual_city")
+            state = st.text_input("State", "", key="manual_state")
+            city = st.text_input("City", "", key="manual_city")
 
         if st.button("Generate Invoice", key="generate_invoice_button"):
             if selected_products and customer_name:
