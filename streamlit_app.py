@@ -938,7 +938,7 @@ def sales_page():
                 st.error("Please fill all required fields and select products.")
     
     with tab2:
-        st.subheader("Sales History")
+        st.subheader("Your Sales History")
         
         @st.cache_data(ttl=300)
         def load_sales_data():
@@ -947,7 +947,7 @@ def sales_page():
                 sales_data = sales_data.dropna(how='all')
                 
                 # Convert columns to proper types
-                sales_data = sales_data.copy()  # Avoid SettingWithCopyWarning
+                sales_data = sales_data.copy()
                 sales_data['Outlet Name'] = sales_data['Outlet Name'].astype(str)
                 sales_data['Invoice Number'] = sales_data['Invoice Number'].astype(str)
                 sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True)
@@ -959,18 +959,18 @@ def sales_page():
                         sales_data[col] = pd.to_numeric(sales_data[col], errors='coerce')
                 
                 # Filter for current employee
-                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+                employee_code = Person[Person['Employee Name'] == st.session_state.employee_name]['Employee Code'].values[0]
                 filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
                 
                 return filtered_data
             except Exception as e:
                 st.error(f"Error loading sales data: {e}")
                 return pd.DataFrame()
-
+    
         sales_data = load_sales_data()
         
         if sales_data.empty:
-            st.warning("No sales records found")
+            st.warning("No sales records found for your account")
             return
             
         with st.expander("🔍 Search Filters", expanded=True):
@@ -1010,7 +1010,7 @@ def sales_page():
             'Delivery Status': 'first'
         }).sort_values('Invoice Date', ascending=False).reset_index()
         
-        st.write(f"📄 Showing {len(invoice_summary)} invoices")
+        st.write(f"📄 Showing {len(invoice_summary)} of your invoices")
         st.dataframe(
             invoice_summary,
             column_config={
@@ -1105,7 +1105,6 @@ def sales_page():
             if st.button("🔄 Regenerate Invoice", key=f"regenerate_btn_{selected_invoice}"):
                 with st.spinner("Regenerating invoice..."):
                     try:
-
                         pdf, pdf_path = generate_invoice(
                             str(invoice_data['Outlet Name']),
                             str(invoice_data.get('GST Number', '')),
