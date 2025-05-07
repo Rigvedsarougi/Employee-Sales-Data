@@ -561,7 +561,6 @@ def demo_page():
             filtered_data[summary_cols],
             column_config={
                 "Demo Date": st.column_config.DateColumn(format="DD/MM/YYYY"),
-                "Duration (minutes)": st.column_config.NumberColumn(format="%.1f min")
             },
             use_container_width=True,
             hide_index=True
