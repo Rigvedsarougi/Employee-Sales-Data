@@ -242,6 +242,31 @@ TRAVEL_HOTEL_COLUMNS = [
     "Time Requested"
 ]
 
+DEMO_SHEET_COLUMNS = [
+    "Demo ID",
+    "Employee Name",
+    "Employee Code",
+    "Designation",
+    "Partner Employee",
+    "Partner Employee Code",
+    "Outlet Name",
+    "Outlet Contact",
+    "Outlet Address",
+    "Outlet State",
+    "Outlet City",
+    "Demo Date",
+    "Check-in Time",
+    "Check-out Time",
+    "Check-in Date Time",
+    "Duration (minutes)",
+    "Outlet Review",
+    "Remarks",
+    "Status",
+    "Products",
+    "Quantities"
+]
+
+
 TICKET_CATEGORIES = [
     "HR Department",
     "MIS & Back Office",
@@ -331,6 +356,267 @@ def save_uploaded_file(uploaded_file, folder):
             f.write(uploaded_file.getbuffer())
         return file_path
     return None
+
+
+def demo_page():
+    st.title("Demo Management")
+    selected_employee = st.session_state.employee_name
+    
+    tab1, tab2 = st.tabs(["New Demo", "Demo History"])
+    
+    with tab1:
+        st.subheader("Partner Employee")
+        partner_employee = st.selectbox(
+            "Select Partner Employee", 
+            [name for name in Person['Employee Name'].tolist() if name != selected_employee],
+            key="partner_employee"
+        )
+
+        st.subheader("Outlet Details")
+        outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="demo_outlet_option")
+        
+        if outlet_option == "Select from list":
+            outlet_names = Outlet['Shop Name'].tolist()
+            selected_outlet = st.selectbox("Select Outlet", outlet_names, key="demo_outlet_select")
+            outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
+            
+            outlet_name = selected_outlet
+            outlet_contact = outlet_details['Contact']
+            outlet_address = outlet_details['Address']
+            outlet_state = outlet_details['State']
+            outlet_city = outlet_details['City']
+            
+            st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="demo_outlet_contact_display")
+            st.text_input("Outlet Address", value=outlet_address, disabled=True, key="demo_outlet_address_display")
+            st.text_input("Outlet State", value=outlet_state, disabled=True, key="demo_outlet_state_display")
+            st.text_input("Outlet City", value=outlet_city, disabled=True, key="demo_outlet_city_display")
+        else:
+            outlet_name = st.text_input("Outlet Name", key="demo_outlet_name")
+            outlet_contact = st.text_input("Outlet Contact", key="demo_outlet_contact")
+            outlet_address = st.text_area("Outlet Address", key="demo_outlet_address")
+            outlet_state = st.text_input("Outlet State", "", key="demo_outlet_state")
+            outlet_city = st.text_input("Outlet City", "", key="demo_outlet_city")
+
+        st.subheader("Demo Details")
+        demo_date = st.date_input("Demo Date", key="demo_date")
+        outlet_review = st.selectbox("Outlet Review", ["Excellent", "Good", "Average", "Poor"], key="outlet_review")
+        remarks = st.text_area("Remarks", key="demo_remarks")
+
+        st.subheader("Time Tracking")
+        col1, col2 = st.columns(2)
+        with col1:
+            check_in_time = st.time_input("Check-in Time", value=None, key="demo_check_in_time")
+        with col2:
+            check_out_time = st.time_input("Check-out Time", value=None, key="demo_check_out_time")
+
+        st.subheader("Product Demonstration")
+        product_names = Products['Product Name'].tolist()
+        selected_products = st.multiselect("Select Products Demonstrated", product_names, key="demo_product_selection")
+
+        quantities = []
+        if selected_products:
+            st.markdown("### Product Quantities")
+            for product in selected_products:
+                qty = st.number_input(
+                    f"Quantity for {product}",
+                    min_value=1,
+                    value=1,
+                    step=1,
+                    key=f"demo_qty_{product}"
+                )
+                quantities.append(qty)
+
+        if st.button("Record Demo", key="record_demo_button"):
+            if outlet_name and selected_products:
+                # Create check-in datetime
+                if check_in_time is None:
+                    check_in_time = get_ist_time().time()
+                check_in_datetime = datetime.combine(demo_date, check_in_time)
+                
+                # Create check-out datetime
+                if check_out_time is None:
+                    check_out_time = get_ist_time().time()
+                check_out_datetime = datetime.combine(demo_date, check_out_time)
+                
+                # Calculate duration
+                duration = (check_out_datetime - check_in_datetime).total_seconds() / 60
+                
+                # Create demo ID
+                demo_id = f"DEMO-{get_ist_time().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+                
+                # Get partner employee code
+                partner_employee_code = Person[Person['Employee Name'] == partner_employee]['Employee Code'].values[0]
+                
+                # Prepare demo data
+                demo_data = {
+                    "Demo ID": demo_id,
+                    "Employee Name": selected_employee,
+                    "Employee Code": Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0],
+                    "Designation": Person[Person['Employee Name'] == selected_employee]['Designation'].values[0],
+                    "Partner Employee": partner_employee,
+                    "Partner Employee Code": partner_employee_code,
+                    "Outlet Name": outlet_name,
+                    "Outlet Contact": outlet_contact,
+                    "Outlet Address": outlet_address,
+                    "Outlet State": outlet_state,
+                    "Outlet City": outlet_city,
+                    "Demo Date": demo_date.strftime("%d-%m-%Y"),
+                    "Check-in Time": check_in_datetime.strftime("%H:%M:%S"),
+                    "Check-out Time": check_out_datetime.strftime("%H:%M:%S"),
+                    "Check-in Date Time": check_in_datetime.strftime("%d-%m-%Y %H:%M:%S"),
+                    "Duration (minutes)": round(duration, 2),
+                    "Outlet Review": outlet_review,
+                    "Remarks": remarks,
+                    "Status": "Completed",
+                    "Products": ", ".join(selected_products),
+                    "Quantities": ", ".join(map(str, quantities))
+                }
+                
+                # Log to Google Sheets
+                try:
+                    existing_data = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5)
+                    existing_data = existing_data.dropna(how="all")
+                    updated_data = pd.concat([existing_data, pd.DataFrame([demo_data])], ignore_index=True)
+                    conn.update(worksheet="Demos", data=updated_data)
+                    
+                    st.success(f"Demo {demo_id} recorded successfully!")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Failed to record demo: {e}")
+            else:
+                st.error("Please fill all required fields (Outlet and at least one product).")
+    
+    with tab2:
+        st.subheader("Demo History")
+        
+        @st.cache_data(ttl=300)
+        def load_demo_data():
+            try:
+                demo_data = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5)
+                demo_data = demo_data.dropna(how='all')
+                
+                # Convert Demo Date to datetime
+                demo_data['Demo Date'] = pd.to_datetime(demo_data['Demo Date'], dayfirst=True, errors='coerce')
+                
+                # Filter for current employee
+                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+                filtered_data = demo_data[demo_data['Employee Code'] == employee_code]
+                
+                return filtered_data.sort_values('Demo Date', ascending=False)
+            except Exception as e:
+                st.error(f"Error loading demo data: {e}")
+                return pd.DataFrame()
+        
+        demo_data = load_demo_data()
+        
+        if demo_data.empty:
+            st.warning("No demo records found for your account")
+            return
+            
+        with st.expander("🔍 Search Filters", expanded=True):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                demo_id_search = st.text_input("Demo ID", key="demo_id_search")
+            with col2:
+                demo_date_search = st.date_input("Demo Date", key="demo_date_search")
+            with col3:
+                outlet_name_search = st.text_input("Outlet Name", key="demo_outlet_search")
+            
+            if st.button("Apply Filters", key="search_demo_button"):
+                st.rerun()
+        
+        filtered_data = demo_data.copy()
+        
+        # Apply filters
+        if demo_id_search:
+            filtered_data = filtered_data[
+                filtered_data['Demo ID'].str.contains(demo_id_search, case=False, na=False)
+            ]
+        
+        if demo_date_search:
+            date_str = demo_date_search.strftime("%d-%m-%Y")
+            filtered_data = filtered_data[
+                filtered_data['Demo Date'].dt.strftime('%d-%m-%Y') == date_str
+            ]
+        
+        if outlet_name_search:
+            filtered_data = filtered_data[
+                filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
+            ]
+        
+        if filtered_data.empty:
+            st.warning("No matching records found")
+            return
+            
+        # Display summary table
+        st.write(f"📄 Showing {len(filtered_data)} of your demos")
+        
+        # Display the summary table with key columns
+        summary_cols = [
+            'Demo ID', 'Demo Date', 'Outlet Name', 'Partner Employee',
+            'Check-in Time', 'Check-out Time', 'Duration (minutes)', 'Outlet Review'
+        ]
+        
+        st.dataframe(
+            filtered_data[summary_cols],
+            column_config={
+                "Demo Date": st.column_config.DateColumn(format="DD/MM/YYYY"),
+                "Duration (minutes)": st.column_config.NumberColumn(format="%.1f min")
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # Detailed view
+        selected_demo = st.selectbox(
+            "Select demo to view details",
+            filtered_data['Demo ID'],
+            key="demo_selection"
+        )
+        
+        if not filtered_data.empty:
+            demo_details = filtered_data[filtered_data['Demo ID'] == selected_demo].iloc[0]
+            
+            st.subheader(f"Demo {selected_demo} Details")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Date", demo_details['Demo Date'].strftime('%d-%m-%Y'))
+                st.metric("Outlet", str(demo_details['Outlet Name']))
+                st.metric("Contact", str(demo_details['Outlet Contact']))
+                st.metric("Partner", str(demo_details['Partner Employee']))
+            with col2:
+                st.metric("Check-in", str(demo_details['Check-in Time']))
+                st.metric("Check-out", str(demo_details['Check-out Time']))
+                st.metric("Duration", f"{demo_details['Duration (minutes)']:.1f} minutes")
+                st.metric("Review", str(demo_details['Outlet Review']))
+            
+            st.subheader("Products Demonstrated")
+            products = demo_details['Products'].split(", ")
+            quantities = demo_details['Quantities'].split(", ")
+            
+            product_df = pd.DataFrame({
+                "Product": products,
+                "Quantity": quantities
+            })
+            
+            st.dataframe(
+                product_df,
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            st.subheader("Remarks")
+            st.write(demo_details['Remarks'])
+            
+            # Add download option
+            csv = filtered_data.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "Download Demo History",
+                csv,
+                "demo_history.csv",
+                "text/csv",
+                key='download-demo-csv'
+            )
 
 def support_ticket_page():
     st.title("Support Ticket Management")
@@ -1317,7 +1603,7 @@ def main():
     else:
         # Show option boxes after login
         st.title("Select Mode")
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
         
         with col1:
             if st.button("Sales", use_container_width=True, key="sales_mode"):
@@ -1348,6 +1634,11 @@ def main():
             if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
                 st.session_state.selected_mode = "Travel/Hotel"
                 st.rerun()
+                
+        with col7:
+            if st.button("Demo", use_container_width=True, key="demo_mode"):
+                st.session_state.selected_mode = "Demo"
+                st.rerun()
         
         if st.session_state.selected_mode:
             add_back_button()
@@ -1364,6 +1655,8 @@ def main():
                 support_ticket_page()
             elif st.session_state.selected_mode == "Travel/Hotel":
                 travel_hotel_page()
+            elif st.session_state.selected_mode == "Demo":
+                demo_page()
 
 def sales_page():
     st.title("Sales Management")
