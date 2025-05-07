@@ -1610,48 +1610,148 @@ def main():
                     else:
                         st.error("Invalid Password. Please try again.")
     else:
-        # Show option boxes after login
-        st.title("Select Mode")
-        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+        # Custom CSS for the grid buttons
+        st.markdown("""
+        <style>
+        .grid-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 120px;
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid #e0e0e0;
+            background: white;
+            transition: all 0.3s ease;
+            padding: 15px;
+            text-align: center;
+        }
+        .grid-btn:hover {
+            border-color: #4a8bfc;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        .grid-btn-icon {
+            font-size: 30px;
+            margin-bottom: 10px;
+        }
+        .grid-btn-title {
+            font-weight: 600;
+            font-size: 16px;
+            margin: 0;
+        }
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        </style>
+        """, unsafe_allow_html=True)
         
-        with col1:
-            if st.button("Sales", use_container_width=True, key="sales_mode"):
-                st.session_state.selected_mode = "Sales"
-                st.rerun()
+        # Show option boxes after login in a grid layout
+        st.title("Employee Portal Dashboard")
+        st.markdown("Select a module to continue:")
         
-        with col2:
-            if st.button("Visit", use_container_width=True, key="visit_mode"):
-                st.session_state.selected_mode = "Visit"
-                st.rerun()
+        # Create grid container
+        st.markdown('<div class="grid-container">', unsafe_allow_html=True)
         
-        with col3:
-            if st.button("Attendance", use_container_width=True, key="attendance_mode"):
-                st.session_state.selected_mode = "Attendance"
-                st.rerun()
-                
-        with col4:
-            if st.button("Resources", use_container_width=True, key="resources_mode"):
-                st.session_state.selected_mode = "Resources"
-                st.rerun()
-                
-        with col5:
-            if st.button("Support Ticket", use_container_width=True, key="ticket_mode"):
-                st.session_state.selected_mode = "Support Ticket"
-                st.rerun()
-                
-        with col6:
-            if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
-                st.session_state.selected_mode = "Travel/Hotel"
-                st.rerun()
-                
-        with col7:
-            if st.button("Demo", use_container_width=True, key="demo_mode"):
-                st.session_state.selected_mode = "Demo"
-                st.rerun()
+        # Sales Button
+        if st.button("""
+            <div class="grid-btn">
+                <div class="grid-btn-icon">💰</div>
+                <div class="grid-btn-title">Sales</div>
+            </div>
+            """, key="sales_mode", help="Manage sales and invoices"):
+            st.session_state.selected_mode = "Sales"
+            st.rerun()
+        
+        # Visit Button
+        if st.button("""
+            <div class="grid-btn">
+                <div class="grid-btn-icon">📍</div>
+                <div class="grid-btn-title">Visit</div>
+            </div>
+            """, key="visit_mode", help="Record customer visits"):
+            st.session_state.selected_mode = "Visit"
+            st.rerun()
+        
+        # Attendance Button
+        if st.button("""
+            <div class="grid-btn">
+                <div class="grid-btn-icon">📅</div>
+                <div class="grid-btn-title">Attendance</div>
+            </div>
+            """, key="attendance_mode", help="Mark your daily attendance"):
+            st.session_state.selected_mode = "Attendance"
+            st.rerun()
+        
+        # Resources Button
+        if st.button("""
+            <div class="grid-btn">
+                <div class="grid-btn-icon">📚</div>
+                <div class="grid-btn-title">Resources</div>
+            </div>
+            """, key="resources_mode", help="Company documents and resources"):
+            st.session_state.selected_mode = "Resources"
+            st.rerun()
+        
+        # Support Ticket Button
+        if st.button("""
+            <div class="grid-btn">
+                <div class="grid-btn-icon">🛟</div>
+                <div class="grid-btn-title">Support</div>
+            </div>
+            """, key="ticket_mode", help="Raise support tickets"):
+            st.session_state.selected_mode = "Support Ticket"
+            st.rerun()
+        
+        # Travel/Hotel Button
+        if st.button("""
+            <div class="grid-btn">
+                <div class="grid-btn-icon">✈️</div>
+                <div class="grid-btn-title">Travel/Hotel</div>
+            </div>
+            """, key="travel_mode", help="Book travel and accommodations"):
+            st.session_state.selected_mode = "Travel/Hotel"
+            st.rerun()
+        
+        # Demo Button
+        if st.button("""
+            <div class="grid-btn">
+                <div class="grid-btn-icon">🎤</div>
+                <div class="grid-btn-title">Demo</div>
+            </div>
+            """, key="demo_mode", help="Record product demonstrations"):
+            st.session_state.selected_mode = "Demo"
+            st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Add logout button at bottom right
+        st.markdown("""
+        <style>
+        .logout-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        if st.button("Logout", key="logout_button", help="Click to logout from the system"):
+            st.session_state.authenticated = False
+            st.session_state.selected_mode = None
+            st.rerun()
         
         if st.session_state.selected_mode:
-            add_back_button()
-            
             if st.session_state.selected_mode == "Sales":
                 sales_page()
             elif st.session_state.selected_mode == "Visit":
