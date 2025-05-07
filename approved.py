@@ -625,6 +625,50 @@ def authenticate_employee(employee_name, passkey):
     except:
         return False
 
+def resources_page():
+    st.title("Company Resources")
+    st.markdown("Download important company documents and product catalogs.")
+    
+    # Define the resources
+    resources = [
+        {
+            "name": "Product Catalogue",
+            "description": "Complete list of all available products with specifications",
+            "file_path": "Biolume Salon Prices Catalogue.pdf"
+        },
+        {
+            "name": "Employee Handbook",
+            "description": "Company policies, procedures, and guidelines for employees",
+            "file_path": "Biolume Employee Handbook.pdf"
+        },
+        {
+            "name": "Facial Treatment Catalogue",
+            "description": "Complete list of all Facial products with specifications",
+            "file_path": "Biolume's Facial Treatment Catalogue.pdf"
+        }
+    ]
+    
+    # Display each resource in a card-like format
+    for resource in resources:
+        with st.container():
+            st.subheader(resource["name"])
+            st.markdown(resource["description"])
+            
+            # Check if file exists
+            if os.path.exists(resource["file_path"]):
+                with open(resource["file_path"], "rb") as file:
+                    btn = st.download_button(
+                        label=f"Download {resource['name']}",
+                        data=file,
+                        file_name=resource["file_path"],
+                        mime="application/pdf",
+                        key=f"download_{resource['name']}"
+                    )
+            else:
+                st.error(f"File not found: {resource['file_path']}")
+            
+            st.markdown("---")  # Divider between resources
+
 def add_back_button():
     st.markdown("""
     <style>
@@ -686,10 +730,9 @@ def main():
                     else:
                         st.error("Invalid Password. Please try again.")
     else:
-        # [REST OF YOUR ORIGINAL main() FUNCTION REMAINS EXACTLY THE SAME]
-        # Show three option boxes after login
+        # Show four option boxes after login
         st.title("Select Mode")
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             if st.button("Sales", use_container_width=True, key="sales_mode"):
@@ -705,6 +748,11 @@ def main():
             if st.button("Attendance", use_container_width=True, key="attendance_mode"):
                 st.session_state.selected_mode = "Attendance"
                 st.rerun()
+                
+        with col4:
+            if st.button("Resources", use_container_width=True, key="resources_mode"):
+                st.session_state.selected_mode = "Resources"
+                st.rerun()
         
         if st.session_state.selected_mode:
             add_back_button()
@@ -713,8 +761,10 @@ def main():
                 sales_page()
             elif st.session_state.selected_mode == "Visit":
                 visit_page()
-            else:
+            elif st.session_state.selected_mode == "Attendance":
                 attendance_page()
+            elif st.session_state.selected_mode == "Resources":
+                resources_page()
 
 def sales_page():
     st.title("Sales Management")
@@ -854,8 +904,8 @@ def sales_page():
             gst_number = st.text_input("GST Number", key="manual_gst_number")
             contact_number = st.text_input("Contact Number", key="manual_contact_number")
             address = st.text_area("Address", key="manual_address")
-            state = st.text_input("State", "Uttar Pradesh", key="manual_state")
-            city = st.text_input("City", "Noida", key="manual_city")
+            state = st.text_input("State", "", key="manual_state")
+            city = st.text_input("City", "", key="manual_city")
 
         if st.button("Generate Invoice", key="generate_invoice_button"):
             if selected_products and customer_name:
@@ -888,7 +938,7 @@ def sales_page():
                 st.error("Please fill all required fields and select products.")
     
     with tab2:
-        st.subheader("Sales History")
+        st.subheader("Your Sales History")
         
         @st.cache_data(ttl=300)
         def load_sales_data():
@@ -897,30 +947,39 @@ def sales_page():
                 sales_data = sales_data.dropna(how='all')
                 
                 # Convert columns to proper types
-                sales_data = sales_data.copy()  # Avoid SettingWithCopyWarning
+                sales_data = sales_data.copy()
                 sales_data['Outlet Name'] = sales_data['Outlet Name'].astype(str)
                 sales_data['Invoice Number'] = sales_data['Invoice Number'].astype(str)
-                sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True)
                 
-                # Convert numeric columns
-                numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)']
+                # Convert Invoice Date properly
+                try:
+                    sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True, errors='coerce')
+                except:
+                    # Fallback if date parsing fails
+                    sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], errors='coerce')
+                
+                # Convert numeric columns properly
+                numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)', 'Quantity']
                 for col in numeric_cols:
                     if col in sales_data.columns:
                         sales_data[col] = pd.to_numeric(sales_data[col], errors='coerce')
                 
                 # Filter for current employee
-                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+                employee_code = Person[Person['Employee Name'] == st.session_state.employee_name]['Employee Code'].values[0]
                 filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
+                
+                # Ensure we have valid dates
+                filtered_data = filtered_data[filtered_data['Invoice Date'].notna()]
                 
                 return filtered_data
             except Exception as e:
                 st.error(f"Error loading sales data: {e}")
                 return pd.DataFrame()
-
+    
         sales_data = load_sales_data()
         
         if sales_data.empty:
-            st.warning("No sales records found")
+            st.warning("No sales records found for your account")
             return
             
         with st.expander("🔍 Search Filters", expanded=True):
@@ -936,13 +995,19 @@ def sales_page():
                 st.rerun()
         
         filtered_data = sales_data.copy()
+        
+        # Apply filters
         if invoice_number_search:
             filtered_data = filtered_data[
                 filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
             ]
+        
         if invoice_date_search:
             date_str = invoice_date_search.strftime("%d-%m-%Y")
-            filtered_data = filtered_data[filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str]
+            filtered_data = filtered_data[
+                filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str
+            ]
+        
         if outlet_name_search:
             filtered_data = filtered_data[
                 filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
@@ -952,20 +1017,32 @@ def sales_page():
             st.warning("No matching records found")
             return
             
+        # Calculate correct grand total by invoice
         invoice_summary = filtered_data.groupby('Invoice Number').agg({
             'Invoice Date': 'first',
             'Outlet Name': 'first',
             'Grand Total': 'sum',
             'Payment Status': 'first',
             'Delivery Status': 'first'
-        }).sort_values('Invoice Date', ascending=False).reset_index()
+        }).reset_index()
         
-        st.write(f"📄 Showing {len(invoice_summary)} invoices")
+        # Sort by date descending
+        invoice_summary = invoice_summary.sort_values('Invoice Date', ascending=False)
+        
+        st.write(f"📄 Showing {len(invoice_summary)} of your invoices")
+        
+        # Display the summary table
         st.dataframe(
             invoice_summary,
             column_config={
-                "Grand Total": st.column_config.NumberColumn(format="₹%.2f"),
-                "Invoice Date": st.column_config.DateColumn(format="DD/MM/YYYY")
+                "Grand Total": st.column_config.NumberColumn(
+                    format="₹%.2f",
+                    help="Sum of all products in the invoice including taxes"
+                ),
+                "Invoice Date": st.column_config.DateColumn(
+                    format="DD/MM/YYYY",
+                    help="Date when invoice was generated"
+                )
             },
             use_container_width=True,
             hide_index=True
@@ -1004,16 +1081,16 @@ def sales_page():
                 if submitted:
                     with st.spinner("Updating delivery status..."):
                         try:
-                            # Update all products in this invoice with the new status
-                            sales_data = conn.read(worksheet="Sales", ttl=5)
-                            sales_data = sales_data.dropna(how='all')
+                            # Get all sales data
+                            all_sales_data = conn.read(worksheet="Sales", ttl=5)
+                            all_sales_data = all_sales_data.dropna(how='all')
                             
                             # Update the status for all rows with this invoice number
-                            mask = sales_data['Invoice Number'] == selected_invoice
-                            sales_data.loc[mask, 'Delivery Status'] = new_status
+                            mask = all_sales_data['Invoice Number'] == selected_invoice
+                            all_sales_data.loc[mask, 'Delivery Status'] = new_status
                             
                             # Write back the updated data
-                            conn.update(worksheet="Sales", data=sales_data)
+                            conn.update(worksheet="Sales", data=all_sales_data)
                             
                             st.success(f"Delivery status updated to '{new_status}' for invoice {selected_invoice}!")
                             st.rerun()
@@ -1023,23 +1100,34 @@ def sales_page():
         # Display invoice details
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
-            original_invoice_date = invoice_data['Invoice Date'].strftime('%d-%m-%Y')  # Store original date
+            original_invoice_date = invoice_data['Invoice Date'].strftime('%d-%m-%Y')
             
             st.subheader(f"Invoice {selected_invoice}")
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("Date", original_invoice_date)  # Use original date
+                st.metric("Date", original_invoice_date)
                 st.metric("Outlet", str(invoice_data['Outlet Name']))
                 st.metric("Contact", str(invoice_data['Outlet Contact']))
             with col2:
-                total_amount = invoice_summary[invoice_summary['Invoice Number'] == selected_invoice]['Grand Total'].values[0]
-                st.metric("Total Amount", f"₹{total_amount:.2f}")
+                # Calculate correct total for this invoice
+                invoice_total = invoice_details['Grand Total'].sum()
+                st.metric("Total Amount", f"₹{invoice_total:.2f}")
                 st.metric("Payment Status", str(invoice_data['Payment Status']).capitalize())
                 st.metric("Delivery Status", str(invoice_data.get('Delivery Status', 'Pending')).capitalize())
             
             st.subheader("Products")
-            product_display = invoice_details[['Product Name', 'Quantity', 'Unit Price', 'Product Discount (%)', 'Total Price', 'Grand Total']].copy()
+            product_display = invoice_details[[
+                'Product Name', 
+                'Quantity', 
+                'Unit Price', 
+                'Product Discount (%)', 
+                'Total Price', 
+                'Grand Total'
+            ]].copy()
+            
+            # Format display
             product_display['Product Name'] = product_display['Product Name'].astype(str)
+            product_display['Quantity'] = product_display['Quantity'].astype(int)
             
             st.dataframe(
                 product_display,
@@ -1055,7 +1143,6 @@ def sales_page():
             if st.button("🔄 Regenerate Invoice", key=f"regenerate_btn_{selected_invoice}"):
                 with st.spinner("Regenerating invoice..."):
                     try:
-
                         pdf, pdf_path = generate_invoice(
                             str(invoice_data['Outlet Name']),
                             str(invoice_data.get('GST Number', '')),
@@ -1131,8 +1218,8 @@ def visit_page():
             outlet_name = st.text_input("Outlet Name", key="visit_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="visit_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="visit_outlet_address")
-            outlet_state = st.text_input("Outlet State", "Uttar Pradesh", key="visit_outlet_state")
-            outlet_city = st.text_input("Outlet City", "Noida", key="visit_outlet_city")
+            outlet_state = st.text_input("Outlet State", "", key="visit_outlet_state")
+            outlet_city = st.text_input("Outlet City", "", key="visit_outlet_city")
 
         st.subheader("Visit Details")
         visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
