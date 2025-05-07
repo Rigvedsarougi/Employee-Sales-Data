@@ -416,38 +416,41 @@ def demo_page():
         quantities = []
         if selected_products:
             st.markdown("### Product Quantities")
-            for product in selected_products:
+            for idx, product in enumerate(selected_products):
                 qty = st.number_input(
                     f"Quantity for {product}",
                     min_value=1,
                     value=1,
                     step=1,
-                    key=f"demo_qty_{product}"
+                    key=f"demo_qty_{idx}"  # Changed to use index to avoid product name issues
                 )
-                quantities.append(qty)
+                quantities.append(str(qty))  # Convert to string immediately
 
         if st.button("Record Demo", key="record_demo_button"):
             if outlet_name and selected_products:
-                # Create check-in datetime
+                # Get current IST time for check-in datetime
+                current_datetime = get_ist_time()
+                
+                # Create check-in datetime (use selected demo date but current time)
                 if check_in_time is None:
-                    check_in_time = get_ist_time().time()
+                    check_in_time = current_datetime.time()
                 check_in_datetime = datetime.combine(demo_date, check_in_time)
                 
                 # Create check-out datetime
                 if check_out_time is None:
-                    check_out_time = get_ist_time().time()
+                    check_out_time = current_datetime.time()
                 check_out_datetime = datetime.combine(demo_date, check_out_time)
                 
                 # Calculate duration
                 duration = (check_out_datetime - check_in_datetime).total_seconds() / 60
                 
                 # Create demo ID
-                demo_id = f"DEMO-{get_ist_time().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+                demo_id = f"DEMO-{current_datetime.strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
                 
                 # Get partner employee code
                 partner_employee_code = Person[Person['Employee Name'] == partner_employee]['Employee Code'].values[0]
                 
-                # Prepare demo data
+                # Prepare demo data with proper data types
                 demo_data = {
                     "Demo ID": demo_id,
                     "Employee Name": selected_employee,
@@ -460,29 +463,36 @@ def demo_page():
                     "Outlet Address": outlet_address,
                     "Outlet State": outlet_state,
                     "Outlet City": outlet_city,
-                    "Demo Date": demo_date.strftime("%d-%m-%Y"),
+                    "Demo Date": demo_date.strftime("%d-%m-%Y"),  # Selected date
                     "Check-in Time": check_in_datetime.strftime("%H:%M:%S"),
                     "Check-out Time": check_out_datetime.strftime("%H:%M:%S"),
-                    "Check-in Date Time": check_in_datetime.strftime("%d-%m-%Y %H:%M:%S"),
+                    "Check-in Date Time": current_datetime.strftime("%d-%m-%Y %H:%M:%S"),  # Actual timestamp
                     "Duration (minutes)": round(duration, 2),
                     "Outlet Review": outlet_review,
                     "Remarks": remarks,
                     "Status": "Completed",
-                    "Products": ", ".join(selected_products),
-                    "Quantities": ", ".join(map(str, quantities))
+                    "Products": "|".join(selected_products),  # Changed to pipe separator
+                    "Quantities": "|".join(quantities)  # Changed to pipe separator
                 }
                 
                 # Log to Google Sheets
                 try:
                     existing_data = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5)
                     existing_data = existing_data.dropna(how="all")
-                    updated_data = pd.concat([existing_data, pd.DataFrame([demo_data])], ignore_index=True)
+                    
+                    # Convert to DataFrame with correct column order
+                    demo_df = pd.DataFrame([demo_data], columns=DEMO_SHEET_COLUMNS)
+                    
+                    # Concatenate with existing data
+                    updated_data = pd.concat([existing_data, demo_df], ignore_index=True)
+                    
+                    # Write to Google Sheets
                     conn.update(worksheet="Demos", data=updated_data)
                     
                     st.success(f"Demo {demo_id} recorded successfully!")
                     st.balloons()
                 except Exception as e:
-                    st.error(f"Failed to record demo: {e}")
+                    st.error(f"Failed to record demo: {str(e)}")
             else:
                 st.error("Please fill all required fields (Outlet and at least one product).")
     
