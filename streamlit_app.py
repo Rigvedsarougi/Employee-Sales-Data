@@ -317,6 +317,12 @@ def generate_visit_id():
 def generate_attendance_id():
     return f"ATT-{get_ist_time().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
 
+def generate_ticket_id():
+    return f"TKT-{get_ist_time().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
+
+def generate_request_id():
+    return f"REQ-{get_ist_time().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
+
 def save_uploaded_file(uploaded_file, folder):
     if uploaded_file is not None:
         file_ext = os.path.splitext(uploaded_file.name)[1]
