@@ -80,14 +80,16 @@ def load_gsheet_data():
             # First drop completely empty rows
             df.dropna(how='all', inplace=True)
             
-            # Fill NaN values appropriately based on column type
+            # Create a dictionary to hold fill values for each column
+            fill_values = {}
             for col in df.columns:
                 if pd.api.types.is_numeric_dtype(df[col]):
-                    # For numeric columns, fill with 0 instead of empty string
-                    df[col].fillna(0, inplace=True)
+                    fill_values[col] = 0  # Fill numeric columns with 0
                 else:
-                    # For non-numeric columns, fill with empty string
-                    df[col].fillna('', inplace=True)
+                    fill_values[col] = ''  # Fill non-numeric with empty string
+            
+            # Fill all NA values at once using the dictionary
+            df.fillna(value=fill_values, inplace=True)
         
         return Products, Outlet, Person, Distributors
     except Exception as e:
