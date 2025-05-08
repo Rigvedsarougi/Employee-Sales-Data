@@ -9,6 +9,9 @@ from PIL import Image
 from datetime import datetime, time, timedelta
 import pytz
 
+# Initialize Google Sheets connection
+conn = st.connection("gsheets", type=GSheetsConnection)
+
 def get_ist_time():
     """Get current time in Indian Standard Time (IST)"""
     utc_now = datetime.now(pytz.utc)
@@ -34,7 +37,7 @@ def display_login_header():
         </div>
         """, unsafe_allow_html=True)
 
-
+# Hide Streamlit default UI elements
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -59,72 +62,39 @@ hide_footer_style = """
     }
     </style>
 """
-
 st.markdown(hide_footer_style, unsafe_allow_html=True)
 
-
-def validate_data_before_write(df, expected_columns):
-    """Validate data structure before writing to Google Sheets"""
-    if not isinstance(df, pd.DataFrame):
-        raise ValueError("Data must be a pandas DataFrame")
-    
-    missing_cols = set(expected_columns) - set(df.columns)
-    if missing_cols:
-        raise ValueError(f"Missing required columns: {missing_cols}")
-    
-    if df.empty:
-        raise ValueError("Cannot write empty dataframe")
-    
-    return True
-
-def backup_sheet(conn, worksheet_name):
-    """Create a timestamped backup of the worksheet"""
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def load_gsheet_data():
+    """Load all required data from Google Sheets"""
     try:
-        data = conn.read(worksheet=worksheet_name, ttl=1)
-        timestamp = get_ist_time().strftime("%Y%m%d_%H%M%S")
-        backup_name = f"{worksheet_name}_backup_{timestamp}"
-        conn.update(worksheet=backup_name, data=data)
-    except Exception as e:
-        st.error(f"Warning: Failed to create backup - {str(e)}")
-
-def attempt_data_recovery(conn, worksheet_name):
-    """Attempt to recover from the most recent backup"""
-    try:
-        # Get list of all worksheets
-        all_sheets = conn.list_worksheets()
-        backups = [s for s in all_sheets if s.startswith(f"{worksheet_name}_backup")]
+        # Load data from Google Sheets
+        Products = conn.read(worksheet="Products", ttl=5)
+        Outlet = conn.read(worksheet="Outlet", ttl=5)
+        Person = conn.read(worksheet="Person", ttl=5)
+        Distributors = conn.read(worksheet="Distributors", ttl=5)
         
-        if backups:
-            # Sort backups by timestamp (newest first)
-            backups.sort(reverse=True)
-            latest_backup = backups[0]
-            
-            # Restore from backup
-            backup_data = conn.read(worksheet=latest_backup)
-            conn.update(worksheet=worksheet_name, data=backup_data)
-            return True
-        return False
+        # Clean data
+        dfs = [Products, Outlet, Person, Distributors]
+        for df in dfs:
+            df.dropna(how='all', inplace=True)
+            df.fillna('', inplace=True)  # Replace NaN with empty strings
+        
+        return Products, Outlet, Person, Distributors
     except Exception as e:
-        st.error(f"Recovery failed: {str(e)}")
-        return False
+        st.error(f"Error loading data from Google Sheets: {e}")
+        # Return empty DataFrames with expected columns
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-def safe_sheet_operation(operation, *args, **kwargs):
-    """Wrapper for safe sheet operations with retry logic"""
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            return operation(*args, **kwargs)
-        except Exception as e:
-            if attempt == max_retries - 1:
-                st.error(f"Operation failed after {max_retries} attempts: {str(e)}")
-                if "Sales" in str(args) or "Visits" in str(args) or "Attendance" in str(args):
-                    worksheet_name = [a for a in args if isinstance(a, str) and ("Sales" in a or "Visits" in a or "Attendance" in a)][0]
-                    if attempt_data_recovery(conn, worksheet_name):
-                        st.success("Data recovery attempted from backup")
-                raise
-            time.sleep(1 * (attempt + 1))  # Exponential backoff
+# Load the data
+Products, Outlet, Person, Distributors = load_gsheet_data()
 
-# Constants
+# Validate data was loaded correctly
+if Products.empty or Outlet.empty or Person.empty or Distributors.empty:
+    st.error("Failed to load required data from Google Sheets. Please check your connection.")
+    st.stop()
+
+# Constants for sheet columns (remain the same as in your original code)
 SALES_SHEET_COLUMNS = [
     "Invoice Number",
     "Invoice Date",
@@ -164,7 +134,7 @@ SALES_SHEET_COLUMNS = [
     "Employee Selfie Path",
     "Invoice PDF Path",
     "Remarks",
-    "Delivery Status"  # Added new column for delivery status
+    "Delivery Status"
 ]
 
 VISIT_SHEET_COLUMNS = [
@@ -201,7 +171,6 @@ ATTENDANCE_SHEET_COLUMNS = [
     "Check-in Date Time"
 ]
 
-# Add these constants at the top of app.py with other constants
 TICKET_SHEET_COLUMNS = [
     "Ticket ID",
     "Raised By (Employee Name)",
@@ -266,7 +235,6 @@ DEMO_SHEET_COLUMNS = [
     "Quantities"
 ]
 
-
 TICKET_CATEGORIES = [
     "HR Department",
     "MIS & Back Office",
@@ -283,16 +251,7 @@ PRIORITY_LEVELS = ["Low", "Medium", "High", "Critical"]
 TRAVEL_MODES = ["Bus", "Train", "Flight", "Taxi", "Other"]
 REQUEST_TYPES = ["Hotel", "Travel", "Travel & Hotel"]
 
-# Establishing a Google Sheets connection
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-# Load data
-Products = pd.read_csv('Invoice - Products.csv')
-Outlet = pd.read_csv('Invoice - Outlet.csv')
-Person = pd.read_csv('Invoice - Person.csv')
-Distributors = pd.read_csv('Invoice - Distributors.csv')
-
-# Company Details with ALLGEN TRADING logo
+# Company Details
 company_name = "BIOLUME SKIN SCIENCE PRIVATE LIMITED"
 company_address = """Ground Floor Rampal Awana Complex,
 Rampal Awana Complex, Indra Market,
@@ -314,7 +273,7 @@ os.makedirs("payment_receipts", exist_ok=True)
 os.makedirs("invoices", exist_ok=True)
 os.makedirs("visit_selfies", exist_ok=True)
 
-# Custom PDF class
+# Custom PDF class (same as original)
 class PDF(FPDF):
     def header(self):
         if company_logo:
@@ -333,6 +292,7 @@ class PDF(FPDF):
         self.line(10, 50, 200, 50)
         self.ln(1)
 
+# Helper functions (same as original but with Google Sheets integration)
 def generate_invoice_number():
     return f"INV-{get_ist_time().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
 
@@ -356,6 +316,190 @@ def save_uploaded_file(uploaded_file, folder):
             f.write(uploaded_file.getbuffer())
         return file_path
     return None
+
+def validate_data_before_write(df, expected_columns):
+    """Validate data structure before writing to Google Sheets"""
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("Data must be a pandas DataFrame")
+    
+    missing_cols = set(expected_columns) - set(df.columns)
+    if missing_cols:
+        raise ValueError(f"Missing required columns: {missing_cols}")
+    
+    if df.empty:
+        raise ValueError("Cannot write empty dataframe")
+    
+    return True
+
+def backup_sheet(conn, worksheet_name):
+    """Create a timestamped backup of the worksheet"""
+    try:
+        data = conn.read(worksheet=worksheet_name, ttl=1)
+        timestamp = get_ist_time().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"{worksheet_name}_backup_{timestamp}"
+        conn.update(worksheet=backup_name, data=data)
+    except Exception as e:
+        st.error(f"Warning: Failed to create backup - {str(e)}")
+
+def attempt_data_recovery(conn, worksheet_name):
+    """Attempt to recover from the most recent backup"""
+    try:
+        # Get list of all worksheets
+        all_sheets = conn.list_worksheets()
+        backups = [s for s in all_sheets if s.startswith(f"{worksheet_name}_backup")]
+        
+        if backups:
+            # Sort backups by timestamp (newest first)
+            backups.sort(reverse=True)
+            latest_backup = backups[0]
+            
+            # Restore from backup
+            backup_data = conn.read(worksheet=latest_backup)
+            conn.update(worksheet=worksheet_name, data=backup_data)
+            return True
+        return False
+    except Exception as e:
+        st.error(f"Recovery failed: {str(e)}")
+        return False
+
+def safe_sheet_operation(operation, *args, **kwargs):
+    """Wrapper for safe sheet operations with retry logic"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return operation(*args, **kwargs)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                st.error(f"Operation failed after {max_retries} attempts: {str(e)}")
+                if "Sales" in str(args) or "Visits" in str(args) or "Attendance" in str(args):
+                    worksheet_name = [a for a in args if isinstance(a, str) and ("Sales" in a or "Visits" in a or "Attendance" in a)][0]
+                    if attempt_data_recovery(conn, worksheet_name):
+                        st.success("Data recovery attempted from backup")
+                raise
+            time.sleep(1 * (attempt + 1))  # Exponential backoff
+
+# Data logging functions updated for Google Sheets
+def log_sales_to_gsheet(conn, sales_data):
+    try:
+        # Read all existing data first
+        existing_sales_data = conn.read(worksheet="Sales", ttl=5)
+        existing_sales_data = existing_sales_data.dropna(how="all")
+        
+        # Ensure columns match
+        sales_data = sales_data.reindex(columns=SALES_SHEET_COLUMNS)
+        
+        # Concatenate and drop any potential duplicates
+        updated_sales_data = pd.concat([existing_sales_data, sales_data], ignore_index=True)
+        updated_sales_data = updated_sales_data.drop_duplicates(subset=["Invoice Number", "Product Name"], keep="last")
+        
+        # Write back all data
+        conn.update(worksheet="Sales", data=updated_sales_data)
+        st.success("Sales data successfully logged to Google Sheets!")
+    except Exception as e:
+        st.error(f"Error logging sales data: {e}")
+        st.stop()
+
+def log_visit_to_gsheet(conn, visit_data):
+    try:
+        existing_visit_data = conn.read(worksheet="Visits", ttl=5)
+        existing_visit_data = existing_visit_data.dropna(how="all")
+        
+        visit_data = visit_data.reindex(columns=VISIT_SHEET_COLUMNS)
+        
+        updated_visit_data = pd.concat([existing_visit_data, visit_data], ignore_index=True)
+        updated_visit_data = updated_visit_data.drop_duplicates(subset=["Visit ID"], keep="last")
+        
+        conn.update(worksheet="Visits", data=updated_visit_data)
+        st.success("Visit data successfully logged to Google Sheets!")
+    except Exception as e:
+        st.error(f"Error logging visit data: {e}")
+        st.stop()
+
+def log_attendance_to_gsheet(conn, attendance_data):
+    try:
+        existing_data = conn.read(worksheet="Attendance", ttl=5)
+        existing_data = existing_data.dropna(how="all")
+        
+        attendance_data = attendance_data.reindex(columns=ATTENDANCE_SHEET_COLUMNS)
+        
+        updated_data = pd.concat([existing_data, attendance_data], ignore_index=True)
+        updated_data = updated_data.drop_duplicates(subset=["Attendance ID"], keep="last")
+        
+        conn.update(worksheet="Attendance", data=updated_data)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+def log_ticket_to_gsheet(conn, ticket_data):
+    try:
+        existing_data = conn.read(worksheet="Tickets", usecols=list(range(len(TICKET_SHEET_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how="all")
+        updated_data = pd.concat([existing_data, ticket_data], ignore_index=True)
+        conn.update(worksheet="Tickets", data=updated_data)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+def log_travel_hotel_request(conn, request_data):
+    try:
+        existing_data = conn.read(worksheet="TravelHotelRequests", usecols=list(range(len(TRAVEL_HOTEL_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how="all")
+        updated_data = pd.concat([existing_data, request_data], ignore_index=True)
+        conn.update(worksheet="TravelHotelRequests", data=updated_data)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+def update_delivery_status(conn, invoice_number, product_name, new_status):
+    try:
+        # Read all existing data
+        sales_data = conn.read(worksheet="Sales", ttl=5)
+        sales_data = sales_data.dropna(how="all")
+        
+        # Update the delivery status for the specific record
+        mask = (sales_data['Invoice Number'] == invoice_number) & (sales_data['Product Name'] == product_name)
+        sales_data.loc[mask, 'Delivery Status'] = new_status
+        
+        # Write back the updated data
+        conn.update(worksheet="Sales", data=sales_data)
+        return True
+    except Exception as e:
+        st.error(f"Error updating delivery status: {e}")
+        return False
+
+# Authentication function
+def authenticate_employee(employee_name, passkey):
+    try:
+        employee_row = Person[Person['Employee Name'] == employee_name]
+        if not employee_row.empty:
+            employee_code = employee_row['Employee Code'].values[0]
+            return str(passkey) == str(employee_code)
+        return False
+    except Exception as e:
+        st.error(f"Authentication error: {e}")
+        return False
+
+def check_existing_attendance(employee_name):
+    try:
+        existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how="all")
+        
+        if existing_data.empty:
+            return False
+        
+        current_date = get_ist_time().strftime("%d-%m-%Y")
+        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
+        
+        existing_records = existing_data[
+            (existing_data['Employee Code'] == employee_code) & 
+            (existing_data['Date'] == current_date)
+        ]
+        
+        return not existing_records.empty
+        
+    except Exception as e:
+        st.error(f"Error checking existing attendance: {str(e)}")
+        return False
 
 
 def demo_page():
@@ -1476,34 +1620,6 @@ def record_attendance(employee_name, status, location_link="", leave_reason=""):
     except Exception as e:
         return None, f"Error creating attendance record: {str(e)}"
 
-def check_existing_attendance(employee_name):
-    try:
-        existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        
-        if existing_data.empty:
-            return False
-        
-        current_date = get_ist_time().strftime("%d-%m-%Y")
-        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
-        
-        existing_records = existing_data[
-            (existing_data['Employee Code'] == employee_code) & 
-            (existing_data['Date'] == current_date)
-        ]
-        
-        return not existing_records.empty
-        
-    except Exception as e:
-        st.error(f"Error checking existing attendance: {str(e)}")
-        return False
-
-def authenticate_employee(employee_name, passkey):
-    try:
-        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
-        return str(passkey) == str(employee_code)
-    except:
-        return False
 
 def resources_page():
     st.title("Company Resources")
@@ -1575,12 +1691,10 @@ def main():
         st.session_state.employee_name = None
 
     if not st.session_state.authenticated:
-        # Display the centered logo and heading
         display_login_header()
         
-        employee_names = Person['Employee Name'].tolist()
+        employee_names = Person['Employee Name'].dropna().tolist()
         
-        # Create centered form
         form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
         
         with form_col2:
@@ -1610,7 +1724,6 @@ def main():
                     else:
                         st.error("Invalid Password. Please try again.")
     else:
-        # Show option boxes after login
         st.title("Select Mode")
         col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
         
