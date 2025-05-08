@@ -77,8 +77,17 @@ def load_gsheet_data():
         # Clean data
         dfs = [Products, Outlet, Person, Distributors]
         for df in dfs:
+            # First drop completely empty rows
             df.dropna(how='all', inplace=True)
-            df.fillna('', inplace=True)  # Replace NaN with empty strings
+            
+            # Fill NaN values appropriately based on column type
+            for col in df.columns:
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    # For numeric columns, fill with 0 instead of empty string
+                    df[col].fillna(0, inplace=True)
+                else:
+                    # For non-numeric columns, fill with empty string
+                    df[col].fillna('', inplace=True)
         
         return Products, Outlet, Person, Distributors
     except Exception as e:
