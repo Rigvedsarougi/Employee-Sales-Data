@@ -18,3 +18,4 @@ streamlit-js-eval
 pytz
 streamlit-bokeh-events
 bokeh
+googlemaps
