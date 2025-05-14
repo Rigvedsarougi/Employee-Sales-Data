@@ -1,173 +1,98 @@
 import streamlit as st
-import pandas as pd
-import plotly.express as px
-from datetime import datetime, timedelta
-from streamlit_gsheets import GSheetsConnection
+import requests
+import geocoder
+from typing import Optional, Tuple
 
-# Set page config
-st.set_page_config(page_title="Admin Dashboard", layout="wide")
+def get_location_geocoder() -> Tuple[Optional[float], Optional[float]]:
+    """
+    Get location using geocoder library
+    """
+    g = geocoder.ip('me')
+    if g.ok:
+        return g.latlng[0], g.latlng[1]
+    return None, None
 
-# Hide Streamlit style
-hide_streamlit_style = """
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
-    header {visibility: hidden;}
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-# Constants
-LOCATION_TRACKING_SHEET = "LocationTracking"
-ADMIN_PASSWORD = "admin123"  # Change this to a more secure password
-
-# Establish connection
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-def authenticate_admin():
-    if 'admin_authenticated' not in st.session_state:
-        st.session_state.admin_authenticated = False
-    
-    if not st.session_state.admin_authenticated:
-        st.title("Admin Login")
-        password = st.text_input("Enter Admin Password", type="password")
-        
-        if st.button("Login"):
-            if password == ADMIN_PASSWORD:
-                st.session_state.admin_authenticated = True
-                st.rerun()
-            else:
-                st.error("Incorrect password")
-        return False
-    return True
-
-def get_location_data():
+def get_location_ipapi() -> Tuple[Optional[float], Optional[float]]:
+    """
+    Fallback method using ipapi.co service
+    """
     try:
-        data = conn.read(worksheet=LOCATION_TRACKING_SHEET, ttl=5)
-        data = data.dropna(how="all")
-        
-        # Convert columns to proper types
-        data['Date'] = pd.to_datetime(data['Date'], dayfirst=True)
-        data['Time'] = pd.to_datetime(data['Time'], format='%H:%M:%S').dt.time
-        data['Latitude'] = pd.to_numeric(data['Latitude'], errors='coerce')
-        data['Longitude'] = pd.to_numeric(data['Longitude'], errors='coerce')
-        
-        return data
-    except Exception as e:
-        st.error(f"Error loading location data: {e}")
-        return pd.DataFrame()
+        response = requests.get('https://ipapi.co/json/')
+        if response.status_code == 200:
+            data = response.json()
+            lat = data.get('latitude')
+            lon = data.get('longitude')
+            
+            if lat is not None and lon is not None:
+                # Store additional location data in session state
+                st.session_state.location_data = {
+                    'city': data.get('city'),
+                    'region': data.get('region'),
+                    'country': data.get('country_name'),
+                    'ip': data.get('ip')
+                }
+                return lat, lon
+    except requests.RequestException as e:
+        st.error(f"Error retrieving location from ipapi.co: {str(e)}")
+    return None, None
 
-def display_location_map(data):
-    st.subheader("Employee Locations")
+def get_location() -> Tuple[Optional[float], Optional[float]]:
+    """
+    Tries to get location first using geocoder, then falls back to ipapi.co
+    """
+    # Try geocoder first
+    lat, lon = get_location_geocoder()
     
-    # Filter active employees
-    active_data = data[data['Status'] == 'active']
+    # If geocoder fails, try ipapi
+    if lat is None:
+        st.info("Primary geolocation method unsuccessful, trying alternative...")
+        lat, lon = get_location_ipapi()
     
-    if not active_data.empty:
-        # Create map
-        fig = px.scatter_mapbox(
-            active_data,
-            lat="Latitude",
-            lon="Longitude",
-            hover_name="Employee Name",
-            hover_data=["Date", "Time", "Address", "Accuracy (m)"],
-            color="Employee Name",
-            zoom=10,
-            height=600
-        )
-        
-        fig.update_layout(mapbox_style="open-street-map")
-        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("No active location data available")
+    return lat, lon
 
-def display_location_history(data):
-    st.subheader("Location History")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        employee_filter = st.multiselect(
-            "Filter by Employee",
-            options=data['Employee Name'].unique(),
-            default=data['Employee Name'].unique()
-        )
-    with col2:
-        date_filter = st.date_input(
-            "Filter by Date",
-            value=[datetime.now().date() - timedelta(days=7), datetime.now().date()],
-            max_value=datetime.now().date()
-        )
-    with col3:
-        status_filter = st.multiselect(
-            "Filter by Status",
-            options=data['Status'].unique(),
-            default=['active', 'inactive']
-        )
-    
-    filtered_data = data[
-        (data['Employee Name'].isin(employee_filter)) &
-        (data['Date'].between(pd.to_datetime(date_filter[0]), pd.to_datetime(date_filter[1]))) &
-        (data['Status'].isin(status_filter))
-    ]
-    
-    if not filtered_data.empty:
-        st.dataframe(
-            filtered_data.sort_values(['Date', 'Time'], ascending=False),
-            use_container_width=True,
-            hide_index=True
-        )
+def show_location_details():
+    """
+    Displays the additional location details if available
+    """
+    if 'location_data' in st.session_state:
+        data = st.session_state.location_data
+        st.write("Location Details:")
+        col1, col2 = st.columns(2)
         
-        # Download button
-        csv = filtered_data.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            "Download as CSV",
-            csv,
-            "location_history.csv",
-            "text/csv",
-            key='download-location-csv'
-        )
-    else:
-        st.warning("No data matching filters")
-
-def display_analytics(data):
-    st.subheader("Analytics")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Daily activity count
-        daily_activity = data.groupby(['Date', 'Employee Name']).size().unstack().fillna(0)
-        st.bar_chart(daily_activity)
-    
-    with col2:
-        # Employee activity count
-        employee_activity = data['Employee Name'].value_counts().reset_index()
-        employee_activity.columns = ['Employee', 'Location Reports']
-        st.dataframe(employee_activity, hide_index=True)
+        with col1:
+            st.write("📍 City:", data['city'])
+            st.write("🏘️ Region:", data['region'])
+        
+        with col2:
+            st.write("🌍 Country:", data['country'])
+            st.write("🔍 IP:", data['ip'])
 
 def main():
-    if not authenticate_admin():
-        return
+    st.title("IP Geolocation Demo")
+    st.write("This app will attempt to detect your location using IP geolocation.")
     
-    st.title("Admin Dashboard - Location Tracking")
-    
-    data = get_location_data()
-    if data.empty:
-        st.warning("No location data available")
-        return
-    
-    tab1, tab2, tab3 = st.tabs(["Live Tracking", "History", "Analytics"])
-    
-    with tab1:
-        display_location_map(data)
-    
-    with tab2:
-        display_location_history(data)
-    
-    with tab3:
-        display_analytics(data)
-
+    if st.button("Get My Location", type="primary"):
+        with st.spinner("Retrieving your location..."):
+            lat, lon = get_location()
+            
+            if lat is not None and lon is not None:
+                st.success("Location retrieved successfully!")
+                
+                # Create two columns for coordinates
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Latitude", f"{lat:.4f}")
+                with col2:
+                    st.metric("Longitude", f"{lon:.4f}")
+                
+                # Show additional location details if available
+                show_location_details()
+                
+                # Display location on a map
+                st.write("📍 Location on Map:")
+                st.map(data={'lat': [lat], 'lon': [lon]}, zoom=10)
+            else:
+                st.error("Could not determine your location. Please check your internet connection and try again.")
+                
 if __name__ == "__main__":
     main()
