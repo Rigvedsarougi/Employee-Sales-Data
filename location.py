@@ -95,9 +95,9 @@ if "location_data" not in st.session_state:
     st.session_state.location_data = None
 
 # Check for POST data in query params (JS-to-Streamlit workaround)
-if "location_data" in st.experimental_get_query_params():
+if "location_data" in st.query_params():
     try:
-        loc_json = st.experimental_get_query_params()["location_data"][0]
+        loc_json = st.query_params()["location_data"][0]
         loc_data = json.loads(loc_json)
         st.session_state.location_data = loc_data
     except Exception as e:
