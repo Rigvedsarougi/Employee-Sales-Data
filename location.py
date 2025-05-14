@@ -2,6 +2,8 @@ import streamlit as st
 import json
 from geopy.geocoders import GoogleV3
 import requests
+import streamlit.components.v1 as components
+
 
 # Set page config
 st.set_page_config(page_title="Live Location Tracker", layout="wide")
