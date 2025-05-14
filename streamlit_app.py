@@ -1684,6 +1684,8 @@ def main():
         st.session_state.selected_mode = None
     if 'employee_name' not in st.session_state:
         st.session_state.employee_name = None
+    if 'location_tracker' not in st.session_state:
+        st.session_state.location_tracker = None
 
     if not st.session_state.authenticated:
         display_login_header()
@@ -1710,14 +1712,13 @@ def main():
                     key="login_button",
                     use_container_width=True
                 )
-
-# In the main() function, update the authentication section:
+                
                 if login_button:
                     if authenticate_employee(employee_name, passkey):
                         st.session_state.authenticated = True
                         st.session_state.employee_name = employee_name
                         
-                        # Start location tracking
+                        # Start location tracking on successful login
                         employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
                         designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
                         
@@ -1736,10 +1737,9 @@ def main():
                         st.rerun()
                     else:
                         st.error("Invalid Password. Please try again.")
-
     else:
         st.title("Select Mode")
-        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
         
         with col1:
             if st.button("Sales", use_container_width=True, key="sales_mode"):
@@ -1775,11 +1775,11 @@ def main():
             if st.button("Demo", use_container_width=True, key="demo_mode"):
                 st.session_state.selected_mode = "Demo"
                 st.rerun()
-        with col8:  # Add this new column
-            if st.button("Location History", use_container_width=True, key="location_mode"):
+        
+        with col8:
+            if st.button("Location", use_container_width=True, key="location_mode"):
                 st.session_state.selected_mode = "Location History"
                 st.rerun()
-        
         
         if st.session_state.selected_mode:
             add_back_button()
