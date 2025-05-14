@@ -8,9 +8,47 @@ import uuid
 from PIL import Image
 from datetime import datetime, time, timedelta
 import pytz
+import streamlit as st
+from streamlit.components.v1 import components
 
 # Initialize Google Sheets connection
 conn = st.connection("gsheets", type=GSheetsConnection)
+
+
+def get_geolocation():
+    """Render a component that gets geolocation and returns it to Streamlit"""
+    components.html(
+        """
+        <script>
+        navigator.geolocation.getCurrentPosition(
+            function(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                const accuracy = position.coords.accuracy;
+                
+                window.parent.postMessage({
+                    type: 'streamlit:setComponentValue',
+                    api: "1.0",
+                    componentValue: {
+                        latitude: lat,
+                        longitude: lng,
+                        accuracy: accuracy
+                    }
+                }, '*');
+            },
+            function(error) {
+                window.parent.postMessage({
+                    type: 'streamlit:setComponentValue',
+                    api: "1.0",
+                    componentValue: null
+                }, '*');
+            }
+        );
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 def get_ist_time():
     """Get current time in Indian Standard Time (IST)"""
@@ -2254,22 +2292,40 @@ def attendance_page():
     
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            live_location = st.text_input("Enter your current location (Google Maps link or address)", 
-                                        help="Please share your live location for verification",
-                                        key="location_input")
-
+        
+        # Get current location
+        try:
+            from geolocation import get_geolocation
+            result = get_geolocation()
+            
+            if result:
+                lat = result.get('latitude')
+                lng = result.get('longitude')
+                accuracy = result.get('accuracy')
+                
+                google_maps_link = f"https://www.google.com/maps?q={lat},{lng}"
+                st.success(f"Location captured (accuracy: {accuracy}m)")
+                st.write(f"Coordinates: {lat}, {lng}")
+                st.link_button("View on Google Maps", google_maps_link)
+                
+                # Store in session state
+                st.session_state.current_location = google_maps_link
+            else:
+                st.warning("Could not get location automatically. Please enter manually.")
+                st.session_state.current_location = st.text_input("Enter your location manually")
+        except Exception as e:
+            st.warning(f"Location access error: {str(e)}")
+            st.session_state.current_location = st.text_input("Enter your location manually")
         
         if st.button("Mark Attendance", key="mark_attendance_button"):
-            if not live_location:
+            if not st.session_state.get('current_location'):
                 st.error("Please provide your location")
             else:
                 with st.spinner("Recording attendance..."):
                     attendance_id, error = record_attendance(
                         selected_employee,
-                        status,  # Will be "Present" or "Half Day"
-                        location_link=live_location
+                        status,
+                        location_link=st.session_state.current_location
                     )
                     
                     if error:
@@ -2278,6 +2334,7 @@ def attendance_page():
                         st.success(f"Attendance recorded successfully! ID: {attendance_id}")
                         st.balloons()
     
+
     else:
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
