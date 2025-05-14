@@ -2249,8 +2249,16 @@ def attendance_page():
         st.warning("You have already marked your attendance for today.")
         return
     
-    st.subheader("Attendance Status")
-    status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
+    current_time = get_ist_time().time()
+    is_after_noon = current_time >= time(12, 0)  # 12:00 PM
+    
+    # If it's after 12 PM, force Half Day status
+    if is_after_noon:
+        st.warning("⚠️ It's after 12 PM - Attendance will be marked as Half Day")
+        status = "Half Day"
+    else:
+        st.subheader("Attendance Status")
+        status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
     
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
@@ -2260,7 +2268,6 @@ def attendance_page():
                                         help="Please share your live location for verification",
                                         key="location_input")
 
-        
         if st.button("Mark Attendance", key="mark_attendance_button"):
             if not live_location:
                 st.error("Please provide your location")
@@ -2268,7 +2275,7 @@ def attendance_page():
                 with st.spinner("Recording attendance..."):
                     attendance_id, error = record_attendance(
                         selected_employee,
-                        status,  # Will be "Present" or "Half Day"
+                        status,
                         location_link=live_location
                     )
                     
@@ -2276,6 +2283,8 @@ def attendance_page():
                         st.error(f"Failed to record attendance: {error}")
                     else:
                         st.success(f"Attendance recorded successfully! ID: {attendance_id}")
+                        if is_after_noon:
+                            st.info("Automatically marked as Half Day because it's after 12 PM")
                         st.balloons()
     
     else:
