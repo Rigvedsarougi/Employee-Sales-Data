@@ -16,3 +16,5 @@ plotly
 requests
 streamlit-js-eval
 pytz
+geolocation
+streamlit.components.v1
