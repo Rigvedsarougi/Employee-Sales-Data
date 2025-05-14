@@ -19,3 +19,4 @@ pytz
 streamlit-bokeh-events
 bokeh
 googlemaps
+geopy
