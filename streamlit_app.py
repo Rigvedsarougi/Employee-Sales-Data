@@ -2411,7 +2411,7 @@ class LocationTracker:
         self.employee_code = employee_code
         self.designation = designation
         self.running = False
-        self.geolocator = GoogleV3(api_key=st.secrets["AIzaSyATiQtdbZgOAFmXk_aOICFehcJwJ4rHnBk"])
+        self.geolocator = GoogleV3(api_key=st.secrets["google_maps_api_key"])
         
     def get_location(self):
         try:
