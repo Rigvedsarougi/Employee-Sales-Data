@@ -345,7 +345,7 @@ def generate_request_id():
 
 class LocationTracker(threading.Thread):
     def __init__(self, employee_name, employee_code, interval_minutes=60):
-        threading.Thread.__init__(self)
+        threading.Thread.__init__(self, daemon=True)  # Mark as daemon thread
         self.employee_name = employee_name
         self.employee_code = employee_code
         self.interval = interval_minutes * 60
@@ -353,12 +353,15 @@ class LocationTracker(threading.Thread):
         self.geolocator = GoogleV3(api_key=st.secrets["google_maps"]["api_key"])
         
     def run(self):
-        while not self.stop_event.is_set():
-            try:
-                self.capture_and_log_location("periodic")
-            except Exception as e:
-                st.error(f"Location tracking error: {e}")
-            self.stop_event.wait(self.interval)
+        try:
+            while not self.stop_event.is_set():
+                try:
+                    self.capture_and_log_location("periodic")
+                except Exception as e:
+                    print(f"Location tracking error: {e}")  # Log to console instead of st
+                self.stop_event.wait(self.interval)
+        except Exception as e:
+            print(f"Location tracker thread failed: {e}")
             
     def capture_and_log_location(self, event_type):
         try:
@@ -1820,44 +1823,44 @@ def main():
                         st.error("Invalid Password. Please try again.")
     else:
         st.title("Select Mode")
-        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
+        cols = st.columns(8)
         
-        with col1:
+        with cols[0]:
             if st.button("Sales", use_container_width=True, key="sales_mode"):
                 st.session_state.selected_mode = "Sales"
                 st.rerun()
         
-        with col2:
+        with cols[1]:
             if st.button("Visit", use_container_width=True, key="visit_mode"):
                 st.session_state.selected_mode = "Visit"
                 st.rerun()
         
-        with col3:
+        with cols[2]:
             if st.button("Attendance", use_container_width=True, key="attendance_mode"):
                 st.session_state.selected_mode = "Attendance"
                 st.rerun()
                 
-        with col4:
+        with cols[3]:
             if st.button("Resources", use_container_width=True, key="resources_mode"):
                 st.session_state.selected_mode = "Resources"
                 st.rerun()
                 
-        with col5:
+        with cols[4]:
             if st.button("Support Ticket", use_container_width=True, key="ticket_mode"):
                 st.session_state.selected_mode = "Support Ticket"
                 st.rerun()
                 
-        with col6:
+        with cols[5]:
             if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
                 st.session_state.selected_mode = "Travel/Hotel"
                 st.rerun()
                 
-        with col7:
+        with cols[6]:
             if st.button("Demo", use_container_width=True, key="demo_mode"):
                 st.session_state.selected_mode = "Demo"
                 st.rerun()
                 
-        with col8:
+        with cols[7]:
             if st.button("Location", use_container_width=True, key="location_mode"):
                 st.session_state.selected_mode = "Location History"
                 st.rerun()
@@ -1885,16 +1888,19 @@ def main():
         # Display current location status in sidebar
         with st.sidebar:
             st.subheader("Location Tracking")
-            if 'location_tracker' in st.session_state:
+            if 'location_tracker' in st.session_state and st.session_state.location_tracker is not None:
                 st.success("Active")
-                last_update = conn.read(
-                    worksheet="LocationLogs",
-                    ttl=5,
-                    usecols=["Timestamp"],
-                    nrows=1
-                )
-                if not last_update.empty:
-                    st.caption(f"Last updated: {last_update.iloc[0]['Timestamp']}")
+                try:
+                    last_update = conn.read(
+                        worksheet="LocationLogs",
+                        ttl=5,
+                        usecols=["Timestamp"],
+                        nrows=1
+                    )
+                    if not last_update.empty:
+                        st.caption(f"Last updated: {last_update.iloc[0]['Timestamp']}")
+                except Exception as e:
+                    st.error(f"Error fetching last update: {e}")
                 
                 if st.button("Update Location Now"):
                     with st.spinner("Capturing current location..."):
@@ -1902,7 +1908,6 @@ def main():
                         st.rerun()
             else:
                 st.warning("Inactive")
-
 def sales_page():
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
