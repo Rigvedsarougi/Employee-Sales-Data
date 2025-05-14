@@ -1,68 +1,153 @@
 import streamlit as st
-from bokeh.models import Button as BokehButton
-from bokeh.models import CustomJS
-from bokeh.layouts import column
-from streamlit_bokeh_events import streamlit_bokeh_events
-import pandas as pd
+import json
+from geopy.geocoders import GoogleV3
+import requests
 
-st.set_page_config(page_title="GPS Locator", page_icon="📍", layout="centered")
-st.title("📍 Real-Time GPS Location")
+# Set page config
+st.set_page_config(page_title="Live Location Tracker", layout="wide")
 
-st.write("Click below to get your current location using your browser's GPS.")
+# Title
+st.title("Live Location Tracker")
 
-# Streamlit fake trigger button
-show_bokeh = st.button("👉 Click Here to Get My Location")
+# Sidebar for API key input
+with st.sidebar:
+    st.header("API Configuration")
+    google_maps_api_key = st.text_input("Enter Google Maps API Key", type="password")
+    st.info("You need both Maps JavaScript API and Geocoding API enabled")
 
-if show_bokeh:
-    st.write("Now click the green button below and allow browser permission to get location.")
+# Check if API key is provided
+if not google_maps_api_key:
+    st.warning("Please enter your Google Maps API key in the sidebar")
+    st.stop()
 
-    # Real Bokeh location button
-    bokeh_button = BokehButton(label="📍 Get Location", button_type="success", width=200)
-    bokeh_button.js_on_event("button_click", CustomJS(code="""
-        navigator.geolocation.getCurrentPosition(
-            (loc) => {
-                document.dispatchEvent(new CustomEvent("GET_LOCATION", {
-                    detail: {
-                        lat: loc.coords.latitude,
-                        lon: loc.coords.longitude,
-                        accuracy: loc.coords.accuracy
-                    }
-                }));
-            },
-            (err) => {
-                document.dispatchEvent(new CustomEvent("GET_LOCATION", {
-                    detail: {
-                        error: err.message
-                    }
-                }));
-            }
+# Initialize geocoder
+geolocator = GoogleV3(api_key=google_maps_api_key)
+
+# HTML and JavaScript for getting live location
+html_code = f"""
+<div id="map" style="height: 600px; width: 100%;"></div>
+<script>
+function initMap() {{
+    // Create a map centered at (0,0) initially
+    const map = new google.maps.Map(document.getElementById("map"), {{
+        zoom: 15,
+        center: {{lat: 0, lng: 0}},
+    }});
+    
+    // Try to get the user's current location
+    if (navigator.geolocation) {{
+        navigator.geolocation.watchPosition(
+            function(position) {{
+                const userLocation = {{
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude
+                }};
+                
+                // Center the map on the user's location
+                map.setCenter(userLocation);
+                
+                // Add a marker at the user's location
+                new google.maps.Marker({{
+                    position: userLocation,
+                    map: map,
+                    title: "Your Location"
+                }});
+                
+                // Send the coordinates back to Streamlit
+                const data = {{
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy
+                }};
+                
+                // Use Streamlit's custom component communication
+                window.parent.postMessage(data, "*");
+            }},
+            function(error) {{
+                console.error("Error getting location:", error);
+                alert("Error getting your location: " + error.message);
+            }},
+            {{
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 5000
+            }}
         );
-    """))
+    }} else {{
+        alert("Geolocation is not supported by this browser.");
+    }}
+}}
+</script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key={google_maps_api_key}&callback=initMap"></script>
+"""
 
-    # Listen to the JS location event
-    result = streamlit_bokeh_events(
-        column(bokeh_button),
-        events="GET_LOCATION",
-        key="get_location_event",
-        refresh_on_update=False,
-        debounce_time=0,
-        override_height=100,
-    )
+# Display the map
+components.html(html_code, height=600)
 
-    # Show results
-    if result and "GET_LOCATION" in result:
-        loc = result["GET_LOCATION"]
-        if "error" in loc:
-            st.error(f"❌ Error: {loc['error']}")
-        else:
-            lat, lon = loc["lat"], loc["lon"]
-            accuracy = loc.get("accuracy", "N/A")
+# Placeholder for location data
+if 'location_data' not in st.session_state:
+    st.session_state.location_data = None
 
-            st.success("✅ Location retrieved successfully!")
-            col1, col2 = st.columns(2)
-            col1.metric("Latitude", f"{lat:.6f}")
-            col2.metric("Longitude", f"{lon:.6f}")
-            st.write(f"📏 Accuracy: {accuracy} meters")
+# JavaScript to Python communication
+def update_location():
+    # This function will be called when we receive location data from JavaScript
+    try:
+        # Get the arguments from JavaScript
+        args = st.session_state.get('location_args')
+        if args:
+            st.session_state.location_data = args
+    except Exception as e:
+        st.error(f"Error updating location: {e}")
 
-            st.write("### 🗺️ Your Location on Map")
-            st.map(pd.DataFrame({'lat': [lat], 'lon': [lon]}), zoom=13)
+# Display location information when available
+if st.session_state.location_data:
+    loc_data = st.session_state.location_data
+    lat, lng = loc_data['latitude'], loc_data['longitude']
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Location Coordinates")
+        st.write(f"Latitude: {lat:.6f}")
+        st.write(f"Longitude: {lng:.6f}")
+        st.write(f"Accuracy: ±{loc_data['accuracy']:.0f} meters")
+        
+        # Reverse geocoding to get address
+        try:
+            location = geolocator.reverse(f"{lat}, {lng}")
+            if location:
+                st.subheader("Address")
+                st.write(location.address)
+        except Exception as e:
+            st.error(f"Could not get address: {e}")
+    
+    with col2:
+        st.subheader("Map Data")
+        st.json(loc_data)
+else:
+    st.info("Waiting for location data... Please allow location access in your browser.")
+
+# Custom component to handle JavaScript communication
+try:
+    from streamlit.components.v1 import html, declare_component
+    
+    # This script listens for messages from the iframe and updates Streamlit
+    comm_script = """
+    <script>
+    window.addEventListener('message', function(event) {
+        // Only accept messages from the same origin
+        if (event.origin !== window.location.origin) return;
+        
+        // Send data to Streamlit
+        if (window.parent && window.parent.streamlitAPI) {
+            window.parent.streamlitAPI.updateLocation(event.data);
+        }
+    });
+    </script>
+    """
+    
+    # Register the custom component
+    declare_component("location_receiver", path=comm_script)
+    
+except ImportError:
+    st.warning("Could not import components. Some features may not work.")
