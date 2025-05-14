@@ -16,3 +16,5 @@ plotly
 requests
 streamlit-js-eval
 pytz
+streamlit-bokeh-events
+bokeh
