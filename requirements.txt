@@ -16,4 +16,3 @@ plotly
 requests
 streamlit-js-eval
 pytz
-streamlit-browser-location
