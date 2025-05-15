@@ -1847,7 +1847,7 @@ def main():
     if 'location_data' not in st.session_state:
         try:
             # This will capture the location data sent from JavaScript
-            location_json = st.experimental_get_query_params().get("location_data", [None])[0]
+            location_json = st.query_params().get("location_data", [None])[0]
             if location_json:
                 st.session_state.location_data = json.loads(location_json)
         except:
