@@ -605,19 +605,25 @@ def reverse_geocode(lat, lng, api_key):
         return None
 
 def record_location(employee_name, location_type="periodic"):
-    """Record employee location to Google Sheets"""
+    """Record employee location to Google Sheets with proper JavaScript communication"""
     try:
-        # Get employee details
-        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
-        designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
+        # Trigger the JavaScript to get location
+        st.write(
+            '<div data-st-trigger-location style="display:none;"></div>',
+            unsafe_allow_html=True
+        )
         
-        # Get current timestamp
-        timestamp = get_ist_time().strftime("%Y-%m-%d %H:%M:%S")
+        # Use a unique key to trigger the location collection
+        trigger_key = str(uuid.uuid4())
+        st.session_state.trigger_location = trigger_key
         
-        # Get location from browser
-        st.session_state.get_location = True  # Trigger the JavaScript
+        # Inject JavaScript that will respond to our trigger
+        st.write(
+            f'<script>window.parent.postMessage({{isStreamlitMessage: true, type: "streamlit:setComponentValue", key: "trigger_location", value: "{trigger_key}"}}, "*");</script>',
+            unsafe_allow_html=True
+        )
         
-        # Wait for location to be set (handled by the JavaScript callback)
+        # Wait for location to be set (with timeout)
         max_wait = 10  # seconds
         wait_time = 0
         
@@ -626,11 +632,18 @@ def record_location(employee_name, location_type="periodic"):
             wait_time += 1
         
         if 'location_data' not in st.session_state:
-            st.error("Could not retrieve location data")
+            st.error("Could not retrieve location data (timeout)")
             return False
         
         location = st.session_state.location_data
-        del st.session_state.location_data  # Clear the location data
+        del st.session_state.location_data  # Clear for next use
+        
+        # Get employee details
+        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
+        designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
+        
+        # Get current timestamp
+        timestamp = get_ist_time().strftime("%Y-%m-%d %H:%M:%S")
         
         # Reverse geocode to get address
         api_key = st.secrets["google_maps"]["google_maps_api_key"]
@@ -684,7 +697,7 @@ def stop_location_tracking():
         st.session_state.location_tracking = False
 
 def inject_location_js():
-    """Inject JavaScript to get geolocation from browser"""
+    """Inject JavaScript to get geolocation from browser and handle the response"""
     js_code = """
     <script>
     // Function to get current location
@@ -697,12 +710,13 @@ def inject_location_js():
                         lng: position.coords.longitude,
                         accuracy: position.coords.accuracy
                     };
-                    // Send data back to Streamlit
+                    // Use Streamlit's setComponentValue to send data back
                     window.parent.postMessage({
+                        isStreamlitMessage: true,
                         type: 'streamlit:setComponentValue',
-                        apikey: window.frameElement.getAttribute('apikey'),
-                        componentValue: JSON.stringify(locationData),
-                        dataType: 'json'
+                        api: window.frameElement.getAttribute('data-st-lib-version'),
+                        key: "location_data",
+                        value: JSON.stringify(locationData)
                     }, '*');
                 },
                 function(error) {
@@ -715,10 +729,10 @@ def inject_location_js():
         }
     }
     
-    // Listen for messages from Streamlit
+    // Listen for messages from Streamlit to trigger location collection
     window.addEventListener('message', function(event) {
         if (event.data.type === 'streamlit:setComponentValue' && 
-            event.data.componentValue === 'get_location') {
+            event.data.key === "trigger_location") {
             getLocation();
         }
     });
@@ -1830,10 +1844,15 @@ def main():
     # Inject JavaScript for location tracking
     inject_location_js()
 
-    # Handle location data from JavaScript
-    if 'location_data' not in st.session_state and st.session_state.get_location:
-        # This will be set by the JavaScript callback
-        pass
+    if 'location_data' not in st.session_state:
+        try:
+            # This will capture the location data sent from JavaScript
+            location_json = st.experimental_get_query_params().get("location_data", [None])[0]
+            if location_json:
+                st.session_state.location_data = json.loads(location_json)
+        except:
+            pass
+
 
     if not st.session_state.authenticated:
         display_login_header()
@@ -1863,16 +1882,22 @@ def main():
                 
                 if login_button:
                     if authenticate_employee(employee_name, passkey):
-                        st.session_state.authenticated = True
-                        st.session_state.employee_name = employee_name
+                        # Inject the JavaScript for location tracking
+                        inject_location_js()
                         
                         # Record login location
-                        record_location(employee_name, "login")
+                        location_recorded = record_location(employee_name, "login")
                         
-                        # Start periodic location tracking
-                        start_location_tracking(employee_name)
-                        
-                        st.rerun()
+                        if location_recorded:
+                            st.session_state.authenticated = True
+                            st.session_state.employee_name = employee_name
+                            
+                            # Start periodic location tracking
+                            start_location_tracking(employee_name)
+                            
+                            st.rerun()
+                        else:
+                            st.error("Failed to record login location. Please try again.")
                     else:
                         st.error("Invalid Password. Please try again.")
     else:
