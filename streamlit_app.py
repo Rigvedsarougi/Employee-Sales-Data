@@ -8,11 +8,6 @@ import uuid
 from PIL import Image
 from datetime import datetime, time, timedelta
 import pytz
-import time
-from threading import Thread
-from geopy.geocoders import GoogleV3
-import json
-from streamlit.runtime.scriptrunner import add_script_run_ctx
 
 # Initialize Google Sheets connection
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -111,21 +106,6 @@ if Products.empty or Outlet.empty or Person.empty or Distributors.empty:
     st.stop()
 
 # Constants for sheet columns (remain the same as in your original code)
-
-LOGIN_SHEET_COLUMNS = [
-    "Login ID",
-    "Employee Name",
-    "Employee Code",
-    "Designation",
-    "Login Timestamp",
-    "Logout Timestamp",
-    "Location Latitude",
-    "Location Longitude",
-    "Location Accuracy",
-    "Location Address",
-    "Device Info"
-]
-
 SALES_SHEET_COLUMNS = [
     "Invoice Number",
     "Invoice Date",
@@ -801,55 +781,6 @@ def demo_page():
                 "text/csv",
                 key='download-demo-csv'
             )
-
-def location_history_page():
-    st.title("Location History")
-    selected_employee = st.session_state.employee_name
-    
-    try:
-        login_data = conn.read(worksheet="Logins", ttl=5)
-        login_data = login_data.dropna(how='all')
-        
-        if not login_data.empty:
-            employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-            filtered_data = login_data[login_data['Employee Code'] == employee_code]
-            
-            if not filtered_data.empty:
-                # Convert timestamps to datetime for sorting
-                filtered_data['Login Timestamp'] = pd.to_datetime(filtered_data['Login Timestamp'], dayfirst=True, errors='coerce')
-                filtered_data['Logout Timestamp'] = pd.to_datetime(filtered_data['Logout Timestamp'], dayfirst=True, errors='coerce')
-                
-                # Sort by login time
-                filtered_data = filtered_data.sort_values('Login Timestamp', ascending=False)
-                
-                st.write(f"Showing {len(filtered_data)} location records")
-                
-                # Display map with all locations
-                st.subheader("Location Map")
-                st.map(filtered_data.rename(columns={
-                    'Location Latitude': 'lat',
-                    'Location Longitude': 'lon'
-                }))
-                
-                # Display table
-                st.subheader("Detailed History")
-                st.dataframe(filtered_data)
-                
-                # Add download option
-                csv = filtered_data.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    "Download Location History",
-                    csv,
-                    "location_history.csv",
-                    "text/csv",
-                    key='download-location-csv'
-                )
-            else:
-                st.info("No location records found for your account")
-        else:
-            st.info("No location data available in the system")
-    except Exception as e:
-        st.error(f"Error loading location data: {e}")
 
 def support_ticket_page():
     st.title("Support Ticket Management")
@@ -1655,7 +1586,6 @@ def resources_page():
             
             st.markdown("---")  # Divider between resources
 
-# Update the add_back_button function:
 def add_back_button():
     st.markdown("""
     <style>
@@ -1669,10 +1599,6 @@ def add_back_button():
     """, unsafe_allow_html=True)
     
     if st.button("← logout", key="back_button"):
-        if 'location_tracker' in st.session_state:
-            st.session_state.location_tracker.stop()
-            del st.session_state.location_tracker
-            
         st.session_state.authenticated = False
         st.session_state.selected_mode = None
         st.rerun()
@@ -1684,8 +1610,6 @@ def main():
         st.session_state.selected_mode = None
     if 'employee_name' not in st.session_state:
         st.session_state.employee_name = None
-    if 'location_tracker' not in st.session_state:
-        st.session_state.location_tracker = None
 
     if not st.session_state.authenticated:
         display_login_header()
@@ -1717,29 +1641,12 @@ def main():
                     if authenticate_employee(employee_name, passkey):
                         st.session_state.authenticated = True
                         st.session_state.employee_name = employee_name
-                        
-                        # Start location tracking on successful login
-                        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
-                        designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
-                        
-                        st.session_state.location_tracker = LocationTracker(
-                            conn, employee_name, employee_code, designation
-                        )
-                        
-                        # Start tracking in a background thread
-                        def run_tracker():
-                            st.session_state.location_tracker.run()
-                            
-                        tracker_thread = Thread(target=run_tracker)
-                        add_script_run_ctx(tracker_thread)
-                        tracker_thread.start()
-                        
                         st.rerun()
                     else:
                         st.error("Invalid Password. Please try again.")
     else:
         st.title("Select Mode")
-        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
+        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
         
         with col1:
             if st.button("Sales", use_container_width=True, key="sales_mode"):
@@ -1776,11 +1683,6 @@ def main():
                 st.session_state.selected_mode = "Demo"
                 st.rerun()
         
-        with col8:
-            if st.button("Location", use_container_width=True, key="location_mode"):
-                st.session_state.selected_mode = "Location History"
-                st.rerun()
-        
         if st.session_state.selected_mode:
             add_back_button()
             
@@ -1798,8 +1700,6 @@ def main():
                 travel_hotel_page()
             elif st.session_state.selected_mode == "Demo":
                 demo_page()
-            elif st.session_state.selected_mode == "Location History":
-                location_history_page()
 
 def sales_page():
     st.title("Sales Management")
@@ -2402,92 +2302,6 @@ def attendance_page():
                         st.error(f"Failed to submit leave request: {error}")
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
-
-
-class LocationTracker:
-    def __init__(self, conn, employee_name, employee_code, designation):
-        self.conn = conn
-        self.employee_name = employee_name
-        self.employee_code = employee_code
-        self.designation = designation
-        self.running = False
-        self.geolocator = GoogleV3(api_key=st.secrets["google_maps_api_key"])
-        
-    def get_location(self):
-        try:
-            # This would be replaced with actual browser geolocation in production
-            # For now, we'll simulate it
-            location = self.geolocator.geocode(self.employee_name + " India")  # Simplified for example
-            if location:
-                return {
-                    "latitude": location.latitude,
-                    "longitude": location.longitude,
-                    "accuracy": 50,  # Simulated accuracy in meters
-                    "address": location.address
-                }
-            return None
-        except Exception as e:
-            st.error(f"Location tracking error: {e}")
-            return None
-    
-    def log_location(self, login_id=None, is_logout=False):
-        location = self.get_location()
-        if location:
-            try:
-                # Get existing data
-                existing_data = self.conn.read(worksheet="Logins", ttl=5)
-                existing_data = existing_data.dropna(how='all')
-                
-                if login_id and not is_logout:
-                    # Update existing login record with new location
-                    mask = existing_data['Login ID'] == login_id
-                    if not existing_data[mask].empty:
-                        existing_data.loc[mask, 'Location Latitude'] = location['latitude']
-                        existing_data.loc[mask, 'Location Longitude'] = location['longitude']
-                        existing_data.loc[mask, 'Location Accuracy'] = location['accuracy']
-                        existing_data.loc[mask, 'Location Address'] = location['address']
-                else:
-                    # Create new record
-                    current_time = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
-                    new_record = {
-                        "Login ID": login_id if login_id else f"LOGIN-{str(uuid.uuid4())[:8].upper()}",
-                        "Employee Name": self.employee_name,
-                        "Employee Code": self.employee_code,
-                        "Designation": self.designation,
-                        "Login Timestamp": current_time,
-                        "Logout Timestamp": current_time if is_logout else "",
-                        "Location Latitude": location['latitude'],
-                        "Location Longitude": location['longitude'],
-                        "Location Accuracy": location['accuracy'],
-                        "Location Address": location['address'],
-                        "Device Info": "Web App"  # In production, you'd get actual device info
-                    }
-                    
-                    # Append new record
-                    new_df = pd.DataFrame([new_record])
-                    existing_data = pd.concat([existing_data, new_df], ignore_index=True)
-                
-                # Write back to Google Sheet
-                self.conn.update(worksheet="Logins", data=existing_data)
-                return new_record['Login ID'] if 'new_record' in locals() else login_id
-                
-            except Exception as e:
-                st.error(f"Error logging location: {e}")
-        return None
-    
-    def run(self):
-        self.running = True
-        login_id = self.log_location()  # Initial login log
-        while self.running:
-            time.sleep(3600)  # Wait for 1 hour
-            if self.running:
-                self.log_location(login_id)
-    
-    def stop(self):
-        self.running = False
-        self.log_location(is_logout=True)  # Final logout log
-
-
 
 if __name__ == "__main__":
     main()
