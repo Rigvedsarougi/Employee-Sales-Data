@@ -147,10 +147,10 @@ def record_attendance(employee_name, status, location_coords=None, check_out=Fal
             existing_data = existing_data.dropna(how='all')
             
             # Find today's check-in record for this employee
-            mask = [
+            mask = (
                 (existing_data['Employee Code'] == employee_code) & 
                 (existing_data['Date'] == current_date) & 
-                (existing_data['Check-out Time'].isna()]
+                (existing_data['Check-out Time'].isna())
             
             if not existing_data[mask].empty:
                 # Calculate duration
