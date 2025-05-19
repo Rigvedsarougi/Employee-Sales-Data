@@ -373,7 +373,7 @@ def demo_page():
         )
 
         st.subheader("Outlet Details")
-        outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="demo_outlet_option")
+        outlet_option = st.radio("Outlet Selection", ["Enter manually", "Select from list"], key="demo_outlet_option")
         
         if outlet_option == "Select from list":
             outlet_names = Outlet['Shop Name'].tolist()
@@ -1781,7 +1781,7 @@ def sales_page():
             st.text_input("Territory", value=distributor_territory, disabled=True, key="distributor_territory_display")
 
         st.subheader("Outlet Details")
-        outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="outlet_option")
+        outlet_option = st.radio("Outlet Selection", ["Enter manually", "Select from list"], key="outlet_option")
         
         if outlet_option == "Select from list":
             outlet_names = Outlet['Shop Name'].tolist()
@@ -2097,7 +2097,7 @@ def visit_page():
     
     with tab1:
         st.subheader("Outlet Details")
-        outlet_option = st.radio("Outlet Selection", ["Select from list", "Enter manually"], key="visit_outlet_option")
+        outlet_option = st.radio("Outlet Selection", ["Enter manually", "Select from list"], key="visit_outlet_option")
         
         if outlet_option == "Select from list":
             outlet_names = Outlet['Shop Name'].tolist()
