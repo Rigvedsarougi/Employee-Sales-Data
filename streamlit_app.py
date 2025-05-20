@@ -62,26 +62,6 @@ hide_footer_style = """
 
 st.markdown(hide_footer_style, unsafe_allow_html=True)
 
-hide_streamlit_style = """
-    <style>
-    /* Hide main menu */
-    #MainMenu {visibility: hidden;}
-    /* Hide footer */
-    footer {visibility: hidden;}
-    /* Optionally, hide the “Made with ♥ by Streamlit” text before CSS3-generated content */
-    footer:before {visibility: hidden;}
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-hide_streamlit_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            </style>
-            """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
-
 
 def validate_data_before_write(df, expected_columns):
     """Validate data structure before writing to Google Sheets"""
