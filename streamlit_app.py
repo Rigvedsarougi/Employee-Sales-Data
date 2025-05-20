@@ -35,12 +35,13 @@ def display_login_header():
         """, unsafe_allow_html=True)
 
 
+
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
     header {visibility: hidden;}
+    .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
