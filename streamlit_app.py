@@ -508,6 +508,7 @@ def demo_page():
                 
                 # Convert Demo Date to datetime
                 demo_data['Demo Date'] = pd.to_datetime(demo_data['Demo Date'], dayfirst=True, errors='coerce')
+                demo_data['Duration (minutes)'] = pd.to_numeric(demo_data['Duration (minutes)'], errors='coerce')
                 
                 # Filter for current employee
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
