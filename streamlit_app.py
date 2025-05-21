@@ -9,6 +9,21 @@ from PIL import Image
 from datetime import datetime, time, timedelta
 import pytz
 
+import gspread
+from google.oauth2.service_account import Credentials
+
+# ——— gspread client initialization ———
+_sa_info     = st.secrets["connections"]["gsheets"]
+_scopes      = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+_creds       = Credentials.from_service_account_info(_sa_info, scopes=_scopes)
+_gs_client   = gspread.authorize(_creds)
+# open the spreadsheet by its URL from secrets
+_spreadsheet = _gs_client.open_by_url(_sa_info["spreadsheet"])
+
+
 def get_ist_time():
     """Get current time in Indian Standard Time (IST)"""
     utc_now = datetime.now(pytz.utc)
@@ -1412,38 +1427,31 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, out
 
 def record_attendance(employee_name, status, location_link="", leave_reason=""):
     try:
-        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
-        designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
-        current_date = get_ist_time().strftime("%d-%m-%Y")
-        current_datetime = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
-        check_in_time = get_ist_time().strftime("%H:%M:%S")
-        
+        # 1) Build the row in the exact ATTENDANCE_SHEET_COLUMNS order
         attendance_id = generate_attendance_id()
-        
-        attendance_data = {
-            "Attendance ID": attendance_id,
-            "Employee Name": employee_name,
-            "Employee Code": employee_code,
-            "Designation": designation,
-            "Date": current_date,
-            "Status": status,
-            "Location Link": location_link,
-            "Leave Reason": leave_reason,
-            "Check-in Time": check_in_time,
-            "Check-in Date Time": current_datetime
-        }
-        
-        attendance_df = pd.DataFrame([attendance_data])
-        
-        success, error = log_attendance_to_gsheet(conn, attendance_df)
-        
-        if success:
-            return attendance_id, None
-        else:
-            return None, error
-            
+        now_dt        = get_ist_time()
+        row = [
+            attendance_id,
+            employee_name,
+            Person.loc[Person['Employee Name']==employee_name,'Employee Code'].iat[0],
+            Person.loc[Person['Employee Name']==employee_name,'Designation'].iat[0],
+            now_dt.strftime("%d-%m-%Y"),           # Date
+            status,                                # Present/Half Day/Leave
+            location_link,                         # Google Maps link or text
+            leave_reason,                          # if any
+            now_dt.strftime("%H:%M:%S"),           # Check-in Time
+            now_dt.strftime("%d-%m-%Y %H:%M:%S"),  # Check-in Date Time
+        ]
+
+        # 2) Append only that one row—leaves all existing data intact
+        ws = _spreadsheet.worksheet("Attendance")
+        ws.append_row(row, value_input_option="USER_ENTERED")
+
+        return attendance_id, None
+
     except Exception as e:
-        return None, f"Error creating attendance record: {str(e)}"
+        return None, f"Error creating attendance record: {e}"
+
 
 def check_existing_attendance(employee_name):
     try:
