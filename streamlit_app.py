@@ -1103,8 +1103,22 @@ def log_ticket_to_gsheet(conn, ticket_df):
 
 
 def log_travel_hotel_request(conn, request_df):
-    rows = request_df[TRAVEL_HOTEL_COLUMNS].values.tolist()
-    safe_sheet_operation(conn.append, "TravelHotelRequests", rows)
+    """
+    Append a single travel/hotel request row to the 'TravelHotelRequests' sheet.
+    """
+    try:
+        # request_df should be a one‐row DataFrame
+        req = request_df.iloc[0]
+        # Build the row in the exact TRAVEL_HOTEL_COLUMNS order, defaulting missing to ""
+        row = [ req.get(col, "") for col in TRAVEL_HOTEL_COLUMNS ]
+
+        ws = _spreadsheet.worksheet("TravelHotelRequests")
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return True, None
+
+    except Exception as e:
+        return False, str(e)
+
 
 def log_sales_to_gsheet(conn, sales_df):
     try:
