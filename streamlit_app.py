@@ -10,6 +10,35 @@ import pytz
 import gspread
 from google.oauth2.service_account import Credentials
 
+
+def update_invoice_delivery_status(invoice_number: str, new_status: str) -> bool:
+    """
+    Update only the Delivery Status field for every row matching invoice_number.
+    Returns True on success.
+    """
+    try:
+        ws = get_worksheet("Sales")
+        # Fetch all records once
+        records = ws.get_all_records()
+        if not records:
+            return False
+
+        # Find column indices (1-based)
+        headers = ws.row_values(1)
+        inv_col = headers.index("Invoice Number") + 1
+        status_col = headers.index("Delivery Status") + 1
+
+        # Iterate rows and update only the status cell
+        for row_idx, rec in enumerate(records, start=2):
+            if str(rec.get("Invoice Number")) == invoice_number:
+                ws.update_cell(row_idx, status_col, new_status)
+
+        return True
+    except Exception as e:
+        st.error(f"Error updating delivery status: {e}")
+        return False
+
+
 # Initialize gspread client
 def init_gsheet_connection():
     sa_info = st.secrets["connections"]["gsheets"]
@@ -1807,36 +1836,28 @@ def sales_page():
         invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
         
         if not invoice_details.empty:
-            with st.form(key='delivery_status_form'):
-                current_status = invoice_details.iloc[0].get('Delivery Status', 'Pending')
-                
+
+
+            with st.form(key=f"delivery_status_form_{selected_invoice}"):
+                # read current
+                current_status = invoice_details.iloc[0].get("Delivery Status", "Pending")
                 new_status = st.selectbox(
                     "Update Delivery Status",
                     ["Pending", "Order Done", "Delivery Done"],
-                    index=["Pending", "Order Done", "Delivery Done"].index(current_status) 
-                    if current_status in ["Pending", "Order Done", "Delivery Done"] else 0,
+                    index=["Pending", "Order Done", "Delivery Done"].index(current_status)
+                           if current_status in ["Pending", "Order Done", "Delivery Done"] else 0,
                     key=f"status_{selected_invoice}"
                 )
-                
                 submitted = st.form_submit_button("Update Status")
-                
+            
                 if submitted:
-                    with st.spinner("Updating delivery status..."):
-                        try:
-                            ws = get_worksheet("Sales")
-                            data = ws.get_all_records()
-                            all_sales_data = pd.DataFrame(data)
-                            
-                            mask = all_sales_data['Invoice Number'] == selected_invoice
-                            all_sales_data.loc[mask, 'Delivery Status'] = new_status
-                            
-                            ws.clear()
-                            ws.append_rows([all_sales_data.columns.tolist()] + all_sales_data.values.tolist())
-                            
+                    with st.spinner("Updating delivery status…"):
+                        success = update_invoice_delivery_status(selected_invoice, new_status)
+                        if success:
                             st.success(f"Delivery status updated to '{new_status}' for invoice {selected_invoice}!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error updating delivery status: {e}")
+                            st.experimental_rerun()
+                        else:
+                            st.error("Failed to update delivery status.")
         
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
