@@ -1573,7 +1573,7 @@ def sales_page():
                 with cols[2]:
                     discount_str = st.text_input(
                         f"Discount for {product}",
-                        placeholder="0.00",
+                        placeholder="Discount %",
                         key=f"discount_{product}",
                         label_visibility="collapsed"
                     )
@@ -1587,7 +1587,7 @@ def sales_page():
                 with cols[3]:
                     qty_str = st.text_input(
                         f"Qty for {product}",
-                        placeholder="1",
+                        placeholder="1      (Quantity)",
                         key=f"qty_{product}",
                         label_visibility="collapsed"
                     )
