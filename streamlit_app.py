@@ -1101,10 +1101,9 @@ def log_travel_hotel_request(conn, request_df):
     rows = request_df[TRAVEL_HOTEL_COLUMNS].values.tolist()
     safe_sheet_operation(conn.append, "TravelHotelRequests", rows)
 
-def log_sales_to_gsheet(sales_df):
+def log_sales_to_gsheet(conn, sales_df):
     try:
         ws = _spreadsheet.worksheet("Sales")
-        # append each new sale row one at a time
         for _, sale in sales_df.iterrows():
             row = [ sale[col] for col in SALES_SHEET_COLUMNS ]
             ws.append_row(row, value_input_option="USER_ENTERED")
@@ -1112,6 +1111,7 @@ def log_sales_to_gsheet(sales_df):
     except Exception as e:
         st.error(f"Error appending sales data: {e}")
         st.stop()
+
 
 
 def update_delivery_status(conn, invoice_number, product_name, new_status):
