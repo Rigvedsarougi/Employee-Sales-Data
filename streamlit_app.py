@@ -1084,11 +1084,15 @@ def travel_hotel_page():
             st.error(f"Error retrieving travel/hotel requests: {str(e)}")
 
 
-def log_ticket_to_gsheet(ticket_df):
+def log_ticket_to_gsheet(conn, ticket_df):
+    """
+    Append a single ticket row to the 'Tickets' sheet.
+    """
     try:
-        # we assume ticket_df has exactly one row
+        # ticket_df is a one-row DataFrame
         ticket = ticket_df.iloc[0]
-        row = [ ticket[col] for col in TICKET_SHEET_COLUMNS ]
+        # build the row in the exact TICKET_SHEET_COLUMNS order
+        row = [ ticket.get(col, "") for col in TICKET_SHEET_COLUMNS ]
 
         ws = _spreadsheet.worksheet("Tickets")
         ws.append_row(row, value_input_option="USER_ENTERED")
@@ -1096,6 +1100,7 @@ def log_ticket_to_gsheet(ticket_df):
 
     except Exception as e:
         return False, str(e)
+
 
 def log_travel_hotel_request(conn, request_df):
     rows = request_df[TRAVEL_HOTEL_COLUMNS].values.tolist()
