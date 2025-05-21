@@ -239,11 +239,15 @@ ATTENDANCE_SHEET_COLUMNS = [
     "Designation",
     "Date",
     "Status",
-    "Location Link",
     "Leave Reason",
     "Check-in Time",
-    "Check-in Date Time"
+    "Check-out Time",
+    "Check-in Date Time",
+    "Check-out Date Time",
+    "Total Working Hours",
+    "Location Link",
 ]
+
 
 TICKET_SHEET_COLUMNS = [
     "Ticket ID",
@@ -599,9 +603,10 @@ def demo_page():
                 ws = get_worksheet("Demos")
                 data = ws.get_all_records()
                 demo_data = pd.DataFrame(data)
-                
+
                 if not demo_data.empty:
                     demo_data['Demo Date'] = pd.to_datetime(demo_data['Demo Date'], dayfirst=True, errors='coerce')
+                    demo_data['Duration (minutes)'] = pd.to_numeric(demo_data['Duration (minutes)'], errors='coerce')
                     employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
                     filtered_data = demo_data[demo_data['Employee Code'] == employee_code]
                     return filtered_data.sort_values('Demo Date', ascending=False)
