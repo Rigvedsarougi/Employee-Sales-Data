@@ -475,7 +475,6 @@ def demo_page():
     
     tab1, tab2 = st.tabs(["New Demo", "Demo History"])
     
-    # --- New Demo Tab ---
     with tab1:
         st.subheader("Partner Employee")
         partner_employee = st.selectbox(
@@ -506,8 +505,8 @@ def demo_page():
             outlet_name = st.text_input("Outlet Name", key="demo_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="demo_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="demo_outlet_address")
-            outlet_state = st.text_input("Outlet State", key="demo_outlet_state")
-            outlet_city = st.text_input("Outlet City", key="demo_outlet_city")
+            outlet_state = st.text_input("Outlet State", "", key="demo_outlet_state")
+            outlet_city = st.text_input("Outlet City", "", key="demo_outlet_city")
 
         st.subheader("Demo Details")
         demo_date = st.date_input("Demo Date", key="demo_date")
@@ -541,17 +540,21 @@ def demo_page():
         if st.button("Record Demo", key="record_demo_button"):
             if outlet_name and selected_products:
                 current_datetime = get_ist_time()
+                
                 if check_in_time is None:
                     check_in_time = current_datetime.time()
+                check_in_datetime = datetime.combine(demo_date, check_in_time)
+                
                 if check_out_time is None:
                     check_out_time = current_datetime.time()
-                check_in_datetime = datetime.combine(demo_date, check_in_time)
                 check_out_datetime = datetime.combine(demo_date, check_out_time)
+                
                 duration = (check_out_datetime - check_in_datetime).total_seconds() / 60
-
+                
                 demo_id = f"DEMO-{current_datetime.strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+                
                 partner_employee_code = Person[Person['Employee Name'] == partner_employee]['Employee Code'].values[0]
-
+                
                 demo_data = {
                     "Demo ID": demo_id,
                     "Employee Name": selected_employee,
@@ -575,9 +578,10 @@ def demo_page():
                     "Products": "|".join(selected_products),
                     "Quantities": "|".join(quantities)
                 }
-
+                
                 demo_df = pd.DataFrame([demo_data], columns=DEMO_SHEET_COLUMNS)
                 success, error = log_demo_to_gsheet(demo_df)
+                
                 if success:
                     st.success(f"Demo {demo_id} recorded successfully!")
                     st.balloons()
@@ -585,43 +589,33 @@ def demo_page():
                     st.error(f"Failed to record demo: {error}")
             else:
                 st.error("Please fill all required fields (Outlet and at least one product).")
-
-    # --- Demo History Tab ---
+    
     with tab2:
         st.subheader("Demo History")
-
+        
         @st.cache_data(ttl=300)
         def load_demo_data():
             try:
                 ws = get_worksheet("Demos")
                 data = ws.get_all_records()
                 demo_data = pd.DataFrame(data)
+                
                 if not demo_data.empty:
-                    demo_data['Demo Date'] = pd.to_datetime(
-                        demo_data['Demo Date'], dayfirst=True, errors='coerce'
-                    )
-                    # ensure duration is numeric
-                    demo_data['Duration (minutes)'] = pd.to_numeric(
-                        demo_data['Duration (minutes)'], errors='coerce'
-                    )
-                    employee_code = Person[
-                        Person['Employee Name'] == selected_employee
-                    ]['Employee Code'].values[0]
-                    filtered_data = demo_data[
-                        demo_data['Employee Code'] == employee_code
-                    ]
+                    demo_data['Demo Date'] = pd.to_datetime(demo_data['Demo Date'], dayfirst=True, errors='coerce')
+                    employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+                    filtered_data = demo_data[demo_data['Employee Code'] == employee_code]
                     return filtered_data.sort_values('Demo Date', ascending=False)
                 return pd.DataFrame()
             except Exception as e:
                 st.error(f"Error loading demo data: {e}")
                 return pd.DataFrame()
-
+        
         demo_data = load_demo_data()
+        
         if demo_data.empty:
             st.warning("No demo records found for your account")
             return
-
-        # Filters
+            
         with st.expander("🔍 Search Filters", expanded=True):
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -630,33 +624,39 @@ def demo_page():
                 demo_date_search = st.date_input("Demo Date", key="demo_date_search")
             with col3:
                 outlet_name_search = st.text_input("Outlet Name", key="demo_outlet_search")
+            
             if st.button("Apply Filters", key="search_demo_button"):
                 st.rerun()
-
+        
         filtered_data = demo_data.copy()
+        
         if demo_id_search:
             filtered_data = filtered_data[
                 filtered_data['Demo ID'].str.contains(demo_id_search, case=False, na=False)
             ]
+        
         if demo_date_search:
             date_str = demo_date_search.strftime("%d-%m-%Y")
             filtered_data = filtered_data[
                 filtered_data['Demo Date'].dt.strftime('%d-%m-%Y') == date_str
             ]
+        
         if outlet_name_search:
             filtered_data = filtered_data[
                 filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
             ]
-
+        
         if filtered_data.empty:
             st.warning("No matching records found")
             return
-
+            
         st.write(f"📄 Showing {len(filtered_data)} of your demos")
+        
         summary_cols = [
             'Demo ID', 'Demo Date', 'Outlet Name', 'Partner Employee',
             'Check-in Time', 'Check-out Time', 'Duration (minutes)', 'Outlet Review'
         ]
+        
         st.dataframe(
             filtered_data[summary_cols],
             column_config={
@@ -665,51 +665,55 @@ def demo_page():
             use_container_width=True,
             hide_index=True
         )
-
+        
         selected_demo = st.selectbox(
             "Select demo to view details",
             filtered_data['Demo ID'],
             key="demo_selection"
         )
-
-        demo_details = filtered_data[filtered_data['Demo ID'] == selected_demo].iloc[0]
-        st.subheader(f"Demo {selected_demo} Details")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Date", demo_details['Demo Date'].strftime('%d-%m-%Y'))
-            st.metric("Outlet", str(demo_details['Outlet Name']))
-            st.metric("Contact", str(demo_details['Outlet Contact']))
-            st.metric("Partner", str(demo_details['Partner Employee']))
-        with col2:
-            raw_duration = demo_details['Duration (minutes)']
-            duration = float(raw_duration) if isinstance(raw_duration, str) else raw_duration
-            st.metric("Duration", f"{duration:.1f} minutes")
-            st.metric("Review", str(demo_details['Outlet Review']))
-
-        st.subheader("Products Demonstrated")
-        products = demo_details['Products'].split("|")
-        quantities = demo_details['Quantities'].split("|")
-        product_df = pd.DataFrame({
-            "Product": products,
-            "Quantity": quantities
-        })
-        st.dataframe(
-            product_df,
-            use_container_width=True,
-            hide_index=True
-        )
-
-        st.subheader("Remarks")
-        st.write(demo_details['Remarks'])
-
-        csv = filtered_data.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            "Download Demo History",
-            csv,
-            "demo_history.csv",
-            "text/csv",
-            key='download-demo-csv'
-        )
+        
+        if not filtered_data.empty:
+            demo_details = filtered_data[filtered_data['Demo ID'] == selected_demo].iloc[0]
+            
+            st.subheader(f"Demo {selected_demo} Details")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Date", demo_details['Demo Date'].strftime('%d-%m-%Y'))
+                st.metric("Outlet", str(demo_details['Outlet Name']))
+                st.metric("Contact", str(demo_details['Outlet Contact']))
+                st.metric("Partner", str(demo_details['Partner Employee']))
+            with col2:
+                st.metric("Check-in", str(demo_details['Check-in Time']))
+                st.metric("Check-out", str(demo_details['Check-out Time']))
+                st.metric("Duration", f"{demo_details['Duration (minutes)']:.1f} minutes")
+                st.metric("Review", str(demo_details['Outlet Review']))
+            
+            st.subheader("Products Demonstrated")
+            products = demo_details['Products'].split("|")
+            quantities = demo_details['Quantities'].split("|")
+            
+            product_df = pd.DataFrame({
+                "Product": products,
+                "Quantity": quantities
+            })
+            
+            st.dataframe(
+                product_df,
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            st.subheader("Remarks")
+            st.write(demo_details['Remarks'])
+            
+            csv = filtered_data.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "Download Demo History",
+                csv,
+                "demo_history.csv",
+                "text/csv",
+                key='download-demo-csv'
+            )
 
 def support_ticket_page():
     st.title("Support Ticket Management")
@@ -1794,7 +1798,6 @@ def sales_page():
         
         st.write(f"📄 Showing {len(invoice_summary)} of your invoices")
         
-        # Display the summary table
         st.dataframe(
             invoice_summary,
             column_config={
@@ -1817,19 +1820,14 @@ def sales_page():
             key="invoice_selection"
         )
         
-        # Delivery Status Section
         st.subheader("Delivery Status Management")
         
-        # Get all products for the selected invoice
         invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
         
         if not invoice_details.empty:
-            # Create a form for delivery status updates
             with st.form(key='delivery_status_form'):
-                # Get current status for the invoice
                 current_status = invoice_details.iloc[0].get('Delivery Status', 'Pending')
                 
-                # Display status selection
                 new_status = st.selectbox(
                     "Update Delivery Status",
                     ["Pending", "Order Done", "Delivery Done"],
@@ -1838,31 +1836,26 @@ def sales_page():
                     key=f"status_{selected_invoice}"
                 )
                 
-                # Submit button for the form
                 submitted = st.form_submit_button("Update Status")
                 
                 if submitted:
                     with st.spinner("Updating delivery status..."):
                         try:
-                            # Get all sales data
                             ws = get_worksheet("Sales")
-                            all_sales_data = pd.DataFrame(ws.get_all_records())
+                            data = ws.get_all_records()
+                            all_sales_data = pd.DataFrame(data)
                             
-                            # Update the status for all rows with this invoice number
                             mask = all_sales_data['Invoice Number'] == selected_invoice
                             all_sales_data.loc[mask, 'Delivery Status'] = new_status
                             
-                            # Clear and rewrite the worksheet
                             ws.clear()
-                            ws.append_row(SALES_SHEET_COLUMNS)  # Add headers
-                            ws.append_rows(all_sales_data.values.tolist())  # Add data
+                            ws.append_rows([all_sales_data.columns.tolist()] + all_sales_data.values.tolist())
                             
                             st.success(f"Delivery status updated to '{new_status}' for invoice {selected_invoice}!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error updating delivery status: {e}")
         
-        # Display invoice details
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
             original_invoice_date = invoice_data['Invoice Date'].strftime('%d-%m-%Y')
@@ -1874,7 +1867,6 @@ def sales_page():
                 st.metric("Outlet", str(invoice_data['Outlet Name']))
                 st.metric("Contact", str(invoice_data['Outlet Contact']))
             with col2:
-                # Calculate correct total for this invoice
                 invoice_total = invoice_details['Grand Total'].sum()
                 st.metric("Total Amount", f"₹{invoice_total:.2f}")
                 st.metric("Payment Status", str(invoice_data['Payment Status']).capitalize())
@@ -1890,7 +1882,6 @@ def sales_page():
                 'Grand Total'
             ]].copy()
             
-            # Format display
             product_display['Product Name'] = product_display['Product Name'].astype(str)
             product_display['Quantity'] = product_display['Quantity'].astype(int)
             
@@ -1953,8 +1944,6 @@ def sales_page():
 def visit_page():
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
-
-    # Empty remarks since we removed the location input
     visit_remarks = ""
 
     tab1, tab2 = st.tabs(["New Visit", "Visit History"])
@@ -1974,7 +1963,6 @@ def visit_page():
             outlet_state = outlet_details['State']
             outlet_city = outlet_details['City']
             
-            # Show outlet details like distributor details
             st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display")
             st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
             st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
@@ -2009,7 +1997,6 @@ def visit_page():
                 entry_datetime = datetime.combine(today, entry_time)
                 exit_datetime = datetime.combine(today, exit_time)
                 
-                # No visit selfie upload
                 visit_selfie_path = None
                 
                 visit_id = record_visit(
@@ -2051,14 +2038,12 @@ def visit_page():
                     filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
                 
                 if not filtered_data.empty:
-                    # Display only the most relevant columns
                     display_columns = [
                         'Visit ID', 'Visit Date', 'Outlet Name', 'Visit Purpose', 'Visit Notes',
                         'Entry Time', 'Exit Time', 'Visit Duration (minutes)', 'Remarks'
                     ]
                     st.dataframe(filtered_data[display_columns])
                     
-                    # Add download option
                     csv = filtered_data.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         "Download as CSV",
@@ -2099,7 +2084,7 @@ def attendance_page():
                 with st.spinner("Recording attendance..."):
                     attendance_id, error = record_attendance(
                         selected_employee,
-                        status,  # Will be "Present" or "Half Day"
+                        status,
                         location_link=live_location
                     )
                     
@@ -2143,12 +2128,10 @@ def main():
         st.session_state.employee_name = None
 
     if not st.session_state.authenticated:
-        # Display the centered logo and heading
         display_login_header()
         
         employee_names = Person['Employee Name'].tolist()
         
-        # Create centered form
         form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
         
         with form_col2:
@@ -2178,7 +2161,6 @@ def main():
                     else:
                         st.error("Invalid Password. Please try again.")
     else:
-        # Show option boxes after login
         st.title("Select Mode")
         col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
         
