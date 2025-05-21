@@ -440,7 +440,7 @@ def demo_page():
                     step=1,
                     key=f"demo_qty_{idx}"
                 )
-                quantities.append(str(qty))
+                quantities.append(qty)
 
         if st.button("Record Demo", key="record_demo_button"):
             if outlet_name and selected_products:
@@ -456,36 +456,42 @@ def demo_page():
                 demo_id = f"DEMO-{current_datetime.strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
                 partner_employee_code = Person.loc[Person['Employee Name'] == partner_employee, 'Employee Code'].iat[0]
 
-                demo_data = {
-                    "Demo ID": demo_id,
-                    "Employee Name": selected_employee,
-                    "Employee Code": Person.loc[Person['Employee Name'] == selected_employee, 'Employee Code'].iat[0],
-                    "Designation": Person.loc[Person['Employee Name'] == selected_employee, 'Designation'].iat[0],
-                    "Partner Employee": partner_employee,
-                    "Partner Employee Code": partner_employee_code,
-                    "Outlet Name": outlet_name,
-                    "Outlet Contact": outlet_contact,
-                    "Outlet Address": outlet_address,
-                    "Outlet State": outlet_state,
-                    "Outlet City": outlet_city,
-                    "Demo Date": demo_date.strftime("%d-%m-%Y"),
-                    "Check-in Time": check_in_datetime.strftime("%H:%M:%S"),
-                    "Check-out Time": check_out_datetime.strftime("%H:%M:%S"),
-                    "Check-in Date Time": current_datetime.strftime("%d-%m-%Y %H:%M:%S"),
-                    "Duration (minutes)": round(duration, 2),
-                    "Outlet Review": outlet_review,
-                    "Remarks": remarks,
-                    "Status": "Completed",
-                    "Products": "|".join(selected_products),
-                    "Quantities": "|".join(quantities)
-                }
+                # Build raw row in correct order
+                raw_row = [
+                    demo_id,
+                    selected_employee,
+                    Person.loc[Person['Employee Name'] == selected_employee, 'Employee Code'].iat[0],
+                    Person.loc[Person['Employee Name'] == selected_employee, 'Designation'].iat[0],
+                    partner_employee,
+                    partner_employee_code,
+                    outlet_name,
+                    outlet_contact,
+                    outlet_address,
+                    outlet_state,
+                    outlet_city,
+                    demo_date.strftime("%d-%m-%Y"),
+                    check_in_datetime.strftime("%H:%M:%S"),
+                    check_out_datetime.strftime("%H:%M:%S"),
+                    round(duration, 2),
+                    outlet_review,
+                    remarks,
+                    "Completed",
+                    "|".join(selected_products),
+                    "|".join(str(q) for q in quantities)
+                ]
+
+                # Convert numpy scalars to Python types
+                row = []
+                for v in raw_row:
+                    try:
+                        # numpy scalar
+                        row.append(v.item())
+                    except:
+                        row.append(v)
 
                 try:
-                    # append via gspread
-                    row = [demo_data[col] for col in DEMO_SHEET_COLUMNS]
                     ws = _spreadsheet.worksheet("Demos")
                     ws.append_row(row, value_input_option="USER_ENTERED")
-
                     st.success(f"Demo {demo_id} recorded successfully!")
                     st.balloons()
                 except Exception as e:
@@ -564,7 +570,7 @@ def demo_page():
                 st.metric("Review", details['Outlet Review'])
 
             st.subheader("Products Demonstrated")
-            prods = details['Products'].split("|" )
+            prods = details['Products'].split("|")
             qts   = details['Quantities'].split("|")
             prod_df = pd.DataFrame({"Product": prods, "Quantity": qts})
             st.dataframe(prod_df, use_container_width=True, hide_index=True)
