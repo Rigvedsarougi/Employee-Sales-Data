@@ -10,35 +10,6 @@ import pytz
 import gspread
 from google.oauth2.service_account import Credentials
 
-
-def update_invoice_delivery_status(invoice_number: str, new_status: str) -> bool:
-    """
-    Update only the Delivery Status field for every row matching invoice_number.
-    Returns True on success.
-    """
-    try:
-        ws = get_worksheet("Sales")
-        # Fetch all records once
-        records = ws.get_all_records()
-        if not records:
-            return False
-
-        # Find column indices (1-based)
-        headers = ws.row_values(1)
-        inv_col = headers.index("Invoice Number") + 1
-        status_col = headers.index("Delivery Status") + 1
-
-        # Iterate rows and update only the status cell
-        for row_idx, rec in enumerate(records, start=2):
-            if str(rec.get("Invoice Number")) == invoice_number:
-                ws.update_cell(row_idx, status_col, new_status)
-
-        return True
-    except Exception as e:
-        st.error(f"Error updating delivery status: {e}")
-        return False
-
-
 # Initialize gspread client
 def init_gsheet_connection():
     sa_info = st.secrets["connections"]["gsheets"]
@@ -1558,8 +1529,7 @@ def sales_page():
     selected_employee = st.session_state.employee_name
     sales_remarks = ""
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
-
-    # --- New Sale Tab ---
+    
     with tab1:
         discount_category = Person[Person['Employee Name'] == selected_employee]['Discount Category'].values[0]
 
@@ -1575,36 +1545,57 @@ def sales_page():
 
         if selected_products:
             st.markdown("### Product Prices & Discounts")
-            cols_header = st.columns([3, 2, 2, 2])
-            cols_header[0].markdown("**Product**")
-            cols_header[1].markdown("**Price (INR)**")
-            cols_header[2].markdown("**Discount %**")
-            cols_header[3].markdown("**Quantity**")
-
+            price_cols = st.columns(4)
+            with price_cols[0]:
+                st.markdown("**Product**")
+            with price_cols[1]:
+                st.markdown("**Price (INR)**")
+            with price_cols[2]:
+                st.markdown("**Discount %**")
+            with price_cols[3]:
+                st.markdown("**Quantity**")
+            
             subtotal = 0
             for product in selected_products:
-                data = Products[Products['Product Name'] == product].iloc[0]
-                unit_price = float(data.get(discount_category, data['Price']))
-
-                cols = st.columns([3, 2, 2, 2])
-                cols[0].text(product)
-                cols[1].text(f"₹{unit_price:.2f}")
-                prod_discount = cols[2].number_input(
-                    f"",
-                    min_value=0.0, max_value=100.0,
-                    value=0.0, step=0.1,
-                    key=f"discount_{product}", label_visibility="collapsed"
-                )
-                product_discounts.append(prod_discount)
-                qty = cols[3].number_input(
-                    f"",
-                    min_value=1, value=1, step=1,
-                    key=f"qty_{product}", label_visibility="collapsed"
-                )
-                quantities.append(qty)
-                subtotal += unit_price * (1 - prod_discount/100) * qty
-
+                product_data = Products[Products['Product Name'] == product].iloc[0]
+                
+                if discount_category in product_data:
+                    unit_price = float(product_data[discount_category])
+                else:
+                    unit_price = float(product_data['Price'])
+                
+                cols = st.columns(4)
+                with cols[0]:
+                    st.text(product)
+                with cols[1]:
+                    st.text(f"₹{unit_price:.2f}")
+                with cols[2]:
+                    prod_discount = st.number_input(
+                        f"Discount for {product}",
+                        min_value=0.0,
+                        max_value=100.0,
+                        value=0.0,
+                        step=0.1,
+                        key=f"discount_{product}",
+                        label_visibility="collapsed"
+                    )
+                    product_discounts.append(prod_discount)
+                with cols[3]:
+                    qty = st.number_input(
+                        f"Qty for {product}",
+                        min_value=1,
+                        value=1,
+                        step=1,
+                        key=f"qty_{product}",
+                        label_visibility="collapsed"
+                    )
+                    quantities.append(qty)
+                
+                item_total = unit_price * (1 - prod_discount/100) * qty
+                subtotal += item_total
+            
             st.markdown("---")
+            st.markdown("### Final Amount Calculation")
             st.markdown(f"Subtotal: ₹{subtotal:.2f}")
             tax_amount = subtotal * 0.18
             st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
@@ -1612,101 +1603,240 @@ def sales_page():
 
         st.subheader("Payment Details")
         payment_status = st.selectbox("Payment Status", ["pending", "paid"], key="payment_status")
+
         amount_paid = 0.0
         if payment_status == "paid":
             amount_paid = st.number_input("Amount Paid (INR)", min_value=0.0, value=0.0, step=1.0, key="amount_paid")
 
         st.subheader("Distributor Details")
         distributor_option = st.radio("Distributor Selection", ["Select from list", "None"], key="distributor_option")
-        # ... (unchanged distributor logic) ...
+        
+        distributor_firm_name = ""
+        distributor_id = ""
+        distributor_contact_person = ""
+        distributor_contact_number = ""
+        distributor_email = ""
+        distributor_territory = ""
+        
+        if distributor_option == "Select from list":
+            distributor_names = Distributors['Firm Name'].tolist()
+            selected_distributor = st.selectbox("Select Distributor", distributor_names, key="distributor_select")
+            distributor_details = Distributors[Distributors['Firm Name'] == selected_distributor].iloc[0]
+            
+            distributor_firm_name = selected_distributor
+            distributor_id = distributor_details['Distributor ID']
+            distributor_contact_person = distributor_details['Contact Person']
+            distributor_contact_number = distributor_details['Contact Number']
+            distributor_email = distributor_details['Email ID']
+            distributor_territory = distributor_details['Territory']
+            
+            st.text_input("Distributor ID", value=distributor_id, disabled=True, key="distributor_id_display")
+            st.text_input("Contact Person", value=distributor_contact_person, disabled=True, key="distributor_contact_person_display")
+            st.text_input("Contact Number", value=distributor_contact_number, disabled=True, key="distributor_contact_number_display")
+            st.text_input("Email", value=distributor_email, disabled=True, key="distributor_email_display")
+            st.text_input("Territory", value=distributor_territory, disabled=True, key="distributor_territory_display")
 
         st.subheader("Outlet Details")
         outlet_option = st.radio("Outlet Selection", ["Enter manually", "Select from list"], key="outlet_option")
-        # ... (unchanged outlet logic) ...
+        
+        if outlet_option == "Select from list":
+            outlet_names = Outlet['Shop Name'].tolist()
+            selected_outlet = st.selectbox("Select Outlet", outlet_names, key="outlet_select")
+            outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
+            
+            customer_name = selected_outlet
+            gst_number = outlet_details['GST']
+            contact_number = outlet_details['Contact']
+            address = outlet_details['Address']
+            state = outlet_details['State']
+            city = outlet_details['City']
+            
+            st.text_input("Outlet Contact", value=contact_number, disabled=True, key="outlet_contact_display")
+            st.text_input("Outlet Address", value=address, disabled=True, key="outlet_address_display")
+            st.text_input("Outlet State", value=state, disabled=True, key="outlet_state_display")
+            st.text_input("Outlet City", value=city, disabled=True, key="outlet_city_display")
+            st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
+        else:
+            customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
+            gst_number = st.text_input("GST Number", key="manual_gst_number")
+            contact_number = st.text_input("Contact Number", key="manual_contact_number")
+            address = st.text_area("Address", key="manual_address")
+            state = st.text_input("State", "", key="manual_state")
+            city = st.text_input("City", "", key="manual_city")
 
         if st.button("Generate Invoice", key="generate_invoice_button"):
             if selected_products and customer_name:
                 invoice_number = generate_invoice_number()
+                employee_selfie_path = None
+                payment_receipt_path = None
+
                 pdf, pdf_path = generate_invoice(
                     customer_name, gst_number, contact_number, address, state, city,
-                    selected_products, quantities, product_discounts, discount_category,
-                    selected_employee, payment_status, amount_paid, None, None,
-                    invoice_number, transaction_type,
+                    selected_products, quantities, product_discounts, discount_category, 
+                    selected_employee, payment_status, amount_paid, employee_selfie_path, 
+                    payment_receipt_path, invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
                     distributor_contact_number, distributor_email, distributor_territory,
                     sales_remarks
                 )
+                
                 with open(pdf_path, "rb") as f:
-                    st.download_button("Download Invoice", f, file_name=f"{invoice_number}.pdf", mime="application/pdf")
+                    st.download_button(
+                        "Download Invoice", 
+                        f, 
+                        file_name=f"{invoice_number}.pdf",
+                        mime="application/pdf",
+                        key=f"download_{invoice_number}"
+                    )
+                
                 st.success(f"Invoice {invoice_number} generated successfully!")
                 st.balloons()
             else:
                 st.error("Please fill all required fields and select products.")
-
-    # --- Sales History Tab ---
+    
     with tab2:
         st.subheader("Your Sales History")
-
+        
         @st.cache_data(ttl=300)
         def load_sales_data():
-            ws = get_worksheet("Sales")
-            data = ws.get_all_records()
-            df = pd.DataFrame(data)
-            # ... (parsing and filtering unchanged) ...
-            return df
-
+            try:
+                ws = get_worksheet("Sales")
+                data = ws.get_all_records()
+                sales_data = pd.DataFrame(data)
+                
+                if not sales_data.empty:
+                    sales_data['Outlet Name'] = sales_data['Outlet Name'].astype(str)
+                    sales_data['Invoice Number'] = sales_data['Invoice Number'].astype(str)
+                    
+                    try:
+                        sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True, errors='coerce')
+                    except:
+                        sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], errors='coerce')
+                    
+                    numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)', 'Quantity']
+                    for col in numeric_cols:
+                        if col in sales_data.columns:
+                            sales_data[col] = pd.to_numeric(sales_data[col], errors='coerce')
+                    
+                    employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+                    filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
+                    filtered_data = filtered_data[filtered_data['Invoice Date'].notna()]
+                    
+                    return filtered_data
+                return pd.DataFrame()
+            except Exception as e:
+                st.error(f"Error loading sales data: {e}")
+                return pd.DataFrame()
+    
         sales_data = load_sales_data()
+        
         if sales_data.empty:
             st.warning("No sales records found for your account")
             return
-
+            
         with st.expander("🔍 Search Filters", expanded=True):
             col1, col2, col3 = st.columns(3)
-            invoice_search = col1.text_input("Invoice Number", key="invoice_search")
-            date_search = col2.date_input("Invoice Date", key="date_search")
-            outlet_search = col3.text_input("Outlet Name", key="outlet_search")
-            if st.form_submit_button("Apply Filters", key="search_sales_button"):
-                st.experimental_rerun()
-
-        filtered = sales_data.copy()
-        # ... (filter logic unchanged) ...
-
-        if filtered.empty:
+            with col1:
+                invoice_number_search = st.text_input("Invoice Number", key="invoice_search")
+            with col2:
+                invoice_date_search = st.date_input("Invoice Date", key="date_search")
+            with col3:
+                outlet_name_search = st.text_input("Outlet Name", key="outlet_search")
+            
+            if st.button("Apply Filters", key="search_sales_button"):
+                st.rerun()
+        
+        filtered_data = sales_data.copy()
+        
+        if invoice_number_search:
+            filtered_data = filtered_data[
+                filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
+            ]
+        
+        if invoice_date_search:
+            date_str = invoice_date_search.strftime("%d-%m-%Y")
+            filtered_data = filtered_data[
+                filtered_data['Invoice Date'].dt.strftime('%d-%m-%Y') == date_str
+            ]
+        
+        if outlet_name_search:
+            filtered_data = filtered_data[
+                filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
+            ]
+        
+        if filtered_data.empty:
             st.warning("No matching records found")
             return
-
-        summary = filtered.groupby('Invoice Number').agg({
-            'Invoice Date':'first','Outlet Name':'first',
-            'Grand Total':'sum','Payment Status':'first',
-            'Delivery Status':'first'
-        }).reset_index().sort_values('Invoice Date', ascending=False)
-
-        st.write(f"📄 Showing {len(summary)} of your invoices")
-        st.dataframe(summary, use_container_width=True, hide_index=True)
-
-        selected_invoice = st.selectbox("Select invoice to view details", summary['Invoice Number'], key="invoice_selection")
-
-        # Delivery Status Management
-        st.subheader("Update Delivery Status")
-        options = ["Pending", "Order Done", "Delivery Done", "Cancelled"]
-        current = summary.loc[summary['Invoice Number']==selected_invoice, 'Delivery Status'].iloc[0]
-        idx = options.index(current) if current in options else 0
-        with st.form(key=f"delivery_status_form_{selected_invoice}"):
-            new_status = st.selectbox("Delivery Status", options, index=idx, key=f"status_{selected_invoice}")
-            submitted = st.form_submit_button("Update Status")
-
-        if submitted:
-            with st.spinner("Updating delivery status…"):
-                success = update_invoice_delivery_status(selected_invoice, new_status)
-                if success:
-                    st.success(f"Delivery status updated to '{new_status}' for invoice {selected_invoice}!")
-                    # clear cache to refresh sales_data
-                    try:
-                        del st.session_state['load_sales_data']
-                    except KeyError:
-                        pass
-                else:
-                    st.error("Failed to update delivery status.")
+            
+        invoice_summary = filtered_data.groupby('Invoice Number').agg({
+            'Invoice Date': 'first',
+            'Outlet Name': 'first',
+            'Grand Total': 'sum',
+            'Payment Status': 'first',
+            'Delivery Status': 'first'
+        }).reset_index()
+        
+        invoice_summary = invoice_summary.sort_values('Invoice Date', ascending=False)
+        
+        st.write(f"📄 Showing {len(invoice_summary)} of your invoices")
+        
+        st.dataframe(
+            invoice_summary,
+            column_config={
+                "Grand Total": st.column_config.NumberColumn(
+                    format="₹%.2f",
+                    help="Sum of all products in the invoice including taxes"
+                ),
+                "Invoice Date": st.column_config.DateColumn(
+                    format="DD/MM/YYYY",
+                    help="Date when invoice was generated"
+                )
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        selected_invoice = st.selectbox(
+            "Select invoice to view details",
+            invoice_summary['Invoice Number'],
+            key="invoice_selection"
+        )
+        
+        st.subheader("Delivery Status Management")
+        
+        invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
+        
+        if not invoice_details.empty:
+            with st.form(key='delivery_status_form'):
+                current_status = invoice_details.iloc[0].get('Delivery Status', 'Pending')
+                
+                new_status = st.selectbox(
+                    "Update Delivery Status",
+                    ["Pending", "Order Done", "Delivery Done"],
+                    index=["Pending", "Order Done", "Delivery Done"].index(current_status) 
+                    if current_status in ["Pending", "Order Done", "Delivery Done"] else 0,
+                    key=f"status_{selected_invoice}"
+                )
+                
+                submitted = st.form_submit_button("Update Status")
+                
+                if submitted:
+                    with st.spinner("Updating delivery status..."):
+                        try:
+                            ws = get_worksheet("Sales")
+                            data = ws.get_all_records()
+                            all_sales_data = pd.DataFrame(data)
+                            
+                            mask = all_sales_data['Invoice Number'] == selected_invoice
+                            all_sales_data.loc[mask, 'Delivery Status'] = new_status
+                            
+                            ws.clear()
+                            ws.append_rows([all_sales_data.columns.tolist()] + all_sales_data.values.tolist())
+                            
+                            st.success(f"Delivery status updated to '{new_status}' for invoice {selected_invoice}!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error updating delivery status: {e}")
         
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
