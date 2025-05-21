@@ -1130,45 +1130,35 @@ def travel_hotel_page():
             st.error(f"Error retrieving travel/hotel requests: {str(e)}")
 
 
-def log_ticket_to_gsheet(conn, ticket_data):
-    try:
-        existing_data = conn.read(worksheet="Tickets", usecols=list(range(len(TICKET_SHEET_COLUMNS))), ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        updated_data = pd.concat([existing_data, ticket_data], ignore_index=True)
-        conn.update(worksheet="Tickets", data=updated_data)
-        return True, None
-    except Exception as e:
-        return False, str(e)
+def log_ticket_to_gsheet(conn, ticket_df):
+    rows = ticket_df[TICKET_SHEET_COLUMNS].values.tolist()
+    safe_sheet_operation(conn.append, "Tickets", rows)
 
-def log_travel_hotel_request(conn, request_data):
-    try:
-        existing_data = conn.read(worksheet="TravelHotelRequests", usecols=list(range(len(TRAVEL_HOTEL_COLUMNS))), ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        updated_data = pd.concat([existing_data, request_data], ignore_index=True)
-        conn.update(worksheet="TravelHotelRequests", data=updated_data)
-        return True, None
-    except Exception as e:
-        return False, str(e)
+def log_travel_hotel_request(conn, request_df):
+    rows = request_df[TRAVEL_HOTEL_COLUMNS].values.tolist()
+    safe_sheet_operation(conn.append, "TravelHotelRequests", rows)
 
 def log_sales_to_gsheet(conn, sales_data):
+    """
+    Append just the new rows in sales_data to the 'Sales' sheet,
+    instead of rewriting the whole thing.
+    """
     try:
-        # Read all existing data first
-        existing_sales_data = conn.read(worksheet="Sales", ttl=5)
-        existing_sales_data = existing_sales_data.dropna(how="all")
-        
-        # Ensure columns match (in case sheet structure changes)
-        sales_data = sales_data.reindex(columns=SALES_SHEET_COLUMNS)
-        
-        # Concatenate and drop any potential duplicates
-        updated_sales_data = pd.concat([existing_sales_data, sales_data], ignore_index=True)
-        updated_sales_data = updated_sales_data.drop_duplicates(subset=["Invoice Number", "Product Name"], keep="last")
-        
-        # Write back all data
-        conn.update(worksheet="Sales", data=updated_sales_data)
-        st.success("Sales data successfully logged to Google Sheets!")
+        # Convert your DataFrame to a list of row lists
+        rows = sales_data[SALES_SHEET_COLUMNS].values.tolist()
+
+        # Use our safe wrapper to retry & backup if needed
+        safe_sheet_operation(
+            conn.append,
+            "Sales",      # worksheet name
+            rows          # list of rows (no header!)
+        )
+
+        st.success("Sales data appended to Google Sheets!")
     except Exception as e:
-        st.error(f"Error logging sales data: {e}")
+        st.error(f"Error appending sales data: {e}")
         st.stop()
+
 
 def update_delivery_status(conn, invoice_number, product_name, new_status):
     try:
@@ -1187,36 +1177,14 @@ def update_delivery_status(conn, invoice_number, product_name, new_status):
         st.error(f"Error updating delivery status: {e}")
         return False
 
-def log_visit_to_gsheet(conn, visit_data):
-    try:
-        existing_visit_data = conn.read(worksheet="Visits", ttl=5)
-        existing_visit_data = existing_visit_data.dropna(how="all")
-        
-        visit_data = visit_data.reindex(columns=VISIT_SHEET_COLUMNS)
-        
-        updated_visit_data = pd.concat([existing_visit_data, visit_data], ignore_index=True)
-        updated_visit_data = updated_visit_data.drop_duplicates(subset=["Visit ID"], keep="last")
-        
-        conn.update(worksheet="Visits", data=updated_visit_data)
-        st.success("Visit data successfully logged to Google Sheets!")
-    except Exception as e:
-        st.error(f"Error logging visit data: {e}")
-        st.stop()
+def log_visit_to_gsheet(conn, visit_df):
+    rows = visit_df[VISIT_SHEET_COLUMNS].values.tolist()
+    safe_sheet_operation(conn.append, "Visits", rows)
+    st.success("Visit recorded!")
 
-def log_attendance_to_gsheet(conn, attendance_data):
-    try:
-        existing_data = conn.read(worksheet="Attendance", ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        
-        attendance_data = attendance_data.reindex(columns=ATTENDANCE_SHEET_COLUMNS)
-        
-        updated_data = pd.concat([existing_data, attendance_data], ignore_index=True)
-        updated_data = updated_data.drop_duplicates(subset=["Attendance ID"], keep="last")
-        
-        conn.update(worksheet="Attendance", data=updated_data)
-        return True, None
-    except Exception as e:
-        return False, str(e)
+def log_attendance_to_gsheet(conn, attendance_df):
+    rows = attendance_df[ATTENDANCE_SHEET_COLUMNS].values.tolist()
+    safe_sheet_operation(conn.append, "Attendance", rows)
 
 
 def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, product_discounts,
