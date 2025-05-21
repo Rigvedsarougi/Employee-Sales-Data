@@ -8,29 +8,9 @@ import uuid
 from PIL import Image
 from datetime import datetime, time, timedelta
 import pytz
-import time as system_time
-import requests
-from threading import Thread
 
 # Initialize Google Sheets connection
 conn = st.connection("gsheets", type=GSheetsConnection)
-
-# Location tracking constants
-LOCATION_SHEET_COLUMNS = [
-    "Timestamp",
-    "Employee Name",
-    "Employee Code",
-    "Designation",
-    "Latitude",
-    "Longitude",
-    "Accuracy (meters)",
-    "Location Type",
-    "Address",
-    "City",
-    "State",
-    "Country",
-    "Postal Code"
-]
 
 def get_ist_time():
     """Get current time in Indian Standard Time (IST)"""
@@ -407,7 +387,7 @@ def safe_sheet_operation(operation, *args, **kwargs):
                     if attempt_data_recovery(conn, worksheet_name):
                         st.success("Data recovery attempted from backup")
                 raise
-            system_time.sleep(1 * (attempt + 1))  # Exponential backoff
+            time.sleep(1 * (attempt + 1))  # Exponential backoff
 
 # Data logging functions updated for Google Sheets
 def log_sales_to_gsheet(conn, sales_data):
@@ -481,26 +461,6 @@ def log_travel_hotel_request(conn, request_data):
     except Exception as e:
         return False, str(e)
 
-def log_location_to_gsheet(conn, location_data):
-    """Log location data to Google Sheets"""
-    try:
-        # Read existing location data
-        existing_data = conn.read(worksheet="EmployeeLocations", ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        
-        # Convert to DataFrame with correct column order
-        location_df = pd.DataFrame([location_data], columns=LOCATION_SHEET_COLUMNS)
-        
-        # Concatenate with existing data
-        updated_data = pd.concat([existing_data, location_df], ignore_index=True)
-        
-        # Write to Google Sheets
-        conn.update(worksheet="EmployeeLocations", data=updated_data)
-        return True
-    except Exception as e:
-        st.error(f"Error logging location data: {e}")
-        return False
-
 def update_delivery_status(conn, invoice_number, product_name, new_status):
     try:
         # Read all existing data
@@ -552,193 +512,6 @@ def check_existing_attendance(employee_name):
         st.error(f"Error checking existing attendance: {str(e)}")
         return False
 
-def get_current_location():
-    """Get current location using browser geolocation API (called from frontend)"""
-    try:
-        # This function will be called from the frontend JavaScript
-        # The actual implementation is in the JavaScript code that we'll inject
-        return None
-    except Exception as e:
-        st.error(f"Error getting location: {e}")
-        return None
-
-def reverse_geocode(lat, lng, api_key):
-    """Convert latitude/longitude to address using Google Maps Geocoding API"""
-    try:
-        url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={lat},{lng}&key={api_key}"
-        response = requests.get(url)
-        data = response.json()
-        
-        if data['status'] == 'OK':
-            result = data['results'][0]
-            address = result.get('formatted_address', '')
-            
-            # Extract address components
-            components = {
-                'street': '',
-                'city': '',
-                'state': '',
-                'country': '',
-                'postal_code': ''
-            }
-            
-            for component in result['address_components']:
-                if 'route' in component['types']:
-                    components['street'] = component['long_name']
-                elif 'locality' in component['types']:
-                    components['city'] = component['long_name']
-                elif 'administrative_area_level_1' in component['types']:
-                    components['state'] = component['long_name']
-                elif 'country' in component['types']:
-                    components['country'] = component['long_name']
-                elif 'postal_code' in component['types']:
-                    components['postal_code'] = component['long_name']
-            
-            return {
-                'address': address,
-                'components': components
-            }
-        else:
-            return None
-    except Exception as e:
-        st.error(f"Error in reverse geocoding: {e}")
-        return None
-
-def record_location(employee_name, location_type="periodic"):
-    """Record employee location to Google Sheets with proper JavaScript communication"""
-    try:
-        # Trigger the JavaScript to get location
-        st.write(
-            '<div data-st-trigger-location style="display:none;"></div>',
-            unsafe_allow_html=True
-        )
-        
-        # Use a unique key to trigger the location collection
-        trigger_key = str(uuid.uuid4())
-        st.session_state.trigger_location = trigger_key
-        
-        # Inject JavaScript that will respond to our trigger
-        st.write(
-            f'<script>window.parent.postMessage({{isStreamlitMessage: true, type: "streamlit:setComponentValue", key: "trigger_location", value: "{trigger_key}"}}, "*");</script>',
-            unsafe_allow_html=True
-        )
-        
-        # Wait for location to be set (with timeout)
-        max_wait = 10  # seconds
-        wait_time = 0
-        
-        while 'location_data' not in st.session_state and wait_time < max_wait:
-            system_time.sleep(1)
-            wait_time += 1
-        
-        if 'location_data' not in st.session_state:
-            st.error("Could not retrieve location data (timeout)")
-            return False
-        
-        location = st.session_state.location_data
-        del st.session_state.location_data  # Clear for next use
-        
-        # Get employee details
-        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
-        designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
-        
-        # Get current timestamp
-        timestamp = get_ist_time().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # Reverse geocode to get address
-        api_key = st.secrets["google_maps"]["google_maps_api_key"]
-        address_data = reverse_geocode(location['lat'], location['lng'], api_key)
-        
-        if not address_data:
-            st.error("Could not retrieve address information")
-            return False
-        
-        # Prepare location data
-        location_data = {
-            "Timestamp": timestamp,
-            "Employee Name": employee_name,
-            "Employee Code": employee_code,
-            "Designation": designation,
-            "Latitude": location['lat'],
-            "Longitude": location['lng'],
-            "Accuracy (meters)": location.get('accuracy', ''),
-            "Location Type": location_type,
-            "Address": address_data['address'],
-            "City": address_data['components']['city'],
-            "State": address_data['components']['state'],
-            "Country": address_data['components']['country'],
-            "Postal Code": address_data['components']['postal_code']
-        }
-        
-        # Log to Google Sheets
-        return log_location_to_gsheet(conn, location_data)
-    
-    except Exception as e:
-        st.error(f"Error recording location: {e}")
-        return False
-
-def start_location_tracking(employee_name):
-    """Start periodic location tracking for an employee"""
-    if 'location_tracking' not in st.session_state:
-        st.session_state.location_tracking = True
-    
-    def tracking_loop():
-        while st.session_state.get('location_tracking', False):
-            # Record location every hour
-            record_location(employee_name, "periodic")
-            system_time.sleep(3600)  # Sleep for 1 hour
-    
-    # Start tracking in a separate thread
-    Thread(target=tracking_loop, daemon=True).start()
-
-def stop_location_tracking():
-    """Stop periodic location tracking"""
-    if 'location_tracking' in st.session_state:
-        st.session_state.location_tracking = False
-
-def inject_location_js():
-    """Inject JavaScript to get geolocation from browser and handle the response"""
-    js_code = """
-    <script>
-    // Function to get current location
-    function getLocation() {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                function(position) {
-                    const locationData = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                        accuracy: position.coords.accuracy
-                    };
-                    // Use Streamlit's setComponentValue to send data back
-                    window.parent.postMessage({
-                        isStreamlitMessage: true,
-                        type: 'streamlit:setComponentValue',
-                        api: window.frameElement.getAttribute('data-st-lib-version'),
-                        key: "location_data",
-                        value: JSON.stringify(locationData)
-                    }, '*');
-                },
-                function(error) {
-                    console.error("Error getting location:", error);
-                },
-                {enableHighAccuracy: true, timeout: 10000, maximumAge: 0}
-            );
-        } else {
-            console.error("Geolocation is not supported by this browser.");
-        }
-    }
-    
-    // Listen for messages from Streamlit to trigger location collection
-    window.addEventListener('message', function(event) {
-        if (event.data.type === 'streamlit:setComponentValue' && 
-            event.data.key === "trigger_location") {
-            getLocation();
-        }
-    });
-    </script>
-    """
-    st.components.v1.html(js_code, height=0)
 
 def demo_page():
     st.title("Demo Management")
@@ -1768,6 +1541,7 @@ def record_attendance(employee_name, status, location_link="", leave_reason=""):
     except Exception as e:
         return None, f"Error creating attendance record: {str(e)}"
 
+
 def resources_page():
     st.title("Company Resources")
     st.markdown("Download important company documents and product catalogs.")
@@ -1836,23 +1610,6 @@ def main():
         st.session_state.selected_mode = None
     if 'employee_name' not in st.session_state:
         st.session_state.employee_name = None
-    if 'location_tracking' not in st.session_state:
-        st.session_state.location_tracking = False
-    if 'get_location' not in st.session_state:
-        st.session_state.get_location = False
-
-    # Inject JavaScript for location tracking
-    inject_location_js()
-
-    if 'location_data' not in st.session_state:
-        try:
-            # This will capture the location data sent from JavaScript
-            location_json = st.query_params().get("location_data", [None])[0]
-            if location_json:
-                st.session_state.location_data = json.loads(location_json)
-        except:
-            pass
-
 
     if not st.session_state.authenticated:
         display_login_header()
@@ -1882,22 +1639,9 @@ def main():
                 
                 if login_button:
                     if authenticate_employee(employee_name, passkey):
-                        # Inject the JavaScript for location tracking
-                        inject_location_js()
-                        
-                        # Record login location
-                        location_recorded = record_location(employee_name, "login")
-                        
-                        if location_recorded:
-                            st.session_state.authenticated = True
-                            st.session_state.employee_name = employee_name
-                            
-                            # Start periodic location tracking
-                            start_location_tracking(employee_name)
-                            
-                            st.rerun()
-                        else:
-                            st.error("Failed to record login location. Please try again.")
+                        st.session_state.authenticated = True
+                        st.session_state.employee_name = employee_name
+                        st.rerun()
                     else:
                         st.error("Invalid Password. Please try again.")
     else:
