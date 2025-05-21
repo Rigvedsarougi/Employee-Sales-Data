@@ -1894,14 +1894,14 @@ def sales_page():
                 # Get current status for the invoice
                 current_status = invoice_details.iloc[0].get('Delivery Status', 'Pending')
                 
-                # Display status selection
+                status_options = ["Pending", "Order Done", "Delivery Done", "Cancelled"]
                 new_status = st.selectbox(
                     "Update Delivery Status",
-                    ["Pending", "Order Done", "Delivery Done"],
-                    index=["Pending", "Order Done", "Delivery Done"].index(current_status) 
-                    if current_status in ["Pending", "Order Done", "Delivery Done"] else 0,
+                    status_options,
+                    index=status_options.index(current_status) if current_status in status_options else 0,
                     key=f"status_{selected_invoice}"
                 )
+
                 
                 # Submit button for the form
                 submitted = st.form_submit_button("Update Status")
