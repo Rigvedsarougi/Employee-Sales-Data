@@ -1587,7 +1587,7 @@ def sales_page():
                 with cols[3]:
                     qty_str = st.text_input(
                         f"Qty for {product}",
-                        placeholder="1      (Quantity)",
+                        placeholder="Quantity",
                         key=f"qty_{product}",
                         label_visibility="collapsed"
                     )
