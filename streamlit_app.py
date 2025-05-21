@@ -672,11 +672,16 @@ def demo_page():
                 st.metric("Duration", "N/A")
             st.metric("Review", demo_details['Outlet Review'])
 
-        # Products table
-        st.subheader("Products Demonstrated")
-        products = demo_details['Products'].split("|")
-        quantities = demo_details['Quantities'].split("|")
-        product_df = pd.DataFrame({"Product": products, "Quantity": quantities})
+        # Products Demonstrated
+        products = demo_details.get('Products', '')
+        quantities = demo_details.get('Quantities', '')
+        # Split into lists (handle missing gracefully)
+        product_list = products.split("|") if products else []
+        quantity_list = quantities.split("|") if quantities else []
+        # Pair products and quantities even if lengths differ
+        from itertools import zip_longest
+        paired = zip_longest(product_list, quantity_list, fillvalue="")
+        product_df = pd.DataFrame(paired, columns=["Product", "Quantity"])
         st.dataframe(product_df, use_container_width=True, hide_index=True)
 
         # Remarks and download
