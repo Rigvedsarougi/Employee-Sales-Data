@@ -602,8 +602,9 @@ def demo_page():
                 st.metric("Review", str(demo_details['Outlet Review']))
             
             st.subheader("Products Demonstrated")
-            products = demo_details['Products'].split(", ")
-            quantities = demo_details['Quantities'].split(", ")
+            products   = str(demo_details['Products']).split("|")
+            quantities = str(demo_details['Quantities']).split("|")
+
             
             product_df = pd.DataFrame({
                 "Product": products,
