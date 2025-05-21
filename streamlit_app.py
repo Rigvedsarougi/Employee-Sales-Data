@@ -1881,38 +1881,19 @@ def sales_page():
         @st.cache_data(ttl=300)
         def load_sales_data():
             try:
-                sales_data = conn.read(worksheet="Sales", ttl=5)
-                sales_data = sales_data.dropna(how='all')
-                
-                # Convert columns to proper types
-                sales_data = sales_data.copy()
-                sales_data['Outlet Name'] = sales_data['Outlet Name'].astype(str)
-                sales_data['Invoice Number'] = sales_data['Invoice Number'].astype(str)
-                
-                # Convert Invoice Date properly
-                try:
-                    sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True, errors='coerce')
-                except:
-                    # Fallback if date parsing fails
-                    sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], errors='coerce')
-                
-                # Convert numeric columns properly
-                numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)', 'Quantity']
-                for col in numeric_cols:
-                    if col in sales_data.columns:
-                        sales_data[col] = pd.to_numeric(sales_data[col], errors='coerce')
+                worksheet = _spreadsheet.worksheet("Sales")
+                records = worksheet.get_all_records()
+                sales_data = pd.DataFrame(records)
                 
                 # Filter for current employee
                 employee_code = Person[Person['Employee Name'] == st.session_state.employee_name]['Employee Code'].values[0]
                 filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
                 
-                # Ensure we have valid dates
-                filtered_data = filtered_data[filtered_data['Invoice Date'].notna()]
-                
                 return filtered_data
             except Exception as e:
                 st.error(f"Error loading sales data: {e}")
                 return pd.DataFrame()
+
     
         sales_data = load_sales_data()
         
