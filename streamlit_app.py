@@ -1342,7 +1342,8 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address,
         now_dt   = get_ist_time()
         duration = (exit_time - entry_time).total_seconds() / 60
 
-        row = [
+        # Build in the exact column order
+        raw_row = [
             visit_id,
             employee_name,
             Person.loc[Person['Employee Name']==employee_name, 'Employee Code'].iat[0],
@@ -1363,6 +1364,14 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address,
             remarks
         ]
 
+        # Convert any numpy scalars to built-ins
+        row = []
+        for v in raw_row:
+            if hasattr(v, "item"):   # numpy scalar
+                row.append(v.item())
+            else:
+                row.append(v)
+
         ws = _spreadsheet.worksheet("Visits")
         ws.append_row(row, value_input_option="USER_ENTERED")
         return visit_id
@@ -1370,6 +1379,7 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address,
     except Exception as e:
         st.error(f"Failed to record visit: {e}")
         return None
+
 
 def record_attendance(employee_name, status, location_link="", leave_reason=""):
     try:
