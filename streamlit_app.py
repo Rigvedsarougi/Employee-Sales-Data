@@ -1647,7 +1647,7 @@ def sales_page():
                 # Discount % placeholder
                 with cols[2]:
                     disc_str = st.text_input(
-                        "",
+                        "Discount %",
                         key=f"discount_{product}",
                         placeholder="Discount %",
                         label_visibility="collapsed"
@@ -1661,7 +1661,7 @@ def sales_page():
                 # Quantity placeholder
                 with cols[3]:
                     qty_str = st.text_input(
-                        "",
+                        "Quantity",
                         key=f"qty_{product}",
                         placeholder="Quantity",
                         label_visibility="collapsed"
