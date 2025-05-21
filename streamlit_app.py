@@ -438,40 +438,29 @@ def demo_page():
                     min_value=1,
                     value=1,
                     step=1,
-                    key=f"demo_qty_{idx}"  # Changed to use index to avoid product name issues
+                    key=f"demo_qty_{idx}"
                 )
-                quantities.append(str(qty))  # Convert to string immediately
+                quantities.append(str(qty))
 
         if st.button("Record Demo", key="record_demo_button"):
             if outlet_name and selected_products:
-                # Get current IST time for check-in datetime
                 current_datetime = get_ist_time()
-                
-                # Create check-in datetime (use selected demo date but current time)
                 if check_in_time is None:
                     check_in_time = current_datetime.time()
-                check_in_datetime = datetime.combine(demo_date, check_in_time)
-                
-                # Create check-out datetime
                 if check_out_time is None:
                     check_out_time = current_datetime.time()
+
+                check_in_datetime = datetime.combine(demo_date, check_in_time)
                 check_out_datetime = datetime.combine(demo_date, check_out_time)
-                
-                # Calculate duration
                 duration = (check_out_datetime - check_in_datetime).total_seconds() / 60
-                
-                # Create demo ID
                 demo_id = f"DEMO-{current_datetime.strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
-                
-                # Get partner employee code
-                partner_employee_code = Person[Person['Employee Name'] == partner_employee]['Employee Code'].values[0]
-                
-                # Prepare demo data with proper data types
+                partner_employee_code = Person.loc[Person['Employee Name'] == partner_employee, 'Employee Code'].iat[0]
+
                 demo_data = {
                     "Demo ID": demo_id,
                     "Employee Name": selected_employee,
-                    "Employee Code": Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0],
-                    "Designation": Person[Person['Employee Name'] == selected_employee]['Designation'].values[0],
+                    "Employee Code": Person.loc[Person['Employee Name'] == selected_employee, 'Employee Code'].iat[0],
+                    "Designation": Person.loc[Person['Employee Name'] == selected_employee, 'Designation'].iat[0],
                     "Partner Employee": partner_employee,
                     "Partner Employee Code": partner_employee_code,
                     "Outlet Name": outlet_name,
@@ -479,66 +468,51 @@ def demo_page():
                     "Outlet Address": outlet_address,
                     "Outlet State": outlet_state,
                     "Outlet City": outlet_city,
-                    "Demo Date": demo_date.strftime("%d-%m-%Y"),  # Selected date
+                    "Demo Date": demo_date.strftime("%d-%m-%Y"),
                     "Check-in Time": check_in_datetime.strftime("%H:%M:%S"),
                     "Check-out Time": check_out_datetime.strftime("%H:%M:%S"),
-                    "Check-in Date Time": current_datetime.strftime("%d-%m-%Y %H:%M:%S"),  # Actual timestamp
+                    "Check-in Date Time": current_datetime.strftime("%d-%m-%Y %H:%M:%S"),
                     "Duration (minutes)": round(duration, 2),
                     "Outlet Review": outlet_review,
                     "Remarks": remarks,
                     "Status": "Completed",
-                    "Products": "|".join(selected_products),  # Changed to pipe separator
-                    "Quantities": "|".join(quantities)  # Changed to pipe separator
+                    "Products": "|".join(selected_products),
+                    "Quantities": "|".join(quantities)
                 }
-                
-                # Log to Google Sheets
+
                 try:
-                    existing_data = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5)
-                    existing_data = existing_data.dropna(how="all")
-                    
-                    # Convert to DataFrame with correct column order
-                    demo_df = pd.DataFrame([demo_data], columns=DEMO_SHEET_COLUMNS)
-                    
-                    # Concatenate with existing data
-                    updated_data = pd.concat([existing_data, demo_df], ignore_index=True)
-                    
-                    # Write to Google Sheets
-                    conn.update(worksheet="Demos", data=updated_data)
-                    
+                    # append via gspread
+                    row = [demo_data[col] for col in DEMO_SHEET_COLUMNS]
+                    ws = _spreadsheet.worksheet("Demos")
+                    ws.append_row(row, value_input_option="USER_ENTERED")
+
                     st.success(f"Demo {demo_id} recorded successfully!")
                     st.balloons()
                 except Exception as e:
-                    st.error(f"Failed to record demo: {str(e)}")
+                    st.error(f"Failed to record demo: {e}")
             else:
                 st.error("Please fill all required fields (Outlet and at least one product).")
-    
+
     with tab2:
         st.subheader("Demo History")
-        
+
         @st.cache_data(ttl=300)
         def load_demo_data():
             try:
-                demo_data = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5)
+                demo_data = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=300)
                 demo_data = demo_data.dropna(how='all')
-                
-                # Convert Demo Date to datetime
                 demo_data['Demo Date'] = pd.to_datetime(demo_data['Demo Date'], dayfirst=True, errors='coerce')
-                
-                # Filter for current employee
-                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-                filtered_data = demo_data[demo_data['Employee Code'] == employee_code]
-                
-                return filtered_data.sort_values('Demo Date', ascending=False)
+                emp_code = Person.loc[Person['Employee Name'] == selected_employee, 'Employee Code'].iat[0]
+                return demo_data[demo_data['Employee Code'] == emp_code].sort_values('Demo Date', ascending=False)
             except Exception as e:
                 st.error(f"Error loading demo data: {e}")
                 return pd.DataFrame()
-        
+
         demo_data = load_demo_data()
-        
         if demo_data.empty:
             st.warning("No demo records found for your account")
             return
-            
+
         with st.expander("🔍 Search Filters", expanded=True):
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -547,93 +521,57 @@ def demo_page():
                 demo_date_search = st.date_input("Demo Date", key="demo_date_search")
             with col3:
                 outlet_name_search = st.text_input("Outlet Name", key="demo_outlet_search")
-            
+
             if st.button("Apply Filters", key="search_demo_button"):
                 st.rerun()
-        
+
         filtered_data = demo_data.copy()
-        
-        # Apply filters
         if demo_id_search:
-            filtered_data = filtered_data[
-                filtered_data['Demo ID'].str.contains(demo_id_search, case=False, na=False)
-            ]
-        
+            filtered_data = filtered_data[filtered_data['Demo ID'].str.contains(demo_id_search, case=False, na=False)]
         if demo_date_search:
             date_str = demo_date_search.strftime("%d-%m-%Y")
-            filtered_data = filtered_data[
-                filtered_data['Demo Date'].dt.strftime('%d-%m-%Y') == date_str
-            ]
-        
+            filtered_data = filtered_data[filtered_data['Demo Date'].dt.strftime('%d-%m-%Y') == date_str]
         if outlet_name_search:
-            filtered_data = filtered_data[
-                filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
-            ]
-        
+            filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)]
+
         if filtered_data.empty:
             st.warning("No matching records found")
             return
-            
-        # Display summary table
+
         st.write(f"📄 Showing {len(filtered_data)} of your demos")
-        
-        # Display the summary table with key columns
-        summary_cols = [
-            'Demo ID', 'Demo Date', 'Outlet Name', 'Partner Employee',
-            'Check-in Time', 'Check-out Time', 'Duration (minutes)', 'Outlet Review'
-        ]
-        
+        summary_cols = ['Demo ID', 'Demo Date', 'Outlet Name', 'Partner Employee', 'Check-in Time', 'Check-out Time', 'Duration (minutes)', 'Outlet Review']
         st.dataframe(
             filtered_data[summary_cols],
-            column_config={
-                "Demo Date": st.column_config.DateColumn(format="DD/MM/YYYY"),
-            },
+            column_config={"Demo Date": st.column_config.DateColumn(format="DD/MM/YYYY")},
             use_container_width=True,
             hide_index=True
         )
-        
-        # Detailed view
-        selected_demo = st.selectbox(
-            "Select demo to view details",
-            filtered_data['Demo ID'],
-            key="demo_selection"
-        )
-        
+
+        selected_demo = st.selectbox("Select demo to view details", filtered_data['Demo ID'], key="demo_selection")
         if not filtered_data.empty:
-            demo_details = filtered_data[filtered_data['Demo ID'] == selected_demo].iloc[0]
-            
+            details = filtered_data[filtered_data['Demo ID'] == selected_demo].iloc[0]
             st.subheader(f"Demo {selected_demo} Details")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Date", demo_details['Demo Date'].strftime('%d-%m-%Y'))
-                st.metric("Outlet", str(demo_details['Outlet Name']))
-                st.metric("Contact", str(demo_details['Outlet Contact']))
-                st.metric("Partner", str(demo_details['Partner Employee']))
-            with col2:
-                st.metric("Check-in", str(demo_details['Check-in Time']))
-                st.metric("Check-out", str(demo_details['Check-out Time']))
-                st.metric("Duration", f"{demo_details['Duration (minutes)']:.1f} minutes")
-                st.metric("Review", str(demo_details['Outlet Review']))
-            
+            c1, c2 = st.columns(2)
+            with c1:
+                st.metric("Date", details['Demo Date'].strftime('%d-%m-%Y'))
+                st.metric("Outlet", details['Outlet Name'])
+                st.metric("Contact", details['Outlet Contact'])
+                st.metric("Partner", details['Partner Employee'])
+            with c2:
+                st.metric("Check-in", details['Check-in Time'])
+                st.metric("Check-out", details['Check-out Time'])
+                st.metric("Duration", f"{details['Duration (minutes)']:.1f} minutes")
+                st.metric("Review", details['Outlet Review'])
+
             st.subheader("Products Demonstrated")
-            products = demo_details['Products'].split(", ")
-            quantities = demo_details['Quantities'].split(", ")
-            
-            product_df = pd.DataFrame({
-                "Product": products,
-                "Quantity": quantities
-            })
-            
-            st.dataframe(
-                product_df,
-                use_container_width=True,
-                hide_index=True
-            )
-            
+            prods = details['Products'].split("|" )
+            qts   = details['Quantities'].split("|")
+            prod_df = pd.DataFrame({"Product": prods, "Quantity": qts})
+            st.dataframe(prod_df, use_container_width=True, hide_index=True)
+
             st.subheader("Remarks")
-            st.write(demo_details['Remarks'])
-            
-            # Add download option
+            st.write(details['Remarks'])
+
             csv = filtered_data.to_csv(index=False).encode('utf-8')
             st.download_button(
                 "Download Demo History",
@@ -642,6 +580,7 @@ def demo_page():
                 "text/csv",
                 key='download-demo-csv'
             )
+
 
 def support_ticket_page():
     st.title("Support Ticket Management")
@@ -1145,30 +1084,30 @@ def travel_hotel_page():
             st.error(f"Error retrieving travel/hotel requests: {str(e)}")
 
 
-def log_ticket_to_gsheet(conn, ticket_df):
-    rows = ticket_df[TICKET_SHEET_COLUMNS].values.tolist()
-    safe_sheet_operation(conn.append, "Tickets", rows)
+def log_ticket_to_gsheet(ticket_df):
+    try:
+        # we assume ticket_df has exactly one row
+        ticket = ticket_df.iloc[0]
+        row = [ ticket[col] for col in TICKET_SHEET_COLUMNS ]
+
+        ws = _spreadsheet.worksheet("Tickets")
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return True, None
+
+    except Exception as e:
+        return False, str(e)
 
 def log_travel_hotel_request(conn, request_df):
     rows = request_df[TRAVEL_HOTEL_COLUMNS].values.tolist()
     safe_sheet_operation(conn.append, "TravelHotelRequests", rows)
 
-def log_sales_to_gsheet(conn, sales_data):
-    """
-    Append just the new rows in sales_data to the 'Sales' sheet,
-    instead of rewriting the whole thing.
-    """
+def log_sales_to_gsheet(sales_df):
     try:
-        # Convert your DataFrame to a list of row lists
-        rows = sales_data[SALES_SHEET_COLUMNS].values.tolist()
-
-        # Use our safe wrapper to retry & backup if needed
-        safe_sheet_operation(
-            conn.append,
-            "Sales",      # worksheet name
-            rows          # list of rows (no header!)
-        )
-
+        ws = _spreadsheet.worksheet("Sales")
+        # append each new sale row one at a time
+        for _, sale in sales_df.iterrows():
+            row = [ sale[col] for col in SALES_SHEET_COLUMNS ]
+            ws.append_row(row, value_input_option="USER_ENTERED")
         st.success("Sales data appended to Google Sheets!")
     except Exception as e:
         st.error(f"Error appending sales data: {e}")
@@ -1392,38 +1331,42 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
 
     return pdf, pdf_path
 
-def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, outlet_state, outlet_city, 
-                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time, remarks=""):
-    visit_id = generate_visit_id()
-    visit_date = get_ist_time().strftime("%d-%m-%Y")
-    
-    duration = (exit_time - entry_time).total_seconds() / 60
-    
-    visit_data = {
-        "Visit ID": visit_id,
-        "Employee Name": employee_name,
-        "Employee Code": Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0],
-        "Designation": Person[Person['Employee Name'] == employee_name]['Designation'].values[0],
-        "Outlet Name": outlet_name,
-        "Outlet Contact": outlet_contact,
-        "Outlet Address": outlet_address,
-        "Outlet State": outlet_state,
-        "Outlet City": outlet_city,
-        "Visit Date": visit_date,
-        "Entry Time": entry_time.strftime("%H:%M:%S"),
-        "Exit Time": exit_time.strftime("%H:%M:%S"),
-        "Visit Duration (minutes)": round(duration, 2),
-        "Visit Purpose": visit_purpose,
-        "Visit Notes": visit_notes,
-        "Visit Selfie Path": visit_selfie_path,
-        "Visit Status": "completed",
-        "Remarks": remarks
-    }
-    
-    visit_df = pd.DataFrame([visit_data])
-    log_visit_to_gsheet(conn, visit_df)
-    
-    return visit_id
+def record_visit(employee_name, outlet_name, outlet_contact, outlet_address,
+                 outlet_state, outlet_city, visit_purpose, visit_notes,
+                 visit_selfie_path, entry_time, exit_time, remarks=""):
+    try:
+        visit_id = generate_visit_id()
+        now_dt   = get_ist_time()
+        duration = (exit_time - entry_time).total_seconds() / 60
+
+        row = [
+            visit_id,
+            employee_name,
+            Person.loc[Person['Employee Name']==employee_name, 'Employee Code'].iat[0],
+            Person.loc[Person['Employee Name']==employee_name, 'Designation'].iat[0],
+            outlet_name,
+            outlet_contact,
+            outlet_address,
+            outlet_state,
+            outlet_city,
+            now_dt.strftime("%d-%m-%Y"),                       # Visit Date
+            entry_time.strftime("%H:%M:%S"),                   # Entry Time
+            exit_time.strftime("%H:%M:%S"),                    # Exit Time
+            round(duration, 2),                                # Visit Duration (minutes)
+            visit_purpose,
+            visit_notes,
+            visit_selfie_path or "",
+            "completed",                                       # Visit Status
+            remarks
+        ]
+
+        ws = _spreadsheet.worksheet("Visits")
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return visit_id
+
+    except Exception as e:
+        st.error(f"Failed to record visit: {e}")
+        return None
 
 def record_attendance(employee_name, status, location_link="", leave_reason=""):
     try:
