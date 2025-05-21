@@ -301,7 +301,6 @@ DEMO_SHEET_COLUMNS = [
     "Check-in Time",
     "Check-out Time",
     "Check-in Date Time",
-    "Duration (minutes)",
     "Outlet Review",
     "Remarks",
     "Status",
@@ -571,7 +570,6 @@ def demo_page():
                     "Check-in Time": check_in_datetime.strftime("%H:%M:%S"),
                     "Check-out Time": check_out_datetime.strftime("%H:%M:%S"),
                     "Check-in Date Time": current_datetime.strftime("%d-%m-%Y %H:%M:%S"),
-                    "Duration (minutes)": round(duration, 2),
                     "Outlet Review": outlet_review,
                     "Remarks": remarks,
                     "Status": "Completed",
@@ -654,7 +652,7 @@ def demo_page():
         
         summary_cols = [
             'Demo ID', 'Demo Date', 'Outlet Name', 'Partner Employee',
-            'Check-in Time', 'Check-out Time', 'Duration (minutes)', 'Outlet Review'
+            'Check-in Time', 'Check-out Time', 'Outlet Review'
         ]
         
         st.dataframe(
@@ -685,7 +683,6 @@ def demo_page():
             with col2:
                 st.metric("Check-in", str(demo_details['Check-in Time']))
                 st.metric("Check-out", str(demo_details['Check-out Time']))
-                st.metric("Duration", f"{demo_details['Duration (minutes)']:.1f} minutes")
                 st.metric("Review", str(demo_details['Outlet Review']))
             
             st.subheader("Products Demonstrated")
