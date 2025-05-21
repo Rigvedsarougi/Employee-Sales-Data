@@ -571,7 +571,7 @@ def demo_page():
                     "Check-in Time": check_in_datetime.strftime("%H:%M:%S"),
                     "Check-out Time": check_out_datetime.strftime("%H:%M:%S"),
                     "Check-in Date Time": current_datetime.strftime("%d-%m-%Y %H:%M:%S"),
-                    "Duration (minutes)": float(round(duration, 2)),
+                    "Duration (minutes)": round(duration, 2),
                     "Outlet Review": outlet_review,
                     "Remarks": remarks,
                     "Status": "Completed",
@@ -685,11 +685,7 @@ def demo_page():
             with col2:
                 st.metric("Check-in", str(demo_details['Check-in Time']))
                 st.metric("Check-out", str(demo_details['Check-out Time']))
-                try:
-                    duration = float(demo_details['Duration (minutes)'])
-                    st.metric("Duration", f"{duration:.1f} minutes")
-                except (ValueError, TypeError):
-                    st.metric("Duration", str(demo_details['Duration (minutes)']))
+                st.metric("Duration", f"{demo_details['Duration (minutes)']:.1f} minutes")
                 st.metric("Review", str(demo_details['Outlet Review']))
             
             st.subheader("Products Demonstrated")
