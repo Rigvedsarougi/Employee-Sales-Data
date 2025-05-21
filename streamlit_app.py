@@ -1772,8 +1772,7 @@ def sales_page():
             'Invoice Date': 'first',
             'Outlet Name': 'first',
             'Grand Total': 'sum',
-            'Payment Status': 'first',
-            'Delivery Status': 'first'
+            'Payment Status': 'first'
         }).reset_index()
         
         invoice_summary = invoice_summary.sort_values('Invoice Date', ascending=False)
@@ -1802,42 +1801,6 @@ def sales_page():
             key="invoice_selection"
         )
         
-        st.subheader("Delivery Status Management")
-        
-        invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
-        
-        if not invoice_details.empty:
-            with st.form(key='delivery_status_form'):
-                current_status = invoice_details.iloc[0].get('Delivery Status', 'Pending')
-                
-                new_status = st.selectbox(
-                    "Update Delivery Status",
-                    ["Pending", "Order Done", "Delivery Done"],
-                    index=["Pending", "Order Done", "Delivery Done"].index(current_status) 
-                    if current_status in ["Pending", "Order Done", "Delivery Done"] else 0,
-                    key=f"status_{selected_invoice}"
-                )
-                
-                submitted = st.form_submit_button("Update Status")
-                
-                if submitted:
-                    with st.spinner("Updating delivery status..."):
-                        try:
-                            ws = get_worksheet("Sales")
-                            data = ws.get_all_records()
-                            all_sales_data = pd.DataFrame(data)
-                            
-                            mask = all_sales_data['Invoice Number'] == selected_invoice
-                            all_sales_data.loc[mask, 'Delivery Status'] = new_status
-                            
-                            ws.clear()
-                            ws.append_rows([all_sales_data.columns.tolist()] + all_sales_data.values.tolist())
-                            
-                            st.success(f"Delivery status updated to '{new_status}' for invoice {selected_invoice}!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error updating delivery status: {e}")
-        
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
             original_invoice_date = invoice_data['Invoice Date'].strftime('%d-%m-%Y')
@@ -1852,7 +1815,6 @@ def sales_page():
                 invoice_total = invoice_details['Grand Total'].sum()
                 st.metric("Total Amount", f"₹{invoice_total:.2f}")
                 st.metric("Payment Status", str(invoice_data['Payment Status']).capitalize())
-                st.metric("Delivery Status", str(invoice_data.get('Delivery Status', 'Pending')).capitalize())
             
             st.subheader("Products")
             product_display = invoice_details[[
