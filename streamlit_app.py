@@ -475,6 +475,7 @@ def demo_page():
     
     tab1, tab2 = st.tabs(["New Demo", "Demo History"])
     
+    # --- New Demo Tab ---
     with tab1:
         st.subheader("Partner Employee")
         partner_employee = st.selectbox(
@@ -505,8 +506,8 @@ def demo_page():
             outlet_name = st.text_input("Outlet Name", key="demo_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="demo_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="demo_outlet_address")
-            outlet_state = st.text_input("Outlet State", "", key="demo_outlet_state")
-            outlet_city = st.text_input("Outlet City", "", key="demo_outlet_city")
+            outlet_state = st.text_input("Outlet State", key="demo_outlet_state")
+            outlet_city = st.text_input("Outlet City", key="demo_outlet_city")
 
         st.subheader("Demo Details")
         demo_date = st.date_input("Demo Date", key="demo_date")
@@ -540,21 +541,17 @@ def demo_page():
         if st.button("Record Demo", key="record_demo_button"):
             if outlet_name and selected_products:
                 current_datetime = get_ist_time()
-                
                 if check_in_time is None:
                     check_in_time = current_datetime.time()
-                check_in_datetime = datetime.combine(demo_date, check_in_time)
-                
                 if check_out_time is None:
                     check_out_time = current_datetime.time()
+                check_in_datetime = datetime.combine(demo_date, check_in_time)
                 check_out_datetime = datetime.combine(demo_date, check_out_time)
-                
                 duration = (check_out_datetime - check_in_datetime).total_seconds() / 60
-                
+
                 demo_id = f"DEMO-{current_datetime.strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
-                
                 partner_employee_code = Person[Person['Employee Name'] == partner_employee]['Employee Code'].values[0]
-                
+
                 demo_data = {
                     "Demo ID": demo_id,
                     "Employee Name": selected_employee,
@@ -578,10 +575,9 @@ def demo_page():
                     "Products": "|".join(selected_products),
                     "Quantities": "|".join(quantities)
                 }
-                
+
                 demo_df = pd.DataFrame([demo_data], columns=DEMO_SHEET_COLUMNS)
                 success, error = log_demo_to_gsheet(demo_df)
-                
                 if success:
                     st.success(f"Demo {demo_id} recorded successfully!")
                     st.balloons()
@@ -589,33 +585,43 @@ def demo_page():
                     st.error(f"Failed to record demo: {error}")
             else:
                 st.error("Please fill all required fields (Outlet and at least one product).")
-    
+
+    # --- Demo History Tab ---
     with tab2:
         st.subheader("Demo History")
-        
+
         @st.cache_data(ttl=300)
         def load_demo_data():
             try:
                 ws = get_worksheet("Demos")
                 data = ws.get_all_records()
                 demo_data = pd.DataFrame(data)
-                
                 if not demo_data.empty:
-                    demo_data['Demo Date'] = pd.to_datetime(demo_data['Demo Date'], dayfirst=True, errors='coerce')
-                    employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-                    filtered_data = demo_data[demo_data['Employee Code'] == employee_code]
+                    demo_data['Demo Date'] = pd.to_datetime(
+                        demo_data['Demo Date'], dayfirst=True, errors='coerce'
+                    )
+                    # ensure duration is numeric
+                    demo_data['Duration (minutes)'] = pd.to_numeric(
+                        demo_data['Duration (minutes)'], errors='coerce'
+                    )
+                    employee_code = Person[
+                        Person['Employee Name'] == selected_employee
+                    ]['Employee Code'].values[0]
+                    filtered_data = demo_data[
+                        demo_data['Employee Code'] == employee_code
+                    ]
                     return filtered_data.sort_values('Demo Date', ascending=False)
                 return pd.DataFrame()
             except Exception as e:
                 st.error(f"Error loading demo data: {e}")
                 return pd.DataFrame()
-        
+
         demo_data = load_demo_data()
-        
         if demo_data.empty:
             st.warning("No demo records found for your account")
             return
-            
+
+        # Filters
         with st.expander("🔍 Search Filters", expanded=True):
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -624,39 +630,33 @@ def demo_page():
                 demo_date_search = st.date_input("Demo Date", key="demo_date_search")
             with col3:
                 outlet_name_search = st.text_input("Outlet Name", key="demo_outlet_search")
-            
             if st.button("Apply Filters", key="search_demo_button"):
                 st.rerun()
-        
+
         filtered_data = demo_data.copy()
-        
         if demo_id_search:
             filtered_data = filtered_data[
                 filtered_data['Demo ID'].str.contains(demo_id_search, case=False, na=False)
             ]
-        
         if demo_date_search:
             date_str = demo_date_search.strftime("%d-%m-%Y")
             filtered_data = filtered_data[
                 filtered_data['Demo Date'].dt.strftime('%d-%m-%Y') == date_str
             ]
-        
         if outlet_name_search:
             filtered_data = filtered_data[
                 filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False, na=False)
             ]
-        
+
         if filtered_data.empty:
             st.warning("No matching records found")
             return
-            
+
         st.write(f"📄 Showing {len(filtered_data)} of your demos")
-        
         summary_cols = [
             'Demo ID', 'Demo Date', 'Outlet Name', 'Partner Employee',
             'Check-in Time', 'Check-out Time', 'Duration (minutes)', 'Outlet Review'
         ]
-        
         st.dataframe(
             filtered_data[summary_cols],
             column_config={
@@ -665,55 +665,51 @@ def demo_page():
             use_container_width=True,
             hide_index=True
         )
-        
+
         selected_demo = st.selectbox(
             "Select demo to view details",
             filtered_data['Demo ID'],
             key="demo_selection"
         )
-        
-        if not filtered_data.empty:
-            demo_details = filtered_data[filtered_data['Demo ID'] == selected_demo].iloc[0]
-            
-            st.subheader(f"Demo {selected_demo} Details")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Date", demo_details['Demo Date'].strftime('%d-%m-%Y'))
-                st.metric("Outlet", str(demo_details['Outlet Name']))
-                st.metric("Contact", str(demo_details['Outlet Contact']))
-                st.metric("Partner", str(demo_details['Partner Employee']))
-            with col2:
-                st.metric("Check-in", str(demo_details['Check-in Time']))
-                st.metric("Check-out", str(demo_details['Check-out Time']))
-                st.metric("Duration", f"{demo_details['Duration (minutes)']:.1f} minutes")
-                st.metric("Review", str(demo_details['Outlet Review']))
-            
-            st.subheader("Products Demonstrated")
-            products = demo_details['Products'].split("|")
-            quantities = demo_details['Quantities'].split("|")
-            
-            product_df = pd.DataFrame({
-                "Product": products,
-                "Quantity": quantities
-            })
-            
-            st.dataframe(
-                product_df,
-                use_container_width=True,
-                hide_index=True
-            )
-            
-            st.subheader("Remarks")
-            st.write(demo_details['Remarks'])
-            
-            csv = filtered_data.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "Download Demo History",
-                csv,
-                "demo_history.csv",
-                "text/csv",
-                key='download-demo-csv'
-            )
+
+        demo_details = filtered_data[filtered_data['Demo ID'] == selected_demo].iloc[0]
+        st.subheader(f"Demo {selected_demo} Details")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Date", demo_details['Demo Date'].strftime('%d-%m-%Y'))
+            st.metric("Outlet", str(demo_details['Outlet Name']))
+            st.metric("Contact", str(demo_details['Outlet Contact']))
+            st.metric("Partner", str(demo_details['Partner Employee']))
+        with col2:
+            raw_duration = demo_details['Duration (minutes)']
+            duration = float(raw_duration) if isinstance(raw_duration, str) else raw_duration
+            st.metric("Duration", f"{duration:.1f} minutes")
+            st.metric("Review", str(demo_details['Outlet Review']))
+
+        st.subheader("Products Demonstrated")
+        products = demo_details['Products'].split("|")
+        quantities = demo_details['Quantities'].split("|")
+        product_df = pd.DataFrame({
+            "Product": products,
+            "Quantity": quantities
+        })
+        st.dataframe(
+            product_df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.subheader("Remarks")
+        st.write(demo_details['Remarks'])
+
+        csv = filtered_data.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            "Download Demo History",
+            csv,
+            "demo_history.csv",
+            "text/csv",
+            key='download-demo-csv'
+        )
 
 def support_ticket_page():
     st.title("Support Ticket Management")
