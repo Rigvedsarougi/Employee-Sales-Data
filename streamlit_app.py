@@ -1569,27 +1569,33 @@ def sales_page():
                     st.text(product)
                 with cols[1]:
                     st.text(f"₹{unit_price:.2f}")
+
                 with cols[2]:
-                    prod_discount = st.number_input(
+                    discount_str = st.text_input(
                         f"Discount for {product}",
-                        min_value=0.0,
-                        max_value=100.0,
-                        value=0.0,
-                        step=0.1,
+                        placeholder="0.00",
                         key=f"discount_{product}",
                         label_visibility="collapsed"
                     )
-                    product_discounts.append(prod_discount)
+                    try:
+                        prod_discount = float(discount_str) if discount_str != "" else 0.0
+                    except ValueError:
+                        st.error("Please enter a valid number for discount")
+                        prod_discount = 0.0
+            
+                # — replace number_input for qty with text_input + placeholder —
                 with cols[3]:
-                    qty = st.number_input(
+                    qty_str = st.text_input(
                         f"Qty for {product}",
-                        min_value=1,
-                        value=1,
-                        step=1,
+                        placeholder="1",
                         key=f"qty_{product}",
                         label_visibility="collapsed"
                     )
-                    quantities.append(qty)
+                    try:
+                        qty = int(qty_str) if qty_str != "" else 1
+                    except ValueError:
+                        st.error("Please enter a valid integer for quantity")
+                        qty = 1
                 
                 item_total = unit_price * (1 - prod_discount/100) * qty
                 subtotal += item_total
