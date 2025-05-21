@@ -1103,15 +1103,18 @@ def log_travel_hotel_request(conn, request_df):
 
 def log_sales_to_gsheet(conn, sales_df):
     try:
+        # Ensure every expected column exists
+        sales_df = sales_df.reindex(columns=SALES_SHEET_COLUMNS, fill_value="")
+
         ws = _spreadsheet.worksheet("Sales")
         for _, sale in sales_df.iterrows():
-            row = [ sale[col] for col in SALES_SHEET_COLUMNS ]
+            row = sale.tolist()
             ws.append_row(row, value_input_option="USER_ENTERED")
+
         st.success("Sales data appended to Google Sheets!")
     except Exception as e:
         st.error(f"Error appending sales data: {e}")
         st.stop()
-
 
 
 def update_delivery_status(conn, invoice_number, product_name, new_status):
