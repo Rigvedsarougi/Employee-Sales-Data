@@ -1,113 +1,105 @@
-Employee Name,Discount Category,Employee Code,Designation,Department,DATE OF JOINING
-Soumya,E1,BSS1111,SMS,6-May-2024
-Pradeep Kumar Verma,E1,BSS1087,BDM - Noida,SALES & MARKETING,6-May-2024
-Sanjib Das,E1,BSS1089,BDE - KOLKATTA,SALES & MARKETING,9-May-2024
-Tanu Jha,E1,BSS1091,BDE - JAMSHEDPUR,SALES & MARKETING,10-May-2024
-Surendra K,E1,BSS1299,RSM - AP/Telangana with Hyderabad HQ,SALES & MARKETING,10-Mar-2025
-Mritunjay Pandey,E1,BSS1092,BDE - RANCHI,SALES & MARKETING,10-May-2024
-Sarika Vilas Pawar,E1,BSS1103,BDE - Pune 1,SALES & MARKETING,1-Jun-2024
-Archana Jaswant More,E1,BSS1104,BDE - Pune 2,SALES & MARKETING,1-Jun-2024
-Prashant Sharma,E1,BSS1115,RSM - North India,SALES & MARKETING,11-Jun-2024
-Rajan Amarnath,E1,BSS1125,RSM - South India,SALES & MARKETING,19-Jun-2024
-Sherwin Tennyson,E1,BSS1126,SR. BDE - COIMBATORE,SALES & MARKETING,19-Jun-2024
-Karthik TSV,E1,BSS1150,ASM - AP & Key Accounts Manager,SALES & MARKETING,27-Jul-2024
-Karan Sharma,E1,BSS1152,BDM - Lucknow,SALES & MARKETING,1-Aug-2024
-Paras,E1,BSS1154,ASM - Haryana,SALES & MARKETING,1-Aug-2024
-A Jagadishwera Rao,E1,BSS1156,AGM Sales - South India,SALES & MARKETING,1-Aug-2024
-M. Shanawaz Khan,E1,BSS1157,ASM - Bengaluru,SALES & MARKETING,8-Aug-2024
-Rahul Kumar,E1,BSS1158,ASM - Chhattisgarh,SALES & MARKETING,7-Aug-2024
-Navin Kumar Chatla,E1,BSS1168,ASM - Hyderabad,SALES & MARKETING,21-Aug-2024
-Neha Kanojiya,E1,BSS1180,BDE - Raipur,SALES & MARKETING,1-Sep-2024
-Sreekumar P S,E1,BSS1182,ASM - Cochin,SALES & MARKETING,6-Sep-2024
-Gourav Sharma,E1,BSS1183,BDE - Chandigarh,SALES & MARKETING,9-Sep-2024
-Mayank Singh,E1,BSS1184,BDM - Chhattisgarh,SALES & MARKETING,1-Oct-2024
-Bholaram Prakash Kachewar,E1,BSS1186,BDM - Nagpur,SALES & MARKETING,12-Sep-2024
-M. Dinesh Kumar,E1,BSS1190,ASM - Tamil Nadu,SALES & MARKETING,3-Oct-2024
-Shobha Singh,E1,BSS1194,BDE - Navi Mumbai,SALES & MARKETING,7-Oct-2024
-Tejashree Ahire,E1,BSS1195,Techno Sales - Nashik,SALES & MARKETING,7-Oct-2024
-Mohit Thakur,E1,BSS1198,BDE - East Delhi & Ghaziabad,SALES & MARKETING,3-Oct-2024
-Mriganka Dev Mahanta,E1,BSS1201,ASM - 7 Sisters,SALES & MARKETING,14-Oct-2024
-Somanth Basu,E1,BSS1206,ASM - KOLKATTA,SALES & MARKETING,14-Oct-2024
-Ajay Singh,E1,BSS1208,SO - Guwahati & Lower Assam,SALES & MARKETING,17-Oct-2024
-Dharmendra Panchal,E1,BSS1216,RSM - Central India (M.P & Gujrat),SALES & MARKETING,4-Nov-2024
-Purabi Das,E1,BSS1221,SO - Guwahati,SALES & MARKETING,12-Nov-2024
-Souvik Mitra,E1,BSS1225,BDM - Kolkata,SALES & MARKETING,18-Nov-2024
-Arvind Singh,E1,BSS1226,BDM - Western Mumbai,SALES & MARKETING,18-Nov-2024
-Moin Khan,E1,BSS1227,Sr. BDM - South Delhi & Jaipur,SALES & MARKETING,20-Nov-2024
-Sashikant Mallick,E1,BSS1228,BDE - Bhubaneshwar,SALES & MARKETING,20-Nov-2024
-Harshal Mahesh Khadekar,E1,BSS1231,SO - Nashik,SALES & MARKETING,22-Nov-2024
-Sujata Pandit,E1,BSS1236,BDE - Central Mumbai,SALES & MARKETING,2-Dec-2024
-Priyanka Das,E1,BSS1242,BDE - Dibrugarh,SALES & MARKETING,11-Dec-2024
-Megha Goswami,E1,BSS1245,BDM - East Delhi,SALES & MARKETING,12-Dec-2024
-Gourav Kumar,E1,BSS1255,BDE - Amritsar,SALES & MARKETING,1-Jan-2025
-Lovekesh Kumar,E1,BSS1260,Sr. BDM,SALES & MARKETING,8-Jan-2025
-Sandeep Kaur,E1,BSS1261,"ASM - Punjab, H.P, & Jammu",SALES & MARKETING,14-Jan-2025
-Archana,E1,BSS1265,BDM - Mysore,SALES & MARKETING,17-Jan-2025
-Soniya Mehta,E1,BSS1267,BDE - Ludhiana,SALES & MARKETING,20-Jan-2025
-Mousom Gogoi,E1,BSS1268,BDE - Tinsukia,SALES & MARKETING,22-Jan-2025
-Ahad Ali,E1,BSS1270,SO - Bhopal,SALES & MARKETING,1-Feb-2025
-Veena Tapre,E1,BSS1271,BDE - Baroda,SALES & MARKETING,1-Feb-2025
-Abhay Kumar,E1,BSS1276,ASM - Rajasthan,SALES & MARKETING,3-Feb-2025
-Mohd Kalim Shaikh,E1,BSS1279,BDE - Western Mumbai,SALES & MARKETING,5-Feb-2025
-Asha Sharma,E1,BSS1282,BDE - Faridabad,SALES & MARKETING,11-Feb-2025
-K.Rani,E1,BSS1283,BDE  Visakhapatnam,SALES & MARKETING,12-Feb-2025
-Sajina.K,E1,BSS1284,BDE  Kannur,SALES & MARKETING,14-Feb-2025
-B.Sushma,E1,BSS1285,BDE  Secunderabad,SALES & MARKETING,13-Feb-2025
-Goutam Bin,E1,BSS1286,BDE - Agartala HQ,SALES & MARKETING,18-Feb-2025
-Kanhaiya Devar,E1,BSS1288,ASM - ROTN,SALES & MARKETING,7-Feb-2025
-Satish Tyagi,E1,BSS1318,ASM - (DELHI NCR),SALES & MARKETING,3-Mar-2025
-Navita Kumari,E1,BSS1291,DSR Dhanbad HQ,SALES & MARKETING,2-Jan-2025
-Kamal Halder,E1,BSS1293,BDE - Siliguri,SALES & MARKETING,3-Mar-2025
-Prathamesh Dixit,E1,BSS1300,BDM -Thane and Navi Mumbai for Mumbai territory,SALES & MARKETING,10-Mar-2025
-Kunal Sureshrao Musale,E1,BSS1305,RSM - ROM (Nagpur HQ),SALES & MARKETING,11-Mar-2025
-Soma Mukherjee,E1,BSS1311,BDE - Ranchi,SALES & MARKETING,25-Mar-2025
-Kiran Kahar,E1,BSS1312,BDE - Kota HQ,SALES & MARKETING,25-Mar-2025
-Arun Verma,E1,BSS1313,SO - (Kanpur HQ),SALES & MARKETING,1-Apr-2025
-Anjum Abdul Ghaffar,E1,BSS1314,BDE - Nagpur HQ,SALES & MARKETING,7-Apr-2025
-Bindu A,E1,BSS1316,ASM - Karnataka,SALES & MARKETING,10-Apr-2025
-Manish Kumar ,E1,BSS1317,BDE - Jodhpur HQ,SALES & MARKETING,11-Apr-2025
-Dimpi Bhola,E1,BSS1319,BDE - Meerut,SALES & MARKETING,14-Apr-2025
-Neha Sharma,E1,BSS1320, BDE - Jaipur,SALES & MARKETING,14-Apr-2025
-Ekta Bhasin,E1,BSS1321,BDE - Zirakpur,SALES & MARKETING,14-Apr-2025
-Adarsh Tiwari,E1,BSS1304,BDM Pune HQ,SALES & MARKETING,
-Sneha Maria,E1,BSS1306,ATM  in TN & KL- (Chennai  HQ),SALES & MARKETING,
-Chirag Sharma ,E1,BSS1294, BDE - Firozpur,SALES & MARKETING,1-Mar-2025
-Yogesh,E1,BSS1296,BDM - Haryana Pepsu HQ,SALES & MARKETING,17-Mar-2025
-Gaurav Kumar,E1,BSS1301,BDM -Rudrapur HQ,SALES & MARKETING,11-Mar-2025
-Jayshree Reddy,E1,BSS1302,BDM -Ajmer HQ,SALES & MARKETING,10-Mar-2025
-Arunesh Kumar Gupta,E1,BSS1307,BDE - Gorakhpur HQ,SALES & MARKETING,17-Mar-2025
-Monika,E1,BSS1308,BDE - West Delhi HQ,SALES & MARKETING,24-Mar-2025
-B. B. Lalatendu,E1,BSS1135,Sr. BDE - Cuttack & Bhubaneshwar,SALES & MARKETING ,1-Jul-2024
-Kajal sarkar,E1,BSS1110,Technical Trainer - Delhi NCR,TRAINING,12-Jun-2024
-Kajal Jha,E1,BSS1138,Technical Trainer - Delhi NCR,TRAINING,15-Jul-2024
-A. Saranya,E1,BSS1173,Technical Trainer - Coimbatore ,TRAINING,20-Aug-2024
-Annie Sophia ,E1,BSS1177,Technical Trainer - Bengaluru,TRAINING,2-Sep-2024
-Swati Bhuruk,E1,BSS1178,Technical Trainer - Hyderabad ,TRAINING,4-Sep-2024
-Shelza Khan,E1,BSS1188,Technical Educator,TRAINING,19-Sep-2024
-Priya G,E1,BSS1191,Technical Educator - Kerala,TRAINING,7-Sep-2024
-Moumita Nandy,E1,BSS1205,RTM - East Zone,TRAINING,4-Oct-2024
-Geeta I Jagtap,E1,BSS1210,Technical Trainer - Mumbai,TRAINING,18-Oct-2024
-Anitha Jackline,E1,BSS1214,Techno Sales - Bengaluru,TRAINING,25-Oct-2024
-Hida Tahir,E1,BSS1224,Technical Trainer - UP East,TRAINING,18-Nov-2024
-Blessy Kikon,E1,BSS1239,Technosales - Dimapur,TRAINING,2-Dec-2024
-Geeta Sharma,E1,BSS1241,Technosales - Saharanpur,TRAINING,4-Dec-2024
-Payel Chatterjee,E1,BSS1243,Technical Trainer - East India,TRAINING,7-Dec-2024
-Barnali,E1,BSS1249,Sr. Technical Educator - Raipur,TRAINING,16-Dec-2024
-Manju Kumari,E1,BSS1250,Technical Educator - Jharkhand,TRAINING,23-Dec-2024
-Sherin K,E1,BSS1252,Technical Educator - Palakkad,TRAINING,2-Jan-2025
-Parneeta Rani,E1,BSS1253,Technical Educator - Punjab,TRAINING,23-Dec-2024
-Jiteshta Thukral,E1,BSS1256,Technical Educator - Delhi/NCR,TRAINING,6-Jan-2025
-Sangita Dattatray Walunj,E1,BSS1257,Technosales - Mumbai,TRAINING,2-Jan-2025
-Rita Das,E1,BSS1258,Technical Educator - Kolkata,TRAINING,8-Jan-2025
-Dhammjyoti Sambharkar,E1,BSS1259,Technical Educator - Nagpur,TRAINING,7-Jan-2025
-Sandhya Rani Das,E1,BSS1262,Technical Educator - Bhubaneshwar,TRAINING,20-Jan-2025
-Saleen Shaikh,E1,BSS1264,Technical Educator - M.P,TRAINING,16-Jan-2025
-Ashwini Deshmukh,E1,BSS1273,Techno sale - Pune PCMC,TRAINING,28-Jan-2025
-Priya Gandhi,E1,BSS1274,Technical Trainer - Ambala HQ,TRAINING,3-Feb-2025
-Deepti Singh,E1,BSS1277,"Technical Educator- (Punjab, H.P)",TRAINING,3-Mar-2025
-Mamta Sinha,E1,BSS1295,Technosale- Varanasi ,TRAINING,3-Mar-2025
-Shalaka Preetam Shetye,E1,BSS1315,Jr. Technical Educator- (Mumbai),TRAINING,8-Apr-2025
-Poonam Sharma,E1,BSS1290,Technosale- Kanpur ,TRAINING,8-Mar-2025
-Abhay Tiwari,E1,BSS1032,EXECUTIVE - R&D,R&D,19-Feb-2024
-Roli Tiwari,E1,BSS1033,SR. EXECUTIVE R&D,R&D,1-Feb-2024
-Sandhya Gupta,E1,BSS1325,BDE - Jammu and Kashmir HQ,SALES & MARKETING,17-Apr-2025
+Employee Code,Discount Category,Employee Name,DATE OF JOINING,Designation,Department,Zone
+BSS1262,E1,Sandhya Rani Das,20-Jan-2025,Technical Educator - Bhubaneshwar,TRAINING,EAST ZONE
+BSS1032,E1,Abhay Tiwari,19-Feb-2024,EXECUTIVE - R&D,R&D,HEAD OFFICE
+BSS1033,E1,Roli Tiwari,1-Feb-2024,SR. EXECUTIVE R&D,R&D,HEAD OFFICE
+BSS1087,E1,Pradeep Kumar Verma,6-May-2024,BDM - Noida,SALES & MARKETING,NORTH ZONE
+BSS1089,E1,Sanjib Das,9-May-2024,BDE - KOLKATTA,SALES & MARKETING,EAST ZONE
+BSS1091,E1,Tanu Jha,10-May-2024,BDE - JAMSHEDPUR,SALES & MARKETING,EAST ZONE
+BSS1092,E1,Mritunjay Pandey,10-May-2024,BDE - RANCHI,SALES & MARKETING,EAST ZONE
+BSS1104,E1,Archana Jaswant More,1-Jun-2024,BDE - Pune 2,SALES & MARKETING,WEST ZONE
+BSS1110,E1,Kajal sarkar,12-Jun-2024,Technical Trainer - Delhi NCR,TRAINING,NORTH ZONE
+BSS1115,E1,Prashant Sharma,11-Jun-2024,RSM - North India,SALES & MARKETING,NORTH ZONE
+BSS1125,E1,Rajan Amarnath,19-Jun-2024,RSM - South India,SALES & MARKETING,SOUTH ZONE
+BSS1126,E1,Sherwin Tennyson,19-Jun-2024,SR. BDE - COIMBATORE,SALES & MARKETING,SOUTH ZONE
+BSS1135,E1,B. B. Lalatendu,1-Jul-2024,Sr. BDE - Cuttack & Bhubaneshwar,SALES & MARKETING,EAST ZONE
+BSS1138,E1,Kajal Jha,15-Jul-2024,Technical Trainer - Delhi NCR,TRAINING,NORTH ZONE
+BSS1150,E1,Karthik TSV,27-Jul-2024,ASM - AP & Key Accounts Manager,SALES & MARKETING,SOUTH ZONE
+BSS1152,E1,Karan Sharma,1-Aug-2024,BDM - Lucknow,SALES & MARKETING,NORTH ZONE
+BSS1154,E1,Paras,1-Aug-2024,ASM - Haryana,SALES & MARKETING,NORTH ZONE
+BSS1156,E1,A Jagadishwera Rao,1-Aug-2024,AGM Sales - South India,SALES & MARKETING,SOUTH ZONE
+BSS1158,E1,Rahul Kumar,7-Aug-2024,ASM - Chhattisgarh,SALES & MARKETING,EAST ZONE
+BSS1177,E1,Annie Sophia,2-Sep-2024,Technical Trainer - Bengaluru,TRAINING,SOUTH ZONE
+BSS1178,E1,Swati Bhuruk,4-Sep-2024,Technical Trainer - Hyderabad,TRAINING,SOUTH ZONE
+BSS1182,E1,Sreekumar P S,6-Sep-2024,ASM - Cochin,SALES & MARKETING,SOUTH ZONE
+BSS1186,E1,Bholaram Prakash Kachewar,12-Sep-2024,BDM - Nagpur,SALES & MARKETING,WEST ZONE
+BSS1188,E1,Shelza Khan,19-Sep-2024,Technical Educator,TRAINING,NORTH ZONE
+BSS1190,E1,M. Dinesh Kumar,3-Oct-2024,ASM - Tamil Nadu,SALES & MARKETING,SOUTH ZONE
+BSS1198,E1,Mohit Thakur,3-Oct-2024,BDE - East Delhi & Ghaziabad,SALES & MARKETING,NORTH ZONE
+BSS1201,E1,Mriganka Dev Mahanta,14-Oct-2024,ASM - 7 Sisters,SALES & MARKETING,EAST ZONE
+BSS1208,E1,Ajay Singh,17-Oct-2024,SO - Guwahati & Lower Assam,SALES & MARKETING,EAST ZONE
+BSS1210,E1,Geeta I Jagtap,18-Oct-2024,Technical Trainer - Mumbai,TRAINING,WEST ZONE
+BSS1214,E1,Anitha Jackline,25-Oct-2024,Techno Sales - Bengaluru,TRAINING,SOUTH ZONE
+BSS1216,E1,Dharmendra Panchal,4-Nov-2024,RSM - Central India (M.P & Gujrat),SALES & MARKETING,CENTRAL ZONE
+BSS1224,E1,Hida Tahir,18-Nov-2024,Technical Trainer - UP East,TRAINING,NORTH ZONE
+BSS1227,E1,Moin Khan,20-Nov-2024,Sr. BDM - South Delhi & Jaipur,SALES & MARKETING,NORTH ZONE
+BSS1228,E1,Sashikant Mallick,20-Nov-2024,BDE - Bhubaneshwar,SALES & MARKETING,EAST ZONE
+BSS1239,E1,Blessy Kikon,2-Dec-2024,Technosales - Dimapur,TRAINING,EAST ZONE
+BSS1241,E1,Geeta Sharma,4-Dec-2024,Technosales - Saharanpur,TRAINING,NORTH ZONE
+BSS1242,E1,Priyanka Das,11-Dec-2024,BDE - Dibrugarh,SALES & MARKETING,EAST ZONE
+BSS1249,E1,Barnali,16-Dec-2024,Sr. Technical Educator - Raipur,TRAINING,EAST ZONE
+BSS1250,E1,Manju Kumari,23-Dec-2024,Technical Educator - Jharkhand,TRAINING,EAST ZONE
+BSS1252,E1,Sherin K,2-Jan-2025,Technical Educator - Palakkad,TRAINING,SOUTH ZONE
+BSS1253,E1,Parneeta Rani,23-Dec-2024,Technical Educator - Punjab,TRAINING,NORTH ZONE
+BSS1255,E1,Gourav Kumar,1-Jan-2025,BDE - Amritsar,SALES & MARKETING,NORTH ZONE
+BSS1257,E1,Sangita Dattatray Walunj,2-Jan-2025,Technosales - Mumbai,TRAINING,WEST ZONE
+BSS1259,E1,Dhammjyoti Sambharkar,7-Jan-2025,Technical Educator - Nagpur,TRAINING,WEST ZONE
+BSS1260,E1,Lovekesh Kumar,8-Jan-2025,Sr. BDM,SALES & MARKETING,NORTH ZONE
+BSS1261,E1,Sandeep Kaur,14-Jan-2025,"ASM - Punjab, H.P, & Jammu",SALES & MARKETING,NORTH ZONE
+BSS1264,E1,Saleen Shaikh,16-Jan-2025,Technical Educator - M.P,TRAINING,CENTRAL ZONE
+BSS1265,E1,Archana,17-Jan-2025,BDM - Mysore,SALES & MARKETING,SOUTH ZONE
+BSS1267,E1,Soniya Mehta,20-Jan-2025,BDE - Ludhiana,SALES & MARKETING,NORTH ZONE
+BSS1268,E1,Mousom Gogoi,22-Jan-2025,BDE - Tinsukia,SALES & MARKETING,EAST ZONE
+BSS1270,E1,Ahad Ali,1-Feb-2025,SO - Bhopal,SALES & MARKETING,CENTRAL ZONE
+BSS1273,E1,Ashwini Deshmukh,28-Jan-2025,Techno sale - Pune PCMC,TRAINING,WEST ZONE
+BSS1274,E1,Priya Gandhi,3-Feb-2025,Technical Trainer - Ambala HQ,TRAINING,NORTH ZONE
+BSS1276,E1,Abhay Kumar,3-Feb-2025,ASM - Rajasthan,SALES & MARKETING,WEST ZONE
+BSS1277,E1,Deepti Singh,3-Mar-2025,"Technical Educator- (Punjab, H.P)",TRAINING,NORTH ZONE
+BSS1282,E1,Asha Sharma,11-Feb-2025,BDE - Faridabad,SALES & MARKETING,NORTH ZONE
+BSS1284,E1,Sajina.K,14-Feb-2025,BDE  Kannur,SALES & MARKETING,SOUTH ZONE
+BSS1285,E1,B.Sushma,13-Feb-2025,BDE  Secunderabad,SALES & MARKETING,SOUTH ZONE
+BSS1286,E1,Goutam Bin,18-Feb-2025,BDE - Agartala HQ,SALES & MARKETING,EAST ZONE
+BSS1288,E1,Kanhaiya Devar,7-Feb-2025,ASM - ROTN,SALES & MARKETING,SOUTH ZONE
+BSS1289,E1,Divyabhusan Tripathi,3-Mar-2025,MIS Executive,,HEAD OFFICE
+BSS1291,E1,Navita Kumari,2-Jan-2025,DSR Dhanbad HQ,SALES & MARKETING,EAST ZONE
+BSS1294,E1,Chirag Sharma,1-Mar-2025,BDE - Firozpur,SALES & MARKETING,NORTH ZONE
+BSS1295,E1,Mamta Sinha,3-Mar-2025,Technosale- Varanasi,TRAINING,NORTH ZONE
+BSS1301,E1,Gaurav Kumar,11-Mar-2025,BDM -Rudrapur HQ,SALES & MARKETING,NORTH ZONE
+BSS1302,E1,Jayshree Reddy,10-Mar-2025,BDM -Ajmer HQ,SALES & MARKETING,WEST ZONE
+BSS1305,E1,Kunal  Musale,11-Mar-2025,RSM - ROM (Nagpur HQ),SALES & MARKETING,EAST ZONE
+BSS1307,E1,Arunesh Kumar Gupta,17-Mar-2025,BDE - Gorakhpur HQ,SALES & MARKETING,NORTH ZONE
+BSS1308,E1,Monika,24-Mar-2025,BDE - West Delhi HQ,SALES & MARKETING,NORTH ZONE
+BSS1311,E1,Soma Mukherjee,25-Mar-2025,BDE - Ranchi,SALES & MARKETING,EAST ZONE
+BSS1312,E1,Kiran Kahar,25-Mar-2025,BDE - Kota HQ,SALES & MARKETING,WEST ZONE
+BSS1313,E1,Arun Verma,1-Apr-2025,SO - (Kanpur HQ),SALES & MARKETING,NORTH ZONE
+BSS1314,E1,Anjum Abdul Ghaffar,7-Apr-2025,BDE - Nagpur HQ,SALES & MARKETING,WEST ZONE
+BSS1315,E1,Shalaka Preetam Shetye,8-Apr-2025,Jr. Technical Educator- (Mumbai),TRAINING,WEST ZONE
+BSS1316,E1,Bindu A,10-Apr-2025,ASM - Karnataka,SALES & MARKETING,SOUTH ZONE
+BSS1317,E1,Manish Kumar,11-Apr-2025,BDE - Jodhpur HQ,SALES & MARKETING,WEST ZONE
+BSS1318,E1,Satish Tyagi,3-Mar-2025,BDM - (NORTH-DELHI),SALES & MARKETING,NORTH ZONE
+BSS1319,E1,Dimpi Bhola,14-Apr-2025,BDE - Meerut,SALES & MARKETING,NORTH ZONE
+BSS1320,E1,Neha Sharma,14-Apr-2025,BDE - Jaipur,SALES & MARKETING,WEST ZONE
+BSS1321,E1,Ekta Bhasin,14-Apr-2025,BDE - Zirakpur,SALES & MARKETING,NORTH ZONE
+BSS1322,E1,Lovejeet singh,17-Apr-2025,BDE - Jaipur HQ,SALES & MARKETING,WEST ZONE
+BSS1323,E1,Vijay Lagdhir,16-Apr-2025,BDM - Rajkot HQ,SALES & MARKETING,CENTRAL ZONE
+BSS1324,E1,Firdoua Sheikh,16-Apr-2025,BDE - Raipur HQ,SALES & MARKETING,EAST ZONE
+BSS1325,E1,Sandhya Gupta,17-Apr-2025,BDE - Jammu and Kashmir HQ,SALES & MARKETING,NORTH ZONE
+BSS1326,E1,Mamatha.R,23-Apr-2025,Technosale - North South Bangalore,SALES & MARKETING,SOUTH ZONE
+BSS1327,E1,K.Sunanda,24-Apr-2025,Sr. ASM - Telangana,SALES & MARKETING,SOUTH ZONE
+BSS1331,E1,Rekha Jitendra Jadhav,17-Apr-2025,BDE - Mumbai,SALES & MARKETING,WEST ZONE
+BSS1332,E1,Kamal Sonkar,5-May-2025,SO - (Lucknow HQ),SALES & MARKETING,NORTH ZONE
+BSS1333,E1,Ram Mandel,15-May-2025,BDM -Region (Raipur HQ),SALES & MARKETING,EAST ZONE
+BSS1335,E1,Rajesh  Kumar,8-May-2025,BDE- Himachal,SALES & MARKETING,NORTH ZONE
+BSS1336,E1,Jatin,10-May-2025,BDE - Jalandhar HQ,SALES & MARKETING,WEST ZONE
+BSS1337,E1,Divya,12-May-2025,OS - Pune,SALES & MARKETING,WEST ZONE
+BSS1338,E1,Seema Pardeshi,12-May-2025,BDE- Nasik,SALES & MARKETING,WEST ZONE
+BSS1340,E1,Kavitha Sampath,15-May-2025,Technical Educator - Tamilnadu HQ,TRAINING,SOUTH ZONE
+BSS1341,E1,Pallavi,15-May-2025,Technical Educator- Raipur Chhattisgarh,TRAINING,EAST ZONE
+BSS1342,E1,Vinod Kumar,14-May-2025,Sr. BDM - Gurugram HQ,SALES & MARKETING,NORTH ZONE
+BSS1343,E1,Arkaprava Jana,13-May-2025,BDE - Kolkata HQ,SALES & MARKETING,EAST ZONE
+BSS1344,E1,Ketan Shah,13-May-2025,BDE - Mumbai  HQ,SALES & MARKETING,WEST ZONE
+BSS1345,E1,Sayan Adhikari,14-May-2025,SO - Howrah(Kolkata),SALES & MARKETING,EAST ZONE
+BSS1347,E1,Balkishan Goenka,12-May-2025,Business Manager - East region siliguri,SALES & MARKETING,EAST ZONE
+BSS1348,E1,Hiral Jain,16-May-2025,DSR - Ahmedabad,SALES & MARKETING,WEST ZONE
+BSS1350,E1,Anjali,19-May-2025,CRM Specialist,SALES & MARKETING,HEAD OFFICE
+BSS1351,E1,Md Salman Khan,20-May-2025,BDE - Siliguri HQ,SALES & MARKETING,EAST ZONE
+BSS1352,E1,"S. Rohini Subramanian,",20-May-2025,Technical Educator (Mckingstone) - Chennai HQ,TRAINING,SOUTH ZONE
