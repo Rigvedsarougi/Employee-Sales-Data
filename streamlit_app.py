@@ -2153,18 +2153,17 @@ def visit_page():
 
 def attendance_page():
     import pandas as pd
-    from urllib.parse import urlparse, parse_qs
 
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
 
-    # Define columns for the location-logger sheet
+    # Columns for our separate Locationlogger sheet
     LOCATION_LOGGER_COLUMNS = [
         "Attendance ID",
         "Timestamp",
         "Latitude",
         "Longitude",
-        "Location Link"
+        "Map Link"
     ]
 
     # Prevent double-marking
@@ -2182,119 +2181,92 @@ def attendance_page():
 
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
-        live_location = st.text_input(
-            "Enter your current location (Google Maps link)",
-            help="We’ll log every minute’s first lat/lng pair from this link",
-            key="location_input"
-        )
+        st.markdown("Please allow your browser to share location—your first reading (time, lat, lng) will be captured automatically.")
 
-        st.title("📍 Location Logger")
-        st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
-        components.html(
+        # Embed HTML+JS that captures one reading and sends it back to Streamlit
+        loc = components.html(
             """
-            <!DOCTYPE html>
             <html>
-            <head>
-              <meta charset="utf-8" />
-              <style>
-                body { font-family: sans-serif; padding: 10px; }
-                ul { padding-left: 20px; }
-              </style>
-            </head>
             <body>
-              <h3>Location History</h3>
-              <div id="status">Waiting for location...</div>
-              <ul id="history"></ul>
               <script>
                 const START_HOUR = 0, END_HOUR = 23;
-                const history = [];
-                function isWithinTimeRange() {
+                function inWindow() {
                   const h = new Date().getHours();
                   return h >= START_HOUR && h <= END_HOUR;
                 }
                 function sendLocation() {
+                  if (!navigator.geolocation) return;
                   navigator.geolocation.getCurrentPosition(pos => {
                     const t = new Date().toLocaleTimeString();
                     const lat = pos.coords.latitude;
                     const lng = pos.coords.longitude;
-                    history.push({ time: t, lat, lng });
-                    updateList();
+                    const link = `https://maps.google.com/?q=${lat},${lng}`;
+                    // send data back to Streamlit
+                    window.parent.postMessage(
+                      { type: 'streamlit:setComponentValue',
+                        value: { time: t, latitude: lat, longitude: lng, link: link } },
+                      "*"
+                    );
                   });
-                }
-                function updateList() {
-                  const ul = document.getElementById("history");
-                  ul.innerHTML = "";
-                  history.forEach(loc => {
-                    const li = document.createElement("li");
-                    li.innerHTML = `[${loc.time}] Lat: ${loc.lat.toFixed(5)}, Lng: ${loc.lng.toFixed(5)}`;
-                    ul.appendChild(li);
-                  });
-                  document.getElementById("status").innerText =
-                    `Last updated: ${history[history.length-1].time}`;
                 }
                 window.onload = () => {
-                  if (isWithinTimeRange()) sendLocation();
-                  setInterval(() => {
-                    if (isWithinTimeRange()) sendLocation();
-                  }, 60*1000);
+                  if (inWindow()) sendLocation();
+                  setInterval(() => { if (inWindow()) sendLocation(); }, 60_000);
                 };
               </script>
             </body>
             </html>
             """,
-            height=500,
+            height=200,
+            key="loc_component"
         )
 
         if st.button("Mark Attendance", key="mark_attendance_button"):
-            if not live_location:
-                st.error("Please provide your location link")
-            else:
-                with st.spinner("Recording attendance..."):
-                    attendance_id, error = record_attendance(
-                        selected_employee,
-                        status,
-                        location_link=live_location
-                    )
-                    if error:
-                        st.error(f"Failed to record attendance: {error}")
-                        return
+            if not loc:
+                st.error("Waiting for location data—please allow location access in your browser.")
+                return
 
-                # Parse the first lat/lng from the provided link
-                try:
-                    ts = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
-                    q = parse_qs(urlparse(live_location).query).get("q", [])
-                    lat, lng = (q[0].split(",", 1) if q else (None, None))
-                except Exception:
-                    ts, lat, lng = (get_ist_time().strftime("%d-%m-%Y %H:%M:%S"), None, None)
+            # Record attendance in the main sheet
+            attendance_id, error = record_attendance(
+                selected_employee,
+                status
+            )
+            if error:
+                st.error(f"Failed to record attendance: {error}")
+                return
 
-                # Build and append to Locationlogger sheet
-                new_row = {
-                    "Attendance ID": attendance_id,
-                    "Timestamp": ts,
-                    "Latitude": lat or "",
-                    "Longitude": lng or "",
-                    "Location Link": live_location
-                }
-                try:
-                    existing = conn.read(
-                        worksheet="Locationlogger",
-                        usecols=list(range(len(LOCATION_LOGGER_COLUMNS))),
-                        ttl=5
-                    ).dropna(how="all")
-                except Exception:
-                    existing = pd.DataFrame(columns=LOCATION_LOGGER_COLUMNS)
+            # Prepare the row for the Locationlogger sheet
+            ts = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
+            new_row = {
+                "Attendance ID": attendance_id,
+                "Timestamp": ts,
+                "Latitude": loc["latitude"],
+                "Longitude": loc["longitude"],
+                "Map Link": loc["link"]
+            }
 
-                df_new = pd.DataFrame([new_row], columns=LOCATION_LOGGER_COLUMNS)
-                conn.update(
+            # Read existing (or start empty)
+            try:
+                existing = conn.read(
                     worksheet="Locationlogger",
-                    data=pd.concat([existing, df_new], ignore_index=True)
-                )
+                    usecols=list(range(len(LOCATION_LOGGER_COLUMNS))),
+                    ttl=5
+                ).dropna(how="all")
+            except Exception:
+                existing = pd.DataFrame(columns=LOCATION_LOGGER_COLUMNS)
 
-                st.success(f"Attendance recorded successfully! ID: {attendance_id}")
-                st.balloons()
+            # Append and write back
+            df_new = pd.DataFrame([new_row], columns=LOCATION_LOGGER_COLUMNS)
+            conn.update(
+                worksheet="Locationlogger",
+                data=pd.concat([existing, df_new], ignore_index=True)
+            )
+
+            st.success(f"Attendance recorded successfully! ID: {attendance_id}")
+            st.balloons()
 
     else:
-        # Leave flow
+        # Leave flow remains unchanged
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
