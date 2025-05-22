@@ -2156,7 +2156,7 @@ def attendance_page():
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
         live_location = st.text_input(
-            "Enter your current location (Google Maps link or address)",
+            "Enter your current location (Google Maps link or address)", 
             help="Please share your live location for verification",
             key="location_input"
         )
@@ -2215,7 +2215,7 @@ def attendance_page():
         </html>
         """
         # Receive the last location update as a JSON string
-        loc_message = components.html(html_content, height=400, key="location_logger")
+        loc_message = components.html(html_content, height=400)
 
         # If a new location message arrived, parse and store in Google Sheets
         if loc_message:
@@ -2257,7 +2257,6 @@ def attendance_page():
                         st.success(f"Attendance recorded successfully! ID: {attendance_id}")
                         st.balloons()
     else:
-        # Leave flow unchanged
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
@@ -2281,6 +2280,7 @@ def attendance_page():
                         st.error(f"Failed to submit leave request: {error}")
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
+
 
 
 if __name__ == "__main__":
