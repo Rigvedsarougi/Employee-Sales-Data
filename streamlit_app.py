@@ -1737,14 +1737,20 @@ def sales_page():
             gst_number    = st.text_input("GST Number", key="manual_gst_number")
             contact_number = st.text_input("Contact Number", key="manual_contact_number")
             address        = st.text_area("Address", key="manual_address")
-            state          = st.text_input("State", "", key="manual_state")
-            city           = st.text_input("City", "", key="manual_city")
+            
+            # State and City Dropdowns
+            unique_states = sorted(citystate['State'].unique())
+            selected_state = st.selectbox("State", unique_states, key="manual_state")
+            
+            # Filter cities based on selected state
+            cities_in_state = sorted(citystate[citystate['State'] == selected_state]['City'].unique())
+            selected_city = st.selectbox("City", cities_in_state, key="manual_city")
     
         if st.button("Generate Invoice", key="generate_invoice_button"):
             if selected_products and customer_name:
                 invoice_number = generate_invoice_number()
                 pdf, pdf_path = generate_invoice(
-                    customer_name, gst_number, contact_number, address, state, city,
+                    customer_name, gst_number, contact_number, address, selected_state, selected_city,
                     selected_products, quantities, product_discounts, discount_category,
                     selected_employee, payment_status, amount_paid, None, None,
                     invoice_number, transaction_type,
