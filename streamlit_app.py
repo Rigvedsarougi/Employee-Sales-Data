@@ -2158,6 +2158,8 @@ def visit_page():
                 st.error(f"Error retrieving visit data: {e}")
 
 
+import re
+
 def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
@@ -2178,121 +2180,122 @@ def attendance_page():
     # PRESENT / HALF DAY branch
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            live_location = st.text_input(
-                "Enter your current location (Google Maps link or address)",
-                help="Please share your live location for verification",
-                key="location_input"
-            )
+        live_location = st.text_input(
+            "Enter your current location (Google Maps link or address)",
+            help="Please share your live location for verification",
+            key="location_input"
+        )
 
-            st.title("📍 Location Logger")
-            st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
+        st.title("📍 Location Logger")
+        st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
 
-            # Inject JS for real-time location logging (runs in-browser only)
-            components.html(
-                """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8" />
-                    <style>
-                        body { font-family: sans-serif; padding: 10px; }
-                        ul { padding-left: 20px; }
-                    </style>
-                </head>
-                <body>
-                    <h3>Location History</h3>
-                    <div id="status">Waiting for location...</div>
-                    <ul id="history"></ul>
+        # Embed HTML/JS and capture the latest location via Streamlit component return
+        js_code = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset=\"utf-8\" />
+            <style>
+                body { font-family: sans-serif; padding: 10px; }
+                ul { padding-left: 20px; }
+            </style>
+        </head>
+        <body>
+            <h3>Location History</h3>
+            <div id=\"status\">Waiting for location...</div>
+            <ul id=\"history\"></ul>
 
-                    <script>
-                        const START_HOUR = 0;
-                        const END_HOUR = 23;
-                        const locationHistory = [];
+            <script>
+                const START_HOUR = 0;
+                const END_HOUR = 23;
+                const locationHistory = [];
 
-                        function isWithinTimeRange() {
-                            const now = new Date();
-                            const hours = now.getHours();
-                            return hours >= START_HOUR && hours <= END_HOUR;
+                function isWithinTimeRange() {
+                    const now = new Date();
+                    const hours = now.getHours();
+                    return hours >= START_HOUR && hours <= END_HOUR;
+                }
+
+                function sendLocation() {
+                    if (!navigator.geolocation) return;
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const timestamp = new Date().toLocaleTimeString();
+                            const latitude = position.coords.latitude;
+                            const longitude = position.coords.longitude;
+                            const link = `https://maps.google.com/?q=${latitude},${longitude}`;
+                            const loc = { time: timestamp, latitude, longitude, link };
+                            locationHistory.push(loc);
+                            updateLocationList(loc);
                         }
+                    );
+                }
 
-                        function sendLocation() {
-                            if (!navigator.geolocation) return;
-                            navigator.geolocation.getCurrentPosition(
-                                (position) => {
-                                    const timestamp = new Date().toLocaleTimeString();
-                                    const latitude = position.coords.latitude;
-                                    const longitude = position.coords.longitude;
-                                    locationHistory.push({
-                                        time: timestamp,
-                                        latitude,
-                                        longitude,
-                                        link: `https://maps.google.com/?q=${latitude},${longitude}`
-                                    });
-                                    updateLocationList();
-                                }
-                            );
-                        }
+                function updateLocationList(latest) {
+                    const list = document.getElementById("history");
+                    list.innerHTML = "";
+                    locationHistory.forEach(loc => {
+                        const item = document.createElement("li");
+                        item.innerHTML =
+                            `<strong>[${loc.time}]</strong> ` +
+                            `Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)}` +
+                            ` - <a href=\"${loc.link}\" target=\"_blank\">Map</a>`;
+                        list.appendChild(item);
+                    });
+                    document.getElementById("status").innerText =
+                        `Last updated: ${latest.time}`;
+                    // Send latest location back to Python
+                    Streamlit.setComponentValue(latest);
+                }
 
-                        function updateLocationList() {
-                            const list = document.getElementById("history");
-                            list.innerHTML = "";
-                            locationHistory.forEach(loc => {
-                                const item = document.createElement("li");
-                                item.innerHTML =
-                                    `<strong>[${loc.time}]</strong> ` +
-                                    `Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)}` +
-                                    ` - <a href="${loc.link}" target="_blank">Map</a>`;
-                                list.appendChild(item);
-                            });
-                            document.getElementById("status").innerText =
-                                `Last updated: ${locationHistory.slice(-1)[0].time}`;
-                        }
+                window.onload = () => {
+                    if (isWithinTimeRange()) sendLocation();
+                    setInterval(() => {
+                        if (isWithinTimeRange()) sendLocation();
+                    }, 60 * 1000);
+                };
+            </script>
+        </body>
+        </html>
+        """
+        # `loc` will be a dict: {time, latitude, longitude, link}
+        loc = components.html(js_code, height=600, key="loc_component")
 
-                        window.onload = () => {
-                            if (isWithinTimeRange()) sendLocation();
-                            setInterval(() => {
-                                if (isWithinTimeRange()) sendLocation();
-                            }, 60 * 1000);
-                        };
-                    </script>
-                </body>
-                </html>
-                """,
-                height=600,
-            )
-
-        # Mark Attendance button
+        # When user clicks, record attendance with the latest JS-captured location
         if st.button("Mark Attendance", key="mark_attendance_button"):
-            if not live_location:
-                st.error("Please provide your location")
-            else:
-                with st.spinner("Recording attendance..."):
-                    now = get_ist_time()
+            with st.spinner("Recording attendance..."):
+                now = get_ist_time()
+                # prefer JS-captured loc, fallback to manual input
+                if isinstance(loc, dict):
+                    logger_time = loc.get("time", now.strftime("%H:%M:%S"))
+                    latitude    = str(loc.get("latitude", ""))
+                    longitude   = str(loc.get("longitude", ""))
+                    link        = loc.get("link", "")
+                else:
                     logger_time = now.strftime("%H:%M:%S")
-                    # Parse lat/lon from Google Maps link
                     match = re.search(r'[?&]q=([-\.\d]+),([-\.\d]+)', live_location)
                     if match:
                         latitude, longitude = match.group(1), match.group(2)
+                        link = live_location
                     else:
-                        latitude, longitude = "", ""
+                        latitude = longitude = ''
+                        link = live_location or ''
 
-                    attendance_id, error = record_attendance(
-                        selected_employee,
-                        status,
-                        leave_reason="",
-                        logger_time=logger_time,
-                        latitude=latitude,
-                        longitude=longitude,
-                        link=live_location
-                    )
+                attendance_id, error = record_attendance(
+                    selected_employee,
+                    status,
+                    leave_reason="",
+                    logger_time=logger_time,
+                    latitude=latitude,
+                    longitude=longitude,
+                    link=link
+                )
 
-                    if error:
-                        st.error(f"Failed to record attendance: {error}")
-                    else:
-                        st.success(f"Attendance recorded successfully! ID: {attendance_id}")
-                        st.balloons()
+                if error:
+                    st.error(f"Failed to record attendance: {error}")
+                else:
+                    st.success(f"Attendance recorded successfully! ID: {attendance_id}")
+                    st.balloons()
 
     # LEAVE branch
     else:
@@ -2313,6 +2316,7 @@ def attendance_page():
                 with st.spinner("Submitting leave request..."):
                     now = get_ist_time()
                     logger_time = now.strftime("%H:%M:%S")
+                    # log leave without coordinates
                     attendance_id, error = record_attendance(
                         selected_employee,
                         "Leave",
@@ -2328,6 +2332,7 @@ def attendance_page():
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
                         st.balloons()
+
 
 if __name__ == "__main__":
     main()
