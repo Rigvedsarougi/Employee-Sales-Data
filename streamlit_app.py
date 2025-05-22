@@ -2245,25 +2245,29 @@ def attendance_page():
         
         # Handle the received location data
         if 'location_data' in st.session_state:
-            loc = st.session_state.location_data
-            employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-            designation = Person[Person['Employee Name'] == selected_employee]['Designation'].values[0]
-            current_date = get_ist_time().strftime("%d-%m-%Y")
-            
-            location_data = {
-                "Timestamp": loc['timestamp'],
-                "Employee Name": selected_employee,
-                "Employee Code": employee_code,
-                "Designation": designation,
-                "Latitude": loc['latitude'],
-                "Longitude": loc['longitude'],
-                "Map Link": loc['link'],
-                "Attendance Date": current_date
-            }
-            
-            st.success("Location captured successfully!")
-            st.write(f"Coordinates: {loc['latitude']:.5f}, {loc['longitude']:.5f}")
-            st.write(f"[View on Google Maps]({loc['link']})")
+            # Ensure we have the expected data structure
+            if isinstance(st.session_state.location_data, dict):
+                loc = st.session_state.location_data
+                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+                designation = Person[Person['Employee Name'] == selected_employee]['Designation'].values[0]
+                current_date = get_ist_time().strftime("%d-%m-%Y")
+                
+                location_data = {
+                    "Timestamp": loc.get('timestamp', ''),
+                    "Employee Name": selected_employee,
+                    "Employee Code": employee_code,
+                    "Designation": designation,
+                    "Latitude": loc.get('latitude', ''),
+                    "Longitude": loc.get('longitude', ''),
+                    "Map Link": loc.get('link', ''),
+                    "Attendance Date": current_date
+                }
+                
+                st.success("Location captured successfully!")
+                st.write(f"Coordinates: {loc.get('latitude', '')}, {loc.get('longitude', '')}")
+                st.write(f"[View on Google Maps]({loc.get('link', '')})")
+            else:
+                st.error("Invalid location data format received")
         
         # Button to mark attendance
         if st.button("Mark Attendance", key="mark_attendance_button"):
