@@ -292,7 +292,8 @@ LOCATION_LOGGER_COLUMNS = [
     "Designation",
     "Latitude",
     "Longitude",
-    "Map Link"
+    "Map Link",
+    "Attendance Date"
 ]
 
 PRIORITY_LEVELS = ["Low", "Medium", "High", "Critical"]
@@ -2164,11 +2165,11 @@ def attendance_page():
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
         
-        # Initialize location data list
-        location_data = []
+        # Initialize location data
+        location_data = None
         
         st.title("📍 Location Logger")
-        st.markdown("This app tracks your location every minute. Data will be recorded in the system.")
+        st.markdown("Please share your current location when marking attendance")
         
         # Define the columns for location logging
         LOCATION_LOGGER_COLUMNS = [
@@ -2178,184 +2179,115 @@ def attendance_page():
             "Designation",
             "Latitude",
             "Longitude",
-            "Map Link"
+            "Map Link",
+            "Attendance Date"
         ]
         
-        # Inject the HTML + JS with callback to Streamlit
-        location_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8" />
-            <style>
-                body {{ font-family: sans-serif; padding: 10px; }}
-                ul {{ padding-left: 20px; }}
-            </style>
-        </head>
-        <body>
-            <h3>Location History</h3>
-            <div id="status">Waiting for location...</div>
-            <ul id="history"></ul>
+        # Button to get location
+        if st.button("Get My Current Location", key="get_location_button"):
+            location_html = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <style>
+                    body { font-family: sans-serif; padding: 10px; }
+                </style>
+            </head>
+            <body>
+                <div id="status">Getting location...</div>
 
-            <script>
-                const START_HOUR = 0;
-                const END_HOUR = 23;
-                const locationHistory = [];
+                <script>
+                    function sendLocationToPython(position) {
+                        const timestamp = new Date().toLocaleTimeString();
+                        const latitude = position.coords.latitude;
+                        const longitude = position.coords.longitude;
+                        const link = `https://maps.google.com/?q=${latitude},${longitude}`;
 
-                function isWithinTimeRange() {{
-                    const now = new Date();
-                    const hours = now.getHours();
-                    return hours >= START_HOUR && hours <= END_HOUR;
-                }}
-
-                function sendLocationToPython(location) {{
-                    const data = {{
-                        timestamp: location.time,
-                        latitude: location.latitude,
-                        longitude: location.longitude,
-                        link: location.link
-                    }};
-                    
-                    // Send data to Streamlit
-                    window.parent.postMessage({{
-                        type: 'locationData',
-                        data: data
-                    }}, '*');
-                }}
-
-                function getLocation() {{
-                    if (!navigator.geolocation) {{
-                        console.log("Geolocation is not supported.");
-                        return;
-                    }}
-
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {{
-                            const timestamp = new Date().toLocaleTimeString();
-                            const latitude = position.coords.latitude;
-                            const longitude = position.coords.longitude;
-
-                            console.log(`[${{timestamp}}] Location: ${{latitude}}, ${{longitude}}`);
-
-                            const location = {{
-                                time: timestamp,
-                                latitude: latitude,
-                                longitude: longitude,
-                                link: `https://maps.google.com/?q=${{latitude}},${{longitude}}`
-                            }};
-
-                            locationHistory.push(location);
-                            updateLocationList();
-                            sendLocationToPython(location);
-                        }},
-                        (err) => {{
-                            console.error("Error getting location:", err);
-                        }}
-                    );
-                }}
-
-                function updateLocationList() {{
-                    const listElement = document.getElementById("history");
-                    listElement.innerHTML = "";
-
-                    locationHistory.forEach((loc, index) => {{
-                        const item = document.createElement("li");
-                        item.innerHTML = `
-                            <strong>[${{loc.time}}]</strong> 
-                            Lat: ${{loc.latitude.toFixed(5)}}, Lng: ${{loc.longitude.toFixed(5)}}
-                            - <a href="${{loc.link}}" target="_blank">Map</a>
-                        `;
-                        listElement.appendChild(item);
-                    }});
-
-                    document.getElementById("status").innerText = `Last updated: ${{locationHistory[locationHistory.length - 1].time}}`;
-                }}
-
-                window.onload = () => {{
-                    if (isWithinTimeRange()) {{
-                        getLocation();
-                    }}
-
-                    setInterval(() => {{
-                        if (isWithinTimeRange()) {{
-                            getLocation();
-                        }}
-                    }}, 60 * 1000); // every minute
-                }};
-            </script>
-        </body>
-        </html>
-        """
-        
-        # Display the component and handle messages
-        components.html(location_html, height=400)
-        
-        # Handle messages from the iframe
-        if 'location_data' not in st.session_state:
-            st.session_state.location_data = []
-            
-        # JavaScript to Python communication
-        components.html(
-            """
-            <script>
-                window.addEventListener('message', function(event) {
-                    if (event.data.type === 'locationData') {
-                        const data = event.data.data;
+                        const data = {
+                            timestamp: timestamp,
+                            latitude: latitude,
+                            longitude: longitude,
+                            link: link
+                        };
+                        
+                        // Send data to Streamlit
                         window.parent.streamlitCommunication.sendMessage(
                             'location_data',
                             {data: data}
                         );
                     }
-                }, false);
-            </script>
-            """,
-            height=0
-        )
+
+                    function getLocation() {
+                        if (!navigator.geolocation) {
+                            document.getElementById("status").innerText = "Geolocation is not supported.";
+                            return;
+                        }
+
+                        navigator.geolocation.getCurrentPosition(
+                            (position) => {
+                                document.getElementById("status").innerText = "Location captured!";
+                                sendLocationToPython(position);
+                            },
+                            (err) => {
+                                document.getElementById("status").innerText = "Error getting location: " + err.message;
+                            }
+                        );
+                    }
+
+                    window.onload = getLocation;
+                </script>
+            </body>
+            </html>
+            """
+            
+            components.html(location_html, height=100)
         
-        # Handle the received data
+        # Handle the received location data
         if 'location_data' in st.session_state:
-            for loc in st.session_state.location_data:
-                # Prepare data for logging
-                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-                designation = Person[Person['Employee Name'] == selected_employee]['Designation'].values[0]
-                
-                location_record = {
-                    "Timestamp": loc['timestamp'],
-                    "Employee Name": selected_employee,
-                    "Employee Code": employee_code,
-                    "Designation": designation,
-                    "Latitude": loc['latitude'],
-                    "Longitude": loc['longitude'],
-                    "Map Link": loc['link']
-                }
-                
-                # Add to location data if not already present
-                if not any(d['Timestamp'] == loc['timestamp'] for d in location_data):
-                    location_data.append(location_record)
+            loc = st.session_state.location_data
+            employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+            designation = Person[Person['Employee Name'] == selected_employee]['Designation'].values[0]
+            current_date = get_ist_time().strftime("%d-%m-%Y")
+            
+            location_data = {
+                "Timestamp": loc['timestamp'],
+                "Employee Name": selected_employee,
+                "Employee Code": employee_code,
+                "Designation": designation,
+                "Latitude": loc['latitude'],
+                "Longitude": loc['longitude'],
+                "Map Link": loc['link'],
+                "Attendance Date": current_date
+            }
+            
+            st.success("Location captured successfully!")
+            st.write(f"Coordinates: {loc['latitude']:.5f}, {loc['longitude']:.5f}")
+            st.write(f"[View on Google Maps]({loc['link']})")
         
-        # Button to mark attendance and log locations
+        # Button to mark attendance
         if st.button("Mark Attendance", key="mark_attendance_button"):
             if not location_data:
-                st.error("Please wait for location data to be collected")
+                st.error("Please capture your location first")
             else:
-                with st.spinner("Recording attendance and locations..."):
+                with st.spinner("Recording attendance..."):
                     try:
-                        # Record attendance first
+                        # Record attendance
                         attendance_id, error = record_attendance(
                             selected_employee,
                             status,
-                            location_link=location_data[-1]['Map Link']  # Use last location as main
+                            location_link=location_data['Map Link']
                         )
                         
                         if error:
                             st.error(f"Failed to record attendance: {error}")
                         else:
-                            # Log all location data to Locationlogger sheet
+                            # Log location data to Locationlogger sheet
                             try:
                                 existing_locations = conn.read(worksheet="Locationlogger", ttl=5)
                                 existing_locations = existing_locations.dropna(how="all")
                                 
-                                location_df = pd.DataFrame(location_data)
+                                location_df = pd.DataFrame([location_data])
                                 if not existing_locations.empty:
                                     location_df = pd.concat([existing_locations, location_df], ignore_index=True)
                                 
@@ -2364,11 +2296,11 @@ def attendance_page():
                                 st.success(f"""
                                 Attendance recorded successfully! ID: {attendance_id}
                                 
-                                {len(location_data)} location points logged.
+                                Location logged at {location_data['Timestamp']}
                                 """)
                                 st.balloons()
                             except Exception as e:
-                                st.error(f"Attendance recorded but failed to log locations: {e}")
+                                st.error(f"Attendance recorded but failed to log location: {e}")
                     except Exception as e:
                         st.error(f"Error during attendance recording: {e}")
     
