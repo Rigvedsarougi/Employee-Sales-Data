@@ -387,7 +387,6 @@ def demo_page():
             st.text_input("Address", value=outlet_address, disabled=True, key="demo_outlet_address_display")
             st.text_input("State", value=outlet_state, disabled=True, key="demo_outlet_state_display")
             st.text_input("City", value=outlet_city, disabled=True, key="demo_outlet_city_display")
-
         else:
             outlet_name    = st.text_input("Outlet Name", key="demo_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="demo_outlet_contact")
@@ -395,13 +394,12 @@ def demo_page():
             
             # State and City Dropdowns
             unique_states = sorted(citystate['State'].unique())
-            selected_state = st.selectbox("State", unique_states, key="demo_outlet_state")
+            outlet_state = st.selectbox("State", unique_states, key="demo_outlet_state")
             
             # Filter cities based on selected state
-            cities_in_state = sorted(citystate[citystate['State'] == selected_state]['City'].unique())
-            selected_city = st.selectbox("City", cities_in_state, key="demo_outlet_city")
+            cities_in_state = sorted(citystate[citystate['State'] == outlet_state]['City'].unique())
+            outlet_city = st.selectbox("City", cities_in_state, key="demo_outlet_city")
 
-        
         st.subheader("Demo Details")
         demo_date     = st.date_input("Demo Date", key="demo_date")
         outlet_review = st.selectbox("Outlet Review", ["Excellent", "Good", "Average", "Poor"], key="outlet_review")
@@ -469,7 +467,6 @@ def demo_page():
                     st.error(f"Failed to record demo: {e}")
             else:
                 st.error("Please fill all required fields (Outlet + ≥1 product).")
-
     # --- Demo History Tab ---
     with tab2:
         st.subheader("Demo History")
