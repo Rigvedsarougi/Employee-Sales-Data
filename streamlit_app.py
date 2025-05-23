@@ -14,50 +14,6 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Location Logger", layout="centered")
 
-
-def display_location_logger():
-    """Renders the live-location tracker/browser component."""
-    st.title("📍 Location Logger")
-    st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
-    components.html(
-        """
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"/><style>body{font-family:sans-serif;padding:10px;}ul{padding-left:20px;}</style></head>
-        <body>
-            <h3>Location History</h3>
-            <div id="status">Waiting for location...</div>
-            <ul id="history"></ul>
-            <script>
-                const locationHistory = [];
-                function sendLocation() {
-                    if (!navigator.geolocation) return;
-                    navigator.geolocation.getCurrentPosition(pos => {
-                        const ts = new Date().toLocaleTimeString();
-                        const lat = pos.coords.latitude, lng = pos.coords.longitude;
-                        locationHistory.push({time:ts,latitude:lat,longitude:lng,link:`https://maps.google.com/?q=${lat},${lng}`});
-                        updateLocationList();
-                    });
-                }
-                function updateLocationList() {
-                    const ul = document.getElementById("history");
-                    ul.innerHTML = "";
-                    locationHistory.forEach(loc => {
-                        const li = document.createElement("li");
-                        li.innerHTML = `<strong>[${loc.time}]</strong> Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)} - <a href="${loc.link}" target="_blank">Map</a>`;
-                        ul.appendChild(li);
-                    });
-                    document.getElementById("status").innerText = `Last updated: ${locationHistory.slice(-1)[0].time}`;
-                }
-                window.onload = () => { sendLocation(); setInterval(sendLocation, 60*1000); };
-            </script>
-        </body>
-        </html>
-        """,
-        height=600,
-    )
-
-
 def get_ist_time():
     """Get current time in Indian Standard Time (IST)"""
     utc_now = datetime.now(pytz.utc)
@@ -341,7 +297,6 @@ Products = pd.read_csv('Invoice - Products.csv')
 Outlet = pd.read_csv('Invoice - Outlet.csv')
 Person = pd.read_csv('Invoice - Person.csv')
 Distributors = pd.read_csv('Invoice - Distributors.csv')
-citystate = pd.read_csv('India City - State.csv')
 
 # Company Details with ALLGEN TRADING logo
 company_name = "BIOLUME SKIN SCIENCE PRIVATE LIMITED"
@@ -440,14 +395,8 @@ def demo_page():
             outlet_name    = st.text_input("Outlet Name", key="demo_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="demo_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="demo_outlet_address")
-            
-            # State and City Dropdowns
-            unique_states = sorted(citystate['State'].unique())
-            outlet_state = st.selectbox("State", unique_states, key="demo_outlet_state")
-            
-            # Filter cities based on selected state
-            cities_in_state = sorted(citystate[citystate['State'] == outlet_state]['City'].unique())
-            outlet_city = st.selectbox("City", cities_in_state, key="demo_outlet_city")
+            outlet_state   = st.text_input("Outlet State", "", key="demo_outlet_state")
+            outlet_city    = st.text_input("Outlet City", "", key="demo_outlet_city")
 
         st.subheader("Demo Details")
         demo_date     = st.date_input("Demo Date", key="demo_date")
@@ -516,6 +465,7 @@ def demo_page():
                     st.error(f"Failed to record demo: {e}")
             else:
                 st.error("Please fill all required fields (Outlet + ≥1 product).")
+
     # --- Demo History Tab ---
     with tab2:
         st.subheader("Demo History")
@@ -1592,9 +1542,6 @@ def main():
                     else:
                         st.error("Invalid Password. Please try again.")
     else:
-        # Show the global location-logger component for all logged-in users
-        display_location_logger()
-
         # Show option boxes after login
         st.title("Select Mode")
         col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
@@ -1651,7 +1598,6 @@ def main():
                 travel_hotel_page()
             elif st.session_state.selected_mode == "Demo":
                 demo_page()
-
 
 def sales_page():
     st.title("Sales Management")
@@ -1796,20 +1742,14 @@ def sales_page():
             gst_number    = st.text_input("GST Number", key="manual_gst_number")
             contact_number = st.text_input("Contact Number", key="manual_contact_number")
             address        = st.text_area("Address", key="manual_address")
-            
-            # State and City Dropdowns
-            unique_states = sorted(citystate['State'].unique())
-            selected_state = st.selectbox("State", unique_states, key="manual_state")
-            
-            # Filter cities based on selected state
-            cities_in_state = sorted(citystate[citystate['State'] == selected_state]['City'].unique())
-            selected_city = st.selectbox("City", cities_in_state, key="manual_city")
+            state          = st.text_input("State", "", key="manual_state")
+            city           = st.text_input("City", "", key="manual_city")
     
         if st.button("Generate Invoice", key="generate_invoice_button"):
             if selected_products and customer_name:
                 invoice_number = generate_invoice_number()
                 pdf, pdf_path = generate_invoice(
-                    customer_name, gst_number, contact_number, address, selected_state, selected_city,
+                    customer_name, gst_number, contact_number, address, state, city,
                     selected_products, quantities, product_discounts, discount_category,
                     selected_employee, payment_status, amount_paid, None, None,
                     invoice_number, transaction_type,
@@ -2082,6 +2022,8 @@ def sales_page():
 def visit_page():
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
+
+    # Empty remarks since we removed the location input
     visit_remarks = ""
 
     tab1, tab2 = st.tabs(["New Visit", "Visit History"])
@@ -2101,6 +2043,7 @@ def visit_page():
             outlet_state = outlet_details['State']
             outlet_city = outlet_details['City']
             
+            # Show outlet details like distributor details
             st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display")
             st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
             st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
@@ -2109,14 +2052,8 @@ def visit_page():
             outlet_name = st.text_input("Outlet Name", key="visit_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="visit_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="visit_outlet_address")
-            
-            # State and City Dropdowns
-            unique_states = sorted(citystate['State'].unique())
-            selected_state = st.selectbox("State", unique_states, key="visit_outlet_state")
-            
-            # Filter cities based on selected state
-            cities_in_state = sorted(citystate[citystate['State'] == selected_state]['City'].unique())
-            selected_city = st.selectbox("City", cities_in_state, key="visit_outlet_city")
+            outlet_state = st.text_input("Outlet State", "", key="visit_outlet_state")
+            outlet_city = st.text_input("Outlet City", "", key="visit_outlet_city")
 
         st.subheader("Visit Details")
         visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
@@ -2141,11 +2078,12 @@ def visit_page():
                 entry_datetime = datetime.combine(today, entry_time)
                 exit_datetime = datetime.combine(today, exit_time)
                 
+                # No visit selfie upload
                 visit_selfie_path = None
                 
                 visit_id = record_visit(
                     selected_employee, outlet_name, outlet_contact, outlet_address,
-                    selected_state, selected_city, visit_purpose, visit_notes, 
+                    outlet_state, outlet_city, visit_purpose, visit_notes, 
                     visit_selfie_path, entry_datetime, exit_datetime,
                     visit_remarks
                 )
@@ -2220,6 +2158,103 @@ def attendance_page():
             live_location = st.text_input("Enter your current location (Google Maps link or address)", 
                                         help="Please share your live location for verification",
                                         key="location_input")
+            
+            st.title("📍 Location Logger")
+            st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
+
+            # Inject the full HTML + JS
+            components.html(
+                """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8" />
+                    <style>
+                        body { font-family: sans-serif; padding: 10px; }
+                        ul { padding-left: 20px; }
+                    </style>
+                </head>
+                <body>
+                    <h3>Location History</h3>
+                    <div id="status">Waiting for location...</div>
+                    <ul id="history"></ul>
+
+                    <script>
+                        const START_HOUR = 0;
+                        const END_HOUR = 23;
+                        const locationHistory = [];
+
+                        function isWithinTimeRange() {
+                            const now = new Date();
+                            const hours = now.getHours();
+                            return hours >= START_HOUR && hours <= END_HOUR;
+                        }
+
+                        function sendLocation() {
+                            if (!navigator.geolocation) {
+                                console.log("Geolocation is not supported.");
+                                return;
+                            }
+
+                            navigator.geolocation.getCurrentPosition(
+                                (position) => {
+                                    const timestamp = new Date().toLocaleTimeString();
+                                    const latitude = position.coords.latitude;
+                                    const longitude = position.coords.longitude;
+
+                                    console.log(`[${timestamp}] Location: ${latitude}, ${longitude}`);
+
+                                    locationHistory.push({
+                                        time: timestamp,
+                                        latitude: latitude,
+                                        longitude: longitude,
+                                        link: `https://maps.google.com/?q=${latitude},${longitude}`
+                                    });
+
+                                    updateLocationList();
+                                },
+                                (err) => {
+                                    console.error("Error getting location:", err);
+                                }, {
+  enableHighAccuracy: true
+}
+                            );
+                        }
+
+                        function updateLocationList() {
+                            const listElement = document.getElementById("history");
+                            listElement.innerHTML = "";
+
+                            locationHistory.forEach((loc, index) => {
+                                const item = document.createElement("li");
+                                item.innerHTML = `
+                                    <strong>[${loc.time}]</strong> 
+                                    Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)}
+                                    - <a href="${loc.link}" target="_blank">Map</a>
+                                `;
+                                listElement.appendChild(item);
+                            });
+
+                            document.getElementById("status").innerText = `Last updated: ${locationHistory[locationHistory.length - 1].time}`;
+                        }
+
+                        window.onload = () => {
+                            if (isWithinTimeRange()) {
+                                sendLocation();
+                            }
+
+                            setInterval(() => {
+                                if (isWithinTimeRange()) {
+                                    sendLocation();
+                                }
+                            }, 60 * 1000); // every minute
+                        };
+                    </script>
+                </body>
+                </html>
+                """,
+                height=600,
+            )
 
         
         if st.button("Mark Attendance", key="mark_attendance_button"):
@@ -2238,6 +2273,7 @@ def attendance_page():
                     else:
                         st.success(f"Attendance recorded successfully! ID: {attendance_id}")
                         st.balloons()
+                        
     
     else:
         st.subheader("Leave Details")
