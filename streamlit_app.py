@@ -173,6 +173,17 @@ SALES_SHEET_COLUMNS = [
     "Delivery Status"  # Added new column for delivery status
 ]
 
+LOCATION_HISTORY_COLUMNS = [
+    "Employee Name",
+    "Employee Code",
+    "Timestamp",
+    "Latitude",
+    "Longitude",
+    "Google Maps Link",
+    "Date",
+    "Time"
+]
+
 VISIT_SHEET_COLUMNS = [
     "Visit ID",
     "Employee Name",
@@ -363,6 +374,20 @@ def save_uploaded_file(uploaded_file, folder):
         return file_path
     return None
 
+def log_location_to_gsheet(conn, location_data):
+    try:
+        existing_data = conn.read(worksheet="LocationHistory", ttl=5)
+        existing_data = existing_data.dropna(how="all")
+        
+        location_df = pd.DataFrame([location_data])
+        location_df = location_df.reindex(columns=LOCATION_HISTORY_COLUMNS)
+        
+        updated_data = pd.concat([existing_data, location_df], ignore_index=True)
+        conn.update(worksheet="LocationHistory", data=updated_data)
+        return True
+    except Exception as e:
+        st.error(f"Error logging location data: {e}")
+        return False
 
 def demo_page():
     st.title("Demo Management")
@@ -2143,129 +2168,220 @@ def visit_page():
 def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
+    employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
     
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
+    
+    # Initialize session state for location data if not exists
+    if 'location_data' not in st.session_state:
+        st.session_state.location_data = []
     
     st.subheader("Attendance Status")
     status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
     
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            live_location = st.text_input("Enter your current location (Google Maps link or address)", 
-                                        help="Please share your live location for verification",
-                                        key="location_input")
-            
-            st.title("📍 Location Logger")
-            st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
+        
+        # Display the location logger component
+        st.title("📍 Location Logger")
+        st.markdown("This app tracks your location every minute. Data will be recorded for attendance verification.")
+        
+        # Inject the HTML/JS component
+        location_component = components.html(
+            """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <style>
+                    body { font-family: sans-serif; padding: 10px; }
+                    ul { padding-left: 20px; }
+                </style>
+            </head>
+            <body>
+                <h3>Location History</h3>
+                <div id="status">Waiting for location...</div>
+                <ul id="history"></ul>
 
-            # Inject the full HTML + JS
-            components.html(
-                """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8" />
-                    <style>
-                        body { font-family: sans-serif; padding: 10px; }
-                        ul { padding-left: 20px; }
-                    </style>
-                </head>
-                <body>
-                    <h3>Location History</h3>
-                    <div id="status">Waiting for location...</div>
-                    <ul id="history"></ul>
+                <script>
+                    const START_HOUR = 0;
+                    const END_HOUR = 23;
+                    const locationHistory = [];
 
-                    <script>
-                        const START_HOUR = 0;
-                        const END_HOUR = 23;
-                        const locationHistory = [];
+                    function isWithinTimeRange() {
+                        const now = new Date();
+                        const hours = now.getHours();
+                        return hours >= START_HOUR && hours <= END_HOUR;
+                    }
 
-                        function isWithinTimeRange() {
-                            const now = new Date();
-                            const hours = now.getHours();
-                            return hours >= START_HOUR && hours <= END_HOUR;
+                    function sendLocation() {
+                        if (!navigator.geolocation) {
+                            console.log("Geolocation is not supported.");
+                            return;
                         }
 
-                        function sendLocation() {
-                            if (!navigator.geolocation) {
-                                console.log("Geolocation is not supported.");
-                                return;
-                            }
+                        navigator.geolocation.getCurrentPosition(
+                            (position) => {
+                                const timestamp = new Date().toLocaleTimeString();
+                                const latitude = position.coords.latitude;
+                                const longitude = position.coords.longitude;
 
-                            navigator.geolocation.getCurrentPosition(
-                                (position) => {
-                                    const timestamp = new Date().toLocaleTimeString();
-                                    const latitude = position.coords.latitude;
-                                    const longitude = position.coords.longitude;
+                                console.log(`[${timestamp}] Location: ${latitude}, ${longitude}`);
 
-                                    console.log(`[${timestamp}] Location: ${latitude}, ${longitude}`);
-
-                                    locationHistory.push({
+                                // Send data to parent window (Streamlit)
+                                window.parent.postMessage({
+                                    type: 'locationUpdate',
+                                    data: {
                                         time: timestamp,
                                         latitude: latitude,
                                         longitude: longitude,
                                         link: `https://maps.google.com/?q=${latitude},${longitude}`
-                                    });
+                                    }
+                                }, '*');
 
-                                    updateLocationList();
-                                },
-                                (err) => {
-                                    console.error("Error getting location:", err);
-                                }, {
-  enableHighAccuracy: true
-}
-                            );
+                                locationHistory.push({
+                                    time: timestamp,
+                                    latitude: latitude,
+                                    longitude: longitude,
+                                    link: `https://maps.google.com/?q=${latitude},${longitude}`
+                                });
+
+                                updateLocationList();
+                            },
+                            (err) => {
+                                console.error("Error getting location:", err);
+                            }, {
+                                enableHighAccuracy: true
+                            }
+                        );
+                    }
+
+                    function updateLocationList() {
+                        const listElement = document.getElementById("history");
+                        listElement.innerHTML = "";
+
+                        locationHistory.forEach((loc, index) => {
+                            const item = document.createElement("li");
+                            item.innerHTML = `
+                                <strong>[${loc.time}]</strong> 
+                                Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)}
+                                - <a href="${loc.link}" target="_blank">Map</a>
+                            `;
+                            listElement.appendChild(item);
+                        });
+
+                        document.getElementById("status").innerText = `Last updated: ${locationHistory[locationHistory.length - 1].time}`;
+                    }
+
+                    // Listen for messages from parent (Streamlit)
+                    window.addEventListener('message', (event) => {
+                        if (event.data.type === 'requestLocationData') {
+                            window.parent.postMessage({
+                                type: 'locationDataResponse',
+                                data: locationHistory
+                            }, '*');
+                        }
+                    });
+
+                    window.onload = () => {
+                        if (isWithinTimeRange()) {
+                            sendLocation();
                         }
 
-                        function updateLocationList() {
-                            const listElement = document.getElementById("history");
-                            listElement.innerHTML = "";
-
-                            locationHistory.forEach((loc, index) => {
-                                const item = document.createElement("li");
-                                item.innerHTML = `
-                                    <strong>[${loc.time}]</strong> 
-                                    Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)}
-                                    - <a href="${loc.link}" target="_blank">Map</a>
-                                `;
-                                listElement.appendChild(item);
-                            });
-
-                            document.getElementById("status").innerText = `Last updated: ${locationHistory[locationHistory.length - 1].time}`;
-                        }
-
-                        window.onload = () => {
+                        setInterval(() => {
                             if (isWithinTimeRange()) {
                                 sendLocation();
                             }
-
-                            setInterval(() => {
-                                if (isWithinTimeRange()) {
-                                    sendLocation();
-                                }
-                            }, 60 * 1000); // every minute
-                        };
-                    </script>
-                </body>
-                </html>
+                        }, 60 * 1000); // every minute
+                    };
+                </script>
+            </body>
+            </html>
+            """,
+            height=600,
+        )
+        
+        # Button to capture the current location data
+        if st.button("Capture Current Location", key="capture_location_button"):
+            # Get the latest location data from the component
+            st.write("Capturing your current location...")
+            
+            # We'll use JavaScript to send the data back to Streamlit
+            components.html(
+                """
+                <script>
+                // Request the location data from the iframe
+                const iframe = window.parent.document.querySelector("iframe[data-testid='st-iframe']");
+                if (iframe) {
+                    iframe.contentWindow.postMessage({ type: 'requestLocationData' }, '*');
+                }
+                
+                // Listen for the response
+                window.addEventListener('message', (event) => {
+                    if (event.data.type === 'locationDataResponse' && event.data.data.length > 0) {
+                        // Send the latest location to Streamlit
+                        const latestLocation = event.data.data[event.data.data.length - 1];
+                        window.parent.streamlitBridge.setComponentValue(latestLocation);
+                    }
+                });
+                </script>
                 """,
-                height=600,
+                height=0
             )
-
+            
+            # Check if we received location data in session state
+            if 'latest_location' in st.session_state:
+                loc = st.session_state.latest_location
+                st.success(f"Location captured: {loc['latitude']}, {loc['longitude']}")
+                
+                # Store in location_data array
+                st.session_state.location_data.append({
+                    "time": loc['time'],
+                    "latitude": loc['latitude'],
+                    "longitude": loc['longitude'],
+                    "link": loc['link']
+                })
+                
+                # Clear the latest location after capturing
+                del st.session_state.latest_location
+        
+        # Display captured locations
+        if st.session_state.location_data:
+            st.subheader("Your Captured Locations")
+            for loc in st.session_state.location_data:
+                st.write(f"{loc['time']} - Lat: {loc['latitude']:.5f}, Lng: {loc['longitude']:.5f} - [Map Link]({loc['link']})")
         
         if st.button("Mark Attendance", key="mark_attendance_button"):
-            if not live_location:
-                st.error("Please provide your location")
+            if not st.session_state.location_data:
+                st.error("Please capture at least one location")
             else:
                 with st.spinner("Recording attendance..."):
+                    # Log all captured locations to Google Sheets
+                    for loc in st.session_state.location_data:
+                        current_date = get_ist_time().strftime("%d-%m-%Y")
+                        current_time = get_ist_time().strftime("%H:%M:%S")
+                        
+                        location_data = {
+                            "Employee Name": selected_employee,
+                            "Employee Code": employee_code,
+                            "Timestamp": f"{current_date} {loc['time']}",
+                            "Latitude": loc['latitude'],
+                            "Longitude": loc['longitude'],
+                            "Google Maps Link": loc['link'],
+                            "Date": current_date,
+                            "Time": loc['time']
+                        }
+                        
+                        log_location_to_gsheet(conn, location_data)
+                    
+                    # Record the attendance
+                    latest_loc = st.session_state.location_data[-1]
                     attendance_id, error = record_attendance(
                         selected_employee,
-                        status,  # Will be "Present" or "Half Day"
-                        location_link=live_location
+                        status,
+                        location_link=latest_loc['link']
                     )
                     
                     if error:
@@ -2273,7 +2389,8 @@ def attendance_page():
                     else:
                         st.success(f"Attendance recorded successfully! ID: {attendance_id}")
                         st.balloons()
-                        
+                        # Clear location data after successful submission
+                        st.session_state.location_data = []
     
     else:
         st.subheader("Leave Details")
@@ -2300,5 +2417,17 @@ def attendance_page():
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
 
+# Add this at the bottom of your app.py, right before if __name__ == "__main__":
+def handle_location_message():
+    # This function will be called when we receive location data from the component
+    if 'latest_location' not in st.session_state:
+        st.session_state.latest_location = None
+    
+    # Check if we received location data
+    data = st.session_state.get('location_component_value')
+    if data:
+        st.session_state.latest_location = data
+
 if __name__ == "__main__":
+    handle_location_message()
     main()
