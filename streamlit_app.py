@@ -2141,162 +2141,139 @@ def visit_page():
                 st.error(f"Error retrieving visit data: {e}")
 
 def attendance_page():
+    import urllib.parse
+
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
-    
+
+    # If already marked today, bail out
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
-    
+
     st.subheader("Attendance Status")
     status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
-    
+
+    # For Present / Half Day: auto-collect from JS
     if status in ["Present", "Half Day"]:
-        st.subheader("Location Verification")
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            live_location = st.text_input("Enter your current location (Google Maps link or address)", 
-                                        help="Please share your live location for verification",
-                                        key="location_input")
-            
-            st.title("📍 Location Logger")
-            st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
+        # Attempt to pull the first location link from the URL query params
+        params = st.experimental_get_query_params()
+        live_location = params.get("loc", [""])[0]
+        if live_location:
+            # decode it once
+            live_location = urllib.parse.unquote(live_location)
+            st.success(f"Detected location: {live_location}")
+        else:
+            st.info("Fetching your live location... Please allow location access in the map below.")
 
-            # Inject the full HTML + JS
-            components.html(
-                """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8" />
-                    <style>
-                        body { font-family: sans-serif; padding: 10px; }
-                        ul { padding-left: 20px; }
-                    </style>
-                </head>
-                <body>
-                    <h3>Location History</h3>
-                    <div id="status">Waiting for location...</div>
-                    <ul id="history"></ul>
+        # Embed the HTML + JS that captures coords and pushes the FIRST link into the URL
+        components.html(
+            """
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8" />
+              <style>
+                body { font-family: sans-serif; padding: 10px; }
+                ul { padding-left: 20px; }
+              </style>
+            </head>
+            <body>
+              <h3>Location History</h3>
+              <div id="status">Waiting for location...</div>
+              <ul id="history"></ul>
 
-                    <script>
-                        const START_HOUR = 0;
-                        const END_HOUR = 23;
-                        const locationHistory = [];
+              <script>
+                const locationHistory = [];
+                let sent = false;
 
-                        function isWithinTimeRange() {
-                            const now = new Date();
-                            const hours = now.getHours();
-                            return hours >= START_HOUR && hours <= END_HOUR;
-                        }
+                function sendLocation(pos) {
+                  const t = new Date().toLocaleTimeString();
+                  const lat = pos.coords.latitude;
+                  const lon = pos.coords.longitude;
+                  const link = `https://maps.google.com/?q=${lat},${lon}`;
 
-                        function sendLocation() {
-                            if (!navigator.geolocation) {
-                                console.log("Geolocation is not supported.");
-                                return;
-                            }
+                  // Only send the first one
+                  if (!sent) {
+                    const encoded = encodeURIComponent(link);
+                    window.history.replaceState({}, "", "?loc=" + encoded);
+                    sent = true;
+                  }
 
-                            navigator.geolocation.getCurrentPosition(
-                                (position) => {
-                                    const timestamp = new Date().toLocaleTimeString();
-                                    const latitude = position.coords.latitude;
-                                    const longitude = position.coords.longitude;
+                  locationHistory.push({ time: t, link });
+                  updateList();
+                }
 
-                                    console.log(`[${timestamp}] Location: ${latitude}, ${longitude}`);
+                function updateList() {
+                  const ul = document.getElementById("history");
+                  ul.innerHTML = "";
+                  locationHistory.forEach(loc => {
+                    const li = document.createElement("li");
+                    li.innerHTML = `<strong>[${loc.time}]</strong> 
+                      <a href="${loc.link}" target="_blank">Map</a>`;
+                    ul.appendChild(li);
+                  });
+                  document.getElementById("status")
+                          .innerText = `Last updated: ${locationHistory.slice(-1)[0].time}`;
+                }
 
-                                    locationHistory.push({
-                                        time: timestamp,
-                                        latitude: latitude,
-                                        longitude: longitude,
-                                        link: `https://maps.google.com/?q=${latitude},${longitude}`
-                                    });
+                function askGeo() {
+                  if (!navigator.geolocation) return;
+                  navigator.geolocation.getCurrentPosition(sendLocation);
+                }
 
-                                    updateLocationList();
-                                },
-                                (err) => {
-                                    console.error("Error getting location:", err);
-                                }
-                            );
-                        }
+                window.onload = () => {
+                  askGeo();
+                  setInterval(askGeo, 60_000);
+                };
+              </script>
+            </body>
+            </html>
+            """,
+            height=500,
+        )
 
-                        function updateLocationList() {
-                            const listElement = document.getElementById("history");
-                            listElement.innerHTML = "";
-
-                            locationHistory.forEach((loc, index) => {
-                                const item = document.createElement("li");
-                                item.innerHTML = `
-                                    <strong>[${loc.time}]</strong> 
-                                    Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)}
-                                    - <a href="${loc.link}" target="_blank">Map</a>
-                                `;
-                                listElement.appendChild(item);
-                            });
-
-                            document.getElementById("status").innerText = `Last updated: ${locationHistory[locationHistory.length - 1].time}`;
-                        }
-
-                        window.onload = () => {
-                            if (isWithinTimeRange()) {
-                                sendLocation();
-                            }
-
-                            setInterval(() => {
-                                if (isWithinTimeRange()) {
-                                    sendLocation();
-                                }
-                            }, 60 * 1000); // every minute
-                        };
-                    </script>
-                </body>
-                </html>
-                """,
-                height=600,
-            )
-
-        
-        if st.button("Mark Attendance", key="mark_attendance_button"):
+        # Now let them mark attendance
+        if st.button("Mark Attendance", key="mark_att"):
             if not live_location:
-                st.error("Please provide your location")
+                st.error("Still waiting on your browser to share location—please allow it and reload if needed.")
             else:
                 with st.spinner("Recording attendance..."):
-                    attendance_id, error = record_attendance(
+                    attendance_id, err = record_attendance(
                         selected_employee,
-                        status,  # Will be "Present" or "Half Day"
+                        status,
                         location_link=live_location
                     )
-                    
-                    if error:
-                        st.error(f"Failed to record attendance: {error}")
+                    if err:
+                        st.error(f"Failed to record attendance: {err}")
                     else:
-                        st.success(f"Attendance recorded successfully! ID: {attendance_id}")
+                        st.success(f"Attendance recorded! ID: {attendance_id}")
                         st.balloons()
-                        
-    
+
+    # For Leave
     else:
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
-        leave_reason = st.text_area("Reason for Leave", 
-                                 placeholder="Please provide details about your leave",
-                                 key="leave_reason")
-        
-        if st.button("Submit Leave Request", key="submit_leave_button"):
+        leave_reason = st.text_area("Reason for Leave", key="leave_reason")
+
+        if st.button("Submit Leave Request", key="submit_leave"):
             if not leave_reason:
                 st.error("Please provide a reason for your leave")
             else:
                 full_reason = f"{leave_type}: {leave_reason}"
                 with st.spinner("Submitting leave request..."):
-                    attendance_id, error = record_attendance(
+                    attendance_id, err = record_attendance(
                         selected_employee,
                         "Leave",
                         leave_reason=full_reason
                     )
-                    
-                    if error:
-                        st.error(f"Failed to submit leave request: {error}")
+                    if err:
+                        st.error(f"Failed to submit leave: {err}")
                     else:
-                        st.success(f"Leave request submitted successfully! ID: {attendance_id}")
+                        st.success(f"Leave request submitted! ID: {attendance_id}")
+                        st.balloons()
+
 
 if __name__ == "__main__":
     main()
