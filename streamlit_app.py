@@ -2299,9 +2299,14 @@ def attendance_page():
             else:
                 with st.spinner("Recording attendance..."):
                     # Get the most accurate location (smallest accuracy value)
-                    best_location = min(
-                        st.session_state.location_data,
-                        key=lambda x: x.get('accuracy', float('inf'))
+
+                    best_location = min(location_list)
+                    
+                    # Finding minimum with a key function
+                    best_location = min(location_list, key=lambda x: x['distance'])
+                    
+                    # Finding minimum of multiple values
+                    best_location = min(lat1, lat2, lat3)
                     
                     # Log to Google Sheets
                     current_date = get_ist_time().strftime("%d-%m-%Y")
