@@ -9,6 +9,11 @@ from PIL import Image
 from datetime import datetime, time, timedelta
 import pytz
 
+import streamlit as st
+import streamlit.components.v1 as components
+
+st.set_page_config(page_title="Location Logger", layout="centered")
+
 
 def display_location_logger():
     """Renders the live-location tracker/browser component."""
