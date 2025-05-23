@@ -14,48 +14,55 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Location Logger", layout="centered")
 
+from streamlit_js_eval import streamlit_js_eval  # to capture geolocation in Python
+import pandas as pd
 
 def display_location_logger():
-    """Renders the live-location tracker/browser component."""
+    """Renders the live-location tracker and logs each reading to the 'Locationlogger' Google sheet."""
     st.title("📍 Location Logger")
-    st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
-    components.html(
-        """
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"/><style>body{font-family:sans-serif;padding:10px;}ul{padding-left:20px;}</style></head>
-        <body>
-            <h3>Location History</h3>
-            <div id="status">Waiting for location...</div>
-            <ul id="history"></ul>
-            <script>
-                const locationHistory = [];
-                function sendLocation() {
-                    if (!navigator.geolocation) return;
-                    navigator.geolocation.getCurrentPosition(pos => {
-                        const ts = new Date().toLocaleTimeString();
-                        const lat = pos.coords.latitude, lng = pos.coords.longitude;
-                        locationHistory.push({time:ts,latitude:lat,longitude:lng,link:`https://maps.google.com/?q=${lat},${lng}`});
-                        updateLocationList();
-                    });
-                }
-                function updateLocationList() {
-                    const ul = document.getElementById("history");
-                    ul.innerHTML = "";
-                    locationHistory.forEach(loc => {
-                        const li = document.createElement("li");
-                        li.innerHTML = `<strong>[${loc.time}]</strong> Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)} - <a href="${loc.link}" target="_blank">Map</a>`;
-                        ul.appendChild(li);
-                    });
-                    document.getElementById("status").innerText = `Last updated: ${locationHistory.slice(-1)[0].time}`;
-                }
-                window.onload = () => { sendLocation(); setInterval(sendLocation, 60*1000); };
-            </script>
-        </body>
-        </html>
-        """,
-        height=600,
+    st.markdown("Tracks your location every minute and writes each reading to the 'Locationlogger' sheet.")
+
+    # 1. Get the current geolocation via JS, brought into Python
+    result = streamlit_js_eval(
+        js_expressions=["""
+            new Promise((resolve) => {
+                navigator.geolocation.getCurrentPosition(
+                    pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                    err => resolve({latitude: null, longitude: null})
+                );
+            })
+        """],
+        key="get_location"
     )
+    loc = result[0]
+    lat, lon = loc.get('latitude'), loc.get('longitude')
+
+    if lat is not None and lon is not None:
+        # 2. Timestamp in IST
+        timestamp = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
+
+        # 3. Read existing sheet data
+        existing = conn.read(worksheet="Locationlogger", ttl=5)
+        df_existing = pd.DataFrame(existing)
+
+        # 4. Prepare new row
+        df_new = pd.DataFrame([{
+            "Timestamp": timestamp,
+            "Latitude": lat,
+            "Longitude": lon
+        }])
+
+        # 5. Append and write back
+        df_updated = pd.concat([df_existing, df_new], ignore_index=True)
+        conn.update(worksheet="Locationlogger", data=df_updated)
+
+        st.success(f"Logged at {timestamp}: ({lat:.5f}, {lon:.5f})")
+    else:
+        st.warning("Waiting for location permission in your browser...")
+
+    # 6. Auto-refresh every minute
+    st_autorefresh(interval=60 * 1000, key="refresh_location")
+
 
 
 def get_ist_time():
