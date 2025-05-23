@@ -2152,12 +2152,12 @@ def visit_page():
                 st.error(f"Error retrieving visit data: {e}")
 
 import json
+import pandas as pd
 
 def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
 
-    # Prevent double‐marking
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
@@ -2170,12 +2170,11 @@ def attendance_page():
         key="attendance_status"
     )
 
-    # === Present / Half Day ===
     if status in ["Present", "Half Day"]:
         st.subheader("📍 Location Logger")
         st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
 
-        # Embed original HTML+JS, but push data back via Streamlit.setComponentValue
+        # ← add key="loc_logger" here
         raw = components.html(
             """
             <!DOCTYPE html>
@@ -2239,10 +2238,9 @@ def attendance_page():
                             listElement.appendChild(item);
                         });
 
-                        document.getElementById("status").innerText = 
+                        document.getElementById("status").innerText =
                             `Last updated: ${locationHistory[locationHistory.length - 1].time}`;
 
-                        // send full history back to Streamlit
                         Streamlit.setComponentValue(JSON.stringify(locationHistory));
                     }
 
@@ -2257,26 +2255,21 @@ def attendance_page():
             </html>
             """,
             height=600,
+            key="loc_logger"   # ← this is required so raw becomes your JSON string
         )
 
-        # raw is a JSON string of the entire locationHistory array
         if not raw:
             st.error("Waiting for location… please allow location sharing.")
             return
 
-        try:
-            history = json.loads(raw)
-        except json.JSONDecodeError:
-            st.error("Failed to parse location data.")
-            return
-
-        # take only the very first entry’s link
-        first_link = history[0].get("link", "")
+        # Now raw is a JSON string
+        history = json.loads(raw)
+        first_link = history[0]["link"]
 
         timestamp = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
         st.markdown(f"**Time:** {timestamp}  \n**Location:** [Open Map]({first_link})")
 
-        # Log to Locationlogger sheet
+        # Log to Locationlogger
         try:
             existing = conn.read(worksheet="Locationlogger", ttl=5).dropna(how="all")
         except Exception:
@@ -2288,10 +2281,8 @@ def attendance_page():
             "Employee Name": selected_employee,
             "Location Link": first_link
         }])
-        merged = pd.concat([existing, new_row], ignore_index=True)
-        conn.update(worksheet="Locationlogger", data=merged)
+        conn.update(worksheet="Locationlogger", data=pd.concat([existing, new_row], ignore_index=True))
 
-        # Finally, record attendance
         if st.button("Mark Attendance"):
             with st.spinner("Recording attendance…"):
                 attendance_id, error = record_attendance(
@@ -2302,11 +2293,11 @@ def attendance_page():
                 if error:
                     st.error(f"Failed to record attendance: {error}")
                 else:
-                    st.success(f"Attendance recorded! ID: {attendance_id}")
+                    st.success(f"Attendance recorded successfully! ID: {attendance_id}")
                     st.balloons()
 
-    # === Leave ===
     else:
+        # … your unchanged Leave branch …
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
