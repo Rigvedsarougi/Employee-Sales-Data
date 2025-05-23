@@ -14,55 +14,70 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Location Logger", layout="centered")
 
-from streamlit_js_eval import streamlit_js_eval  # to capture geolocation in Python
+# In your app.py, replace display_location_logger with the following implementation.
+# Install the community component:
+#    pip install streamlit-js-eval
+# and restart your Streamlit session.
+from streamlit_js_eval import streamlit_js_eval  # capture JS-geolocation in Python
+import json
 import pandas as pd
+import streamlit as st
+from streamlit_autorefresh import st_autorefresh
+
 
 def display_location_logger():
     """Renders the live-location tracker and logs each reading to the 'Locationlogger' Google sheet."""
     st.title("📍 Location Logger")
     st.markdown("Tracks your location every minute and writes each reading to the 'Locationlogger' sheet.")
 
-    # 1. Get the current geolocation via JS, brought into Python
+    # Fetch geolocation via JS, brought into Python
     result = streamlit_js_eval(
-        js_expressions=["""
+        js_expressions=[
+            """
             new Promise((resolve) => {
                 navigator.geolocation.getCurrentPosition(
-                    pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                    err => resolve({latitude: null, longitude: null})
+                    pos => resolve(JSON.stringify({latitude: pos.coords.latitude, longitude: pos.coords.longitude})),
+                    err => resolve(JSON.stringify({latitude: null, longitude: null}))
                 );
             })
-        """],
+            """
+        ],
         key="get_location"
     )
-    loc = result[0]
-    lat, lon = loc.get('latitude'), loc.get('longitude')
+
+    if not result:
+        st.warning("Waiting for location permission in your browser...")
+        return
+
+    # Parse JSON string into dict
+    try:
+        loc = json.loads(result[0])
+        lat = loc.get('latitude')
+        lon = loc.get('longitude')
+    except Exception as e:
+        st.error(f"Failed to parse location data: {e}")
+        return
 
     if lat is not None and lon is not None:
-        # 2. Timestamp in IST
         timestamp = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
 
-        # 3. Read existing sheet data
+        # Read existing sheet data
         existing = conn.read(worksheet="Locationlogger", ttl=5)
         df_existing = pd.DataFrame(existing)
 
-        # 4. Prepare new row
-        df_new = pd.DataFrame([{
-            "Timestamp": timestamp,
-            "Latitude": lat,
-            "Longitude": lon
-        }])
+        # Prepare new row
+        df_new = pd.DataFrame([{"Timestamp": timestamp, "Latitude": lat, "Longitude": lon}])
 
-        # 5. Append and write back
+        # Append and write back
         df_updated = pd.concat([df_existing, df_new], ignore_index=True)
         conn.update(worksheet="Locationlogger", data=df_updated)
 
         st.success(f"Logged at {timestamp}: ({lat:.5f}, {lon:.5f})")
     else:
-        st.warning("Waiting for location permission in your browser...")
+        st.warning("Could not obtain location. Please ensure browser location services are enabled.")
 
-    # 6. Auto-refresh every minute
+    # Auto-refresh every minute
     st_autorefresh(interval=60 * 1000, key="refresh_location")
-
 
 
 def get_ist_time():
