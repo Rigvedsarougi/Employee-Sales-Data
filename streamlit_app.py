@@ -17,6 +17,7 @@ st.set_page_config(page_title="Location Logger", layout="centered")
 # In your app.py, replace display_location_logger with the following implementation.
 # Install the community component:
 #    pip install streamlit-js-eval
+#    pip install streamlit-autorefresh
 # and restart your Streamlit session.
 from streamlit_js_eval import streamlit_js_eval  # capture JS-geolocation in Python
 import json
@@ -30,14 +31,14 @@ def display_location_logger():
     st.title("📍 Location Logger")
     st.markdown("Tracks your location every minute and writes each reading to the 'Locationlogger' sheet.")
 
-    # Fetch geolocation via JS, brought into Python
+    # Fetch geolocation via JS, returned as JS object
     result = streamlit_js_eval(
         js_expressions=[
             """
             new Promise((resolve) => {
                 navigator.geolocation.getCurrentPosition(
-                    pos => resolve(JSON.stringify({latitude: pos.coords.latitude, longitude: pos.coords.longitude})),
-                    err => resolve(JSON.stringify({latitude: null, longitude: null}))
+                    pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                    err => resolve({latitude: null, longitude: null})
                 );
             })
             """
@@ -49,14 +50,22 @@ def display_location_logger():
         st.warning("Waiting for location permission in your browser...")
         return
 
-    # Parse JSON string into dict
-    try:
-        loc = json.loads(result[0])
-        lat = loc.get('latitude')
-        lon = loc.get('longitude')
-    except Exception as e:
-        st.error(f"Failed to parse location data: {e}")
+    raw = result[0]
+    # If raw is string, attempt JSON parse; if dict-like, use directly
+    if isinstance(raw, str):
+        try:
+            loc = json.loads(raw)
+        except Exception as e:
+            st.error(f"Failed to parse location data: {e}\nRaw data: {raw}")
+            return
+    elif isinstance(raw, dict):
+        loc = raw
+    else:
+        st.error(f"Unexpected location data type: {type(raw)}")
         return
+
+    lat = loc.get('latitude')
+    lon = loc.get('longitude')
 
     if lat is not None and lon is not None:
         timestamp = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
@@ -78,6 +87,7 @@ def display_location_logger():
 
     # Auto-refresh every minute
     st_autorefresh(interval=60 * 1000, key="refresh_location")
+
 
 
 def get_ist_time():
