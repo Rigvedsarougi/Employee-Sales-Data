@@ -2157,7 +2157,7 @@ def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
 
-    # Columns for the Locationlogger sheet
+    # Columns for our separate Locationlogger sheet
     LOCATION_LOGGER_COLUMNS = [
         "Attendance ID",
         "Timestamp",
@@ -2166,7 +2166,7 @@ def attendance_page():
         "Map Link"
     ]
 
-    # Don’t let them mark twice
+    # Prevent double‐marking
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
@@ -2180,26 +2180,33 @@ def attendance_page():
     )
 
     if status in ["Present", "Half Day"]:
-        st.subheader("Auto-capturing your first location reading…")
+        st.subheader("Auto‐capturing your first location reading…")
+        # This component will post back a dict {time, latitude, longitude, link}
         loc = components.html(
             """
             <html><body>
               <script>
                 const START=0, END=23;
-                function inHours(){let h=new Date().getHours();return h>=START&&h<=END;}
-                function pushLoc(p){
-                  let t=new Date().toLocaleTimeString(),
-                      lat=p.coords.latitude.toFixed(5),
-                      lng=p.coords.longitude.toFixed(5),
-                      link=`https://maps.google.com/?q=${lat},${lng}`;
-                  window.parent.postMessage(
-                    {type:'streamlit:setComponentValue',
-                     value:{time:t,latitude:lat,longitude:lng,link:link}
-                    },"*");
+                function inHours(){
+                  const h = new Date().getHours();
+                  return h>=START && h<=END;
                 }
-                window.onload=()=>{
+                function pushLoc(pos){
+                  const t = new Date().toLocaleTimeString();
+                  const lat = pos.coords.latitude.toFixed(5);
+                  const lng = pos.coords.longitude.toFixed(5);
+                  const link = `https://maps.google.com/?q=${lat},${lng}`;
+                  window.parent.postMessage({
+                    isStreamlitMessage: true,
+                    type: "streamlit:setComponentValue",
+                    value: {time: t, latitude: lat, longitude: lng, link: link}
+                  }, "*");
+                }
+                window.onload = () => {
                   if(inHours()) navigator.geolocation.getCurrentPosition(pushLoc);
-                  setInterval(()=>{ if(inHours()) navigator.geolocation.getCurrentPosition(pushLoc); },60000);
+                  setInterval(()=>{
+                    if(inHours()) navigator.geolocation.getCurrentPosition(pushLoc);
+                  }, 60000);
                 };
               </script>
             </body></html>
@@ -2213,7 +2220,7 @@ def attendance_page():
                 st.error("Waiting on your browser’s location read—please allow location access.")
                 return
 
-            # 1) Record attendance in Attendance sheet (with the map link)
+            # 1) Record attendance (stores the map link in your Attendance sheet)
             attendance_id, err = record_attendance(
                 selected_employee,
                 status,
@@ -2223,7 +2230,7 @@ def attendance_page():
                 st.error(f"Failed to record attendance: {err}")
                 return
 
-            # 2) Also append into our separate Locationlogger sheet
+            # 2) Also log into our separate Locationlogger sheet
             ts = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
             new_row = {
                 "Attendance ID": attendance_id,
@@ -2232,6 +2239,7 @@ def attendance_page():
                 "Longitude": loc["longitude"],
                 "Map Link": loc["link"]
             }
+
             try:
                 existing = conn.read(
                     worksheet="Locationlogger",
@@ -2251,27 +2259,31 @@ def attendance_page():
             st.balloons()
 
     else:
-        # Unchanged Leave flow
+        # Leave flow unchanged
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
-        leave_type = st.selectbox("Leave Type", leave_types)
-        leave_reason = st.text_area("Reason for Leave")
-
+        leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
+        leave_reason = st.text_area(
+            "Reason for Leave",
+            placeholder="Provide details about your leave",
+            key="leave_reason"
+        )
         if st.button("Submit Leave Request"):
             if not leave_reason:
                 st.error("Please provide a reason for your leave")
             else:
-                full = f"{leave_type}: {leave_reason}"
-                with st.spinner("Submitting leave..."):
+                full_reason = f"{leave_type}: {leave_reason}"
+                with st.spinner("Submitting leave request..."):
                     aid, err = record_attendance(
                         selected_employee,
                         "Leave",
-                        leave_reason=full
+                        leave_reason=full_reason
                     )
                     if err:
-                        st.error(f"Error: {err}")
+                        st.error(f"Failed to submit leave request: {err}")
                     else:
-                        st.success(f"Leave submitted! ID: {aid}")
+                        st.success(f"Leave request submitted successfully! ID: {aid}")
+
 
 
 
