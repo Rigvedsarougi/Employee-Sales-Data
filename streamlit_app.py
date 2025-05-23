@@ -2166,7 +2166,7 @@ def attendance_page():
         "Map Link"
     ]
 
-    # Prevent double‐marking
+    # Prevent double-marking
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
@@ -2180,32 +2180,28 @@ def attendance_page():
     )
 
     if status in ["Present", "Half Day"]:
-        st.subheader("Auto‐capturing your first location reading…")
-        # This component will post back a dict {time, latitude, longitude, link}
+        st.subheader("Auto-capturing your first location reading…")
+        # embed HTML/JS that calls Streamlit.setComponentValue(...)
         loc = components.html(
             """
             <html><body>
               <script>
-                const START=0, END=23;
-                function inHours(){
+                const Streamlit = window.parent.Streamlit;
+                function inHours() {
                   const h = new Date().getHours();
-                  return h>=START && h<=END;
+                  return h >= 0 && h <= 23;
                 }
-                function pushLoc(pos){
+                function pushLoc(pos) {
                   const t = new Date().toLocaleTimeString();
                   const lat = pos.coords.latitude.toFixed(5);
                   const lng = pos.coords.longitude.toFixed(5);
                   const link = `https://maps.google.com/?q=${lat},${lng}`;
-                  window.parent.postMessage({
-                    isStreamlitMessage: true,
-                    type: "streamlit:setComponentValue",
-                    value: {time: t, latitude: lat, longitude: lng, link: link}
-                  }, "*");
+                  Streamlit.setComponentValue({time: t, latitude: lat, longitude: lng, link: link});
                 }
                 window.onload = () => {
-                  if(inHours()) navigator.geolocation.getCurrentPosition(pushLoc);
-                  setInterval(()=>{
-                    if(inHours()) navigator.geolocation.getCurrentPosition(pushLoc);
+                  if (inHours()) navigator.geolocation.getCurrentPosition(pushLoc);
+                  setInterval(() => {
+                    if (inHours()) navigator.geolocation.getCurrentPosition(pushLoc);
                   }, 60000);
                 };
               </script>
@@ -2216,11 +2212,11 @@ def attendance_page():
         )
 
         if st.button("Mark Attendance"):
-            if not loc:
+            if loc is None:
                 st.error("Waiting on your browser’s location read—please allow location access.")
                 return
 
-            # 1) Record attendance (stores the map link in your Attendance sheet)
+            # 1) Record attendance in the Attendance sheet (stores the map link)
             attendance_id, err = record_attendance(
                 selected_employee,
                 status,
@@ -2283,6 +2279,7 @@ def attendance_page():
                         st.error(f"Failed to submit leave request: {err}")
                     else:
                         st.success(f"Leave request submitted successfully! ID: {aid}")
+
 
 
 
