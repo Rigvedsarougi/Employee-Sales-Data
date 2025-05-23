@@ -2155,6 +2155,9 @@ def attendance_page():
         st.subheader("Location Verification")
         col1, col2 = st.columns([3, 1])
         with col1:
+            live_location = st.text_input("Enter your current location (Google Maps link or address)", 
+                                        help="Please share your live location for verification",
+                                        key="location_input")
             
             st.title("📍 Location Logger")
             st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
@@ -2250,7 +2253,6 @@ def attendance_page():
                 """,
                 height=600,
             )
-            live_location = ${loc.link}
 
         
         if st.button("Mark Attendance", key="mark_attendance_button"):
