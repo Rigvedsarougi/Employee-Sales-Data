@@ -173,18 +173,6 @@ SALES_SHEET_COLUMNS = [
     "Delivery Status"  # Added new column for delivery status
 ]
 
-LOCATION_HISTORY_COLUMNS = [
-    "Employee Name",
-    "Employee Code",
-    "Timestamp",
-    "Latitude",
-    "Longitude",
-    "Google Maps Link",
-    "Date",
-    "Time",
-    "Accuracy (m)"
-]
-
 VISIT_SHEET_COLUMNS = [
     "Visit ID",
     "Employee Name",
@@ -375,26 +363,6 @@ def save_uploaded_file(uploaded_file, folder):
         return file_path
     return None
 
-def log_location_to_gsheet(conn, location_data):
-    try:
-        existing_data = conn.read(worksheet="LocationHistory", ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        
-        location_df = pd.DataFrame([location_data])
-        
-        # Ensure all columns exist
-        for col in LOCATION_HISTORY_COLUMNS:
-            if col not in location_df.columns:
-                location_df[col] = None
-        
-        location_df = location_df[LOCATION_HISTORY_COLUMNS]
-        
-        updated_data = pd.concat([existing_data, location_df], ignore_index=True)
-        conn.update(worksheet="LocationHistory", data=updated_data)
-        return True
-    except Exception as e:
-        st.error(f"Error logging location data: {e}")
-        return False
 
 def demo_page():
     st.title("Demo Management")
@@ -2175,171 +2143,137 @@ def visit_page():
 def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
-    employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
     
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
-    
-    # Initialize location data in session state
-    handle_location_message()
     
     st.subheader("Attendance Status")
     status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
     
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
-        
-        # Display the location logger component
-        st.title("📍 Location Logger")
-        st.markdown("This app tracks your location every minute. Data will be recorded for attendance verification.")
-        
-        # Inject the HTML/JS component
-        components.html(
-            """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8" />
-                <style>
-                    body { font-family: sans-serif; padding: 10px; }
-                    ul { padding-left: 20px; }
-                </style>
-            </head>
-            <body>
-                <h3>Location History</h3>
-                <div id="status">Waiting for location...</div>
-                <ul id="history"></ul>
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            live_location = st.text_input("Enter your current location (Google Maps link or address)", 
+                                        help="Please share your live location for verification",
+                                        key="location_input")
+            
+            st.title("📍 Location Logger")
+            st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
 
-                <script>
-                    const locationHistory = [];
+            # Inject the full HTML + JS
+            components.html(
+                """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8" />
+                    <style>
+                        body { font-family: sans-serif; padding: 10px; }
+                        ul { padding-left: 20px; }
+                    </style>
+                </head>
+                <body>
+                    <h3>Location History</h3>
+                    <div id="status">Waiting for location...</div>
+                    <ul id="history"></ul>
 
-                    function sendLocation() {
-                        if (!navigator.geolocation) {
-                            document.getElementById("status").innerText = "Geolocation is not supported";
-                            return;
+                    <script>
+                        const START_HOUR = 0;
+                        const END_HOUR = 23;
+                        const locationHistory = [];
+
+                        function isWithinTimeRange() {
+                            const now = new Date();
+                            const hours = now.getHours();
+                            return hours >= START_HOUR && hours <= END_HOUR;
                         }
 
-                        navigator.geolocation.getCurrentPosition(
-                            (position) => {
-                                const now = new Date();
-                                const timestamp = now.toLocaleTimeString();
-                                const latitude = position.coords.latitude;
-                                const longitude = position.coords.longitude;
-                                const accuracy = position.coords.accuracy;
+                        function sendLocation() {
+                            if (!navigator.geolocation) {
+                                console.log("Geolocation is not supported.");
+                                return;
+                            }
 
-                                // Send data to Streamlit
-                                const locationData = {
-                                    time: timestamp,
-                                    latitude: latitude,
-                                    longitude: longitude,
-                                    accuracy: accuracy,
-                                    link: `https://maps.google.com/?q=${latitude},${longitude}`
-                                };
-                                
-                                window.parent.postMessage({
-                                    type: 'streamlit:setComponentValue',
-                                    apiToken: 'your_api_token',
-                                    value: locationData
-                                }, '*');
+                            navigator.geolocation.getCurrentPosition(
+                                (position) => {
+                                    const timestamp = new Date().toLocaleTimeString();
+                                    const latitude = position.coords.latitude;
+                                    const longitude = position.coords.longitude;
 
-                                // Update UI
+                                    console.log(`[${timestamp}] Location: ${latitude}, ${longitude}`);
+
+                                    locationHistory.push({
+                                        time: timestamp,
+                                        latitude: latitude,
+                                        longitude: longitude,
+                                        link: `https://maps.google.com/?q=${latitude},${longitude}`
+                                    });
+
+                                    updateLocationList();
+                                },
+                                (err) => {
+                                    console.error("Error getting location:", err);
+                                }, {
+  enableHighAccuracy: true
+}
+                            );
+                        }
+
+                        function updateLocationList() {
+                            const listElement = document.getElementById("history");
+                            listElement.innerHTML = "";
+
+                            locationHistory.forEach((loc, index) => {
                                 const item = document.createElement("li");
                                 item.innerHTML = `
-                                    <strong>[${timestamp}]</strong> 
-                                    Lat: ${latitude.toFixed(5)}, Lng: ${longitude.toFixed(5)}
-                                    (Accuracy: ${accuracy.toFixed(1)}m)
-                                    - <a href="${locationData.link}" target="_blank">Map</a>
+                                    <strong>[${loc.time}]</strong> 
+                                    Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)}
+                                    - <a href="${loc.link}" target="_blank">Map</a>
                                 `;
-                                document.getElementById("history").appendChild(item);
-                                document.getElementById("status").innerText = `Last updated: ${timestamp}`;
-                            },
-                            (error) => {
-                                document.getElementById("status").innerText = `Error getting location: ${error.message}`;
-                            },
-                            {
-                                enableHighAccuracy: true,
-                                timeout: 10000,
-                                maximumAge: 0
+                                listElement.appendChild(item);
+                            });
+
+                            document.getElementById("status").innerText = `Last updated: ${locationHistory[locationHistory.length - 1].time}`;
+                        }
+
+                        window.onload = () => {
+                            if (isWithinTimeRange()) {
+                                sendLocation();
                             }
-                        );
-                    }
 
-                    // Get location immediately and then every minute
-                    sendLocation();
-                    setInterval(sendLocation, 60000);
-                </script>
-            </body>
-            </html>
-            """,
-            height=400,
-            key="location_tracker"
-        )
+                            setInterval(() => {
+                                if (isWithinTimeRange()) {
+                                    sendLocation();
+                                }
+                            }, 60 * 1000); // every minute
+                        };
+                    </script>
+                </body>
+                </html>
+                """,
+                height=600,
+            )
 
-        # Button to capture the current location
-        if st.button("Capture Current Location", key="capture_location"):
-            # Check if we have any location data
-            if st.session_state.get('location_tracker'):
-                loc = st.session_state.location_tracker
-                st.session_state.latest_location = loc
-                st.session_state.location_data.append(loc)
-                st.success(f"Location captured: {loc['latitude']:.5f}, {loc['longitude']:.5f}")
-            else:
-                st.warning("Waiting for location data... Please allow location access and try again.")
-
-        # Display captured locations
-        if st.session_state.location_data:
-            st.subheader("Your Captured Locations")
-            for i, loc in enumerate(st.session_state.location_data, 1):
-                st.write(f"{i}. {loc['time']} - Lat: {loc['latitude']:.5f}, Lng: {loc['longitude']:.5f} - [Map Link]({loc['link']})")
-
+        
         if st.button("Mark Attendance", key="mark_attendance_button"):
-            if not st.session_state.location_data:
-                st.error("Please capture at least one location before marking attendance")
+            if not live_location:
+                st.error("Please provide your location")
             else:
                 with st.spinner("Recording attendance..."):
-                    # Get the most accurate location (smallest accuracy value)
-
-                    best_location = min(location_list)
+                    attendance_id, error = record_attendance(
+                        selected_employee,
+                        status,  # Will be "Present" or "Half Day"
+                        location_link=live_location
+                    )
                     
-                    # Finding minimum with a key function
-                    best_location = min(location_list, key=lambda x: x['distance'])
-                    
-                    # Finding minimum of multiple values
-                    best_location = min(lat1, lat2, lat3)
-                    
-                    # Log to Google Sheets
-                    current_date = get_ist_time().strftime("%d-%m-%Y")
-                    location_data = {
-                        "Employee Name": selected_employee,
-                        "Employee Code": employee_code,
-                        "Timestamp": f"{current_date} {best_location['time']}",
-                        "Latitude": best_location['latitude'],
-                        "Longitude": best_location['longitude'],
-                        "Google Maps Link": best_location['link'],
-                        "Date": current_date,
-                        "Time": best_location['time'],
-                        "Accuracy (m)": best_location.get('accuracy', 'N/A')
-                    }
-                    
-                    if log_location_to_gsheet(conn, location_data):
-                        # Record attendance with the best location
-                        attendance_id, error = record_attendance(
-                            selected_employee,
-                            status,
-                            location_link=best_location['link']
-                        )
-                        
-                        if error:
-                            st.error(f"Attendance recorded but location logging failed: {error}")
-                        else:
-                            st.success(f"Attendance recorded successfully! ID: {attendance_id}")
-                            st.balloons()
-                            # Clear location data after successful submission
-                            st.session_state.location_data = []
-                            st.session_state.latest_location = None
+                    if error:
+                        st.error(f"Failed to record attendance: {error}")
                     else:
-                        st.error("Failed to log location data to Google Sheets")
+                        st.success(f"Attendance recorded successfully! ID: {attendance_id}")
+                        st.balloons()
+                        
     
     else:
         st.subheader("Leave Details")
@@ -2366,17 +2300,5 @@ def attendance_page():
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
 
-# Add this at the bottom of your app.py, right before if __name__ == "__main__":
-def handle_location_message():
-    # Initialize location data in session state if not exists
-    if 'location_data' not in st.session_state:
-        st.session_state.location_data = []
-    if 'latest_location' not in st.session_state:
-        st.session_state.latest_location = None
-    data = st.session_state.get('location_component_value')
-    if data:
-        st.session_state.latest_location = data
-
 if __name__ == "__main__":
-    handle_location_message()
     main()
