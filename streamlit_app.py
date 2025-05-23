@@ -14,80 +14,57 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Location Logger", layout="centered")
 
-# In your app.py, replace display_location_logger with the following implementation.
-# Install the community component:
+# In your app.py, replace display_location_logger with this implementation.
+# Install:
 #    pip install streamlit-js-eval
 #    pip install streamlit-autorefresh
-# and restart your Streamlit session.
-from streamlit_js_eval import streamlit_js_eval  # capture JS-geolocation in Python
-import json
+
 import pandas as pd
 import streamlit as st
+from streamlit_js_eval import streamlit_js_eval
 from streamlit_autorefresh import st_autorefresh
 
 
 def display_location_logger():
-    """Renders the live-location tracker and logs each reading to the 'Locationlogger' Google sheet."""
+    """Logs browser geolocation every minute into the 'Locationlogger' sheet."""
     st.title("📍 Location Logger")
-    st.markdown("Tracks your location every minute and writes each reading to the 'Locationlogger' sheet.")
+    st.markdown("Tracks your location every minute and writes to 'Locationlogger'.")
 
-    # Fetch geolocation via JS, returned as JS object
-    result = streamlit_js_eval(
-        js_expressions=[
-            """
-            new Promise((resolve) => {
-                navigator.geolocation.getCurrentPosition(
-                    pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                    err => resolve({latitude: null, longitude: null})
-                );
-            })
-            """
-        ],
-        key="get_location"
+    # Immediate geolocation fetch via async IIFE returning an object
+    js_code = (
+        "(async () => {"
+        "  const pos = await new Promise(resolve => navigator.geolocation.getCurrentPosition(resolve, resolve));"
+        "  return { latitude: pos.coords.latitude || null, longitude: pos.coords.longitude || null };"
+        "})()"
     )
+    result = streamlit_js_eval(js_expressions=[js_code], key="get_location")
 
     if not result:
-        st.warning("Waiting for location permission in your browser...")
+        st.warning("Waiting for browser location permission...")
         return
 
-    raw = result[0]
-    # If raw is string, attempt JSON parse; if dict-like, use directly
-    if isinstance(raw, str):
-        try:
-            loc = json.loads(raw)
-        except Exception as e:
-            st.error(f"Failed to parse location data: {e}\nRaw data: {raw}")
-            return
-    elif isinstance(raw, dict):
-        loc = raw
-    else:
-        st.error(f"Unexpected location data type: {type(raw)}")
+    loc = result[0]
+    # Ensure it's a dict
+    if not isinstance(loc, dict) or 'latitude' not in loc:
+        st.error(f"Unexpected location data: {loc}")
         return
 
     lat = loc.get('latitude')
     lon = loc.get('longitude')
-
-    if lat is not None and lon is not None:
-        timestamp = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
-
-        # Read existing sheet data
-        existing = conn.read(worksheet="Locationlogger", ttl=5)
-        df_existing = pd.DataFrame(existing)
-
-        # Prepare new row
-        df_new = pd.DataFrame([{"Timestamp": timestamp, "Latitude": lat, "Longitude": lon}])
-
-        # Append and write back
-        df_updated = pd.concat([df_existing, df_new], ignore_index=True)
-        conn.update(worksheet="Locationlogger", data=df_updated)
-
-        st.success(f"Logged at {timestamp}: ({lat:.5f}, {lon:.5f})")
+    if lat is None or lon is None:
+        st.warning("Location unavailable—please enable location services.")
     else:
-        st.warning("Could not obtain location. Please ensure browser location services are enabled.")
+        timestamp = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
+        # Read and append
+        existing = conn.read(worksheet="Locationlogger", ttl=5)
+        df_exist = pd.DataFrame(existing)
+        df_new = pd.DataFrame([{"Timestamp": timestamp, "Latitude": lat, "Longitude": lon}])
+        df_up = pd.concat([df_exist, df_new], ignore_index=True)
+        conn.update(worksheet="Locationlogger", data=df_up)
+        st.success(f"Logged at {timestamp}: ({lat:.5f}, {lon:.5f})")
 
-    # Auto-refresh every minute
-    st_autorefresh(interval=60 * 1000, key="refresh_location")
-
+    # Schedule a refresh every minute
+    st_autorefresh(interval=60_000, key="refresh_location")
 
 
 def get_ist_time():
