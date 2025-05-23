@@ -2152,169 +2152,127 @@ def visit_page():
                 st.error(f"Error retrieving visit data: {e}")
 
 def attendance_page():
+    import pandas as pd
+
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
-    
+
+    # Columns for the Locationlogger sheet
+    LOCATION_LOGGER_COLUMNS = [
+        "Attendance ID",
+        "Timestamp",
+        "Latitude",
+        "Longitude",
+        "Map Link"
+    ]
+
+    # Don’t let them mark twice
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
-    
+
     st.subheader("Attendance Status")
-    status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
-    
+    status = st.radio(
+        "Select Status",
+        ["Present", "Half Day", "Leave"],
+        index=0,
+        key="attendance_status"
+    )
+
     if status in ["Present", "Half Day"]:
-        st.subheader("Location Verification")
-        
-        # Initialize session state for location data if not exists
-        if 'location_data' not in st.session_state:
-            st.session_state.location_data = None
-        
-        st.title("📍 Location Logger")
-        st.markdown("Your current location will be automatically captured when you mark attendance.")
-        
-        # Display the location logger component
-        components.html(
+        st.subheader("Auto-capturing your first location reading…")
+        loc = components.html(
             """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8" />
-                <style>
-                    body { font-family: sans-serif; padding: 10px; }
-                    ul { padding-left: 20px; }
-                </style>
-            </head>
-            <body>
-                <h3>Location History</h3>
-                <div id="status">Waiting for location...</div>
-                <ul id="history"></ul>
-
-                <script>
-                    const locationHistory = [];
-
-                    function sendLocation() {
-                        if (!navigator.geolocation) {
-                            document.getElementById("status").innerText = "Geolocation is not supported by your browser";
-                            return;
-                        }
-
-                        navigator.geolocation.getCurrentPosition(
-                            (position) => {
-                                const timestamp = new Date().toLocaleTimeString();
-                                const latitude = position.coords.latitude;
-                                const longitude = position.coords.longitude;
-
-                                const locationData = {
-                                    time: timestamp,
-                                    latitude: latitude,
-                                    longitude: longitude,
-                                    link: `https://maps.google.com/?q=${latitude},${longitude}`
-                                };
-
-                                locationHistory.push(locationData);
-                                updateLocationList();
-                                
-                                // Send data to Streamlit
-                                window.parent.postMessage({
-                                    type: 'streamlit:setComponentValue',
-                                    data: locationData
-                                }, '*');
-                            },
-                            (err) => {
-                                document.getElementById("status").innerText = `Error getting location: ${err.message}`;
-                            }
-                        );
-                    }
-
-                    function updateLocationList() {
-                        const listElement = document.getElementById("history");
-                        listElement.innerHTML = "";
-
-                        locationHistory.forEach((loc, index) => {
-                            const item = document.createElement("li");
-                            item.innerHTML = `
-                                <strong>[${loc.time}]</strong> 
-                                Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)}
-                                - <a href="${loc.link}" target="_blank">Map</a>
-                            `;
-                            listElement.appendChild(item);
-                        });
-
-                        if (locationHistory.length > 0) {
-                            document.getElementById("status").innerText = `Last updated: ${locationHistory[locationHistory.length - 1].time}`;
-                        }
-                    }
-
-                    // Get initial location
-                    sendLocation();
-                    
-                    // Update every minute
-                    setInterval(sendLocation, 60000);
-                </script>
-            </body>
-            </html>
+            <html><body>
+              <script>
+                const START=0, END=23;
+                function inHours(){let h=new Date().getHours();return h>=START&&h<=END;}
+                function pushLoc(p){
+                  let t=new Date().toLocaleTimeString(),
+                      lat=p.coords.latitude.toFixed(5),
+                      lng=p.coords.longitude.toFixed(5),
+                      link=`https://maps.google.com/?q=${lat},${lng}`;
+                  window.parent.postMessage(
+                    {type:'streamlit:setComponentValue',
+                     value:{time:t,latitude:lat,longitude:lng,link:link}
+                    },"*");
+                }
+                window.onload=()=>{
+                  if(inHours()) navigator.geolocation.getCurrentPosition(pushLoc);
+                  setInterval(()=>{ if(inHours()) navigator.geolocation.getCurrentPosition(pushLoc); },60000);
+                };
+              </script>
+            </body></html>
             """,
-            height=300
+            height=200,
+            scrolling=False
         )
 
-        # Handle the location data from the component
-        location_data = components.html(
-            "<script>window.dummy=1;</script>",  # Dummy content
-            height=0,
-            key="location_data_receiver"
-        )
-        
-        if location_data:
-            st.session_state.location_data = location_data
-        
-        if st.button("Mark Attendance", key="mark_attendance_button"):
-            if not st.session_state.location_data:
-                st.error("Please wait for your location to be captured. Make sure you've allowed location access.")
-            else:
-                loc = st.session_state.location_data
-                with st.spinner("Recording attendance..."):
-                    attendance_id, error = record_attendance(
-                        selected_employee,
-                        status,
-                        location_link=loc['link'],
-                        latitude=loc['latitude'],
-                        longitude=loc['longitude'],
-                        timestamp=loc['time']
-                    )
-                    
-                    if error:
-                        st.error(f"Failed to record attendance: {error}")
-                    else:
-                        st.success(f"""
-                        Attendance recorded successfully! ID: {attendance_id}
-                        Location logged at {loc['time']}
-                        """)
-                        st.balloons()
-    
+        if st.button("Mark Attendance"):
+            if not loc:
+                st.error("Waiting on your browser’s location read—please allow location access.")
+                return
+
+            # 1) Record attendance in Attendance sheet (with the map link)
+            attendance_id, err = record_attendance(
+                selected_employee,
+                status,
+                location_link=loc["link"]
+            )
+            if err:
+                st.error(f"Failed to record attendance: {err}")
+                return
+
+            # 2) Also append into our separate Locationlogger sheet
+            ts = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
+            new_row = {
+                "Attendance ID": attendance_id,
+                "Timestamp": ts,
+                "Latitude": loc["latitude"],
+                "Longitude": loc["longitude"],
+                "Map Link": loc["link"]
+            }
+            try:
+                existing = conn.read(
+                    worksheet="Locationlogger",
+                    usecols=list(range(len(LOCATION_LOGGER_COLUMNS))),
+                    ttl=5
+                ).dropna(how="all")
+            except Exception:
+                existing = pd.DataFrame(columns=LOCATION_LOGGER_COLUMNS)
+
+            df_new = pd.DataFrame([new_row], columns=LOCATION_LOGGER_COLUMNS)
+            conn.update(
+                worksheet="Locationlogger",
+                data=pd.concat([existing, df_new], ignore_index=True)
+            )
+
+            st.success(f"✅ Attendance recorded! ID: {attendance_id}")
+            st.balloons()
+
     else:
+        # Unchanged Leave flow
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
-        leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
-        leave_reason = st.text_area("Reason for Leave", 
-                                 placeholder="Please provide details about your leave",
-                                 key="leave_reason")
-        
-        if st.button("Submit Leave Request", key="submit_leave_button"):
+        leave_type = st.selectbox("Leave Type", leave_types)
+        leave_reason = st.text_area("Reason for Leave")
+
+        if st.button("Submit Leave Request"):
             if not leave_reason:
                 st.error("Please provide a reason for your leave")
             else:
-                full_reason = f"{leave_type}: {leave_reason}"
-                with st.spinner("Submitting leave request..."):
-                    attendance_id, error = record_attendance(
+                full = f"{leave_type}: {leave_reason}"
+                with st.spinner("Submitting leave..."):
+                    aid, err = record_attendance(
                         selected_employee,
                         "Leave",
-                        leave_reason=full_reason
+                        leave_reason=full
                     )
-                    
-                    if error:
-                        st.error(f"Failed to submit leave request: {error}")
+                    if err:
+                        st.error(f"Error: {err}")
                     else:
-                        st.success(f"Leave request submitted successfully! ID: {attendance_id}")
+                        st.success(f"Leave submitted! ID: {aid}")
+
 
 
 if __name__ == "__main__":
