@@ -14,57 +14,48 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Location Logger", layout="centered")
 
-# In your app.py, replace display_location_logger with this implementation.
-# Install:
-#    pip install streamlit-js-eval
-#    pip install streamlit-autorefresh
-
-import pandas as pd
-import streamlit as st
-from streamlit_js_eval import streamlit_js_eval
-from streamlit_autorefresh import st_autorefresh
-
 
 def display_location_logger():
-    """Logs browser geolocation every minute into the 'Locationlogger' sheet."""
+    """Renders the live-location tracker/browser component."""
     st.title("📍 Location Logger")
-    st.markdown("Tracks your location every minute and writes to 'Locationlogger'.")
-
-    # Immediate geolocation fetch via async IIFE returning an object
-    js_code = (
-        "(async () => {"
-        "  const pos = await new Promise(resolve => navigator.geolocation.getCurrentPosition(resolve, resolve));"
-        "  return { latitude: pos.coords.latitude || null, longitude: pos.coords.longitude || null };"
-        "})()"
+    st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
+    components.html(
+        """
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"/><style>body{font-family:sans-serif;padding:10px;}ul{padding-left:20px;}</style></head>
+        <body>
+            <h3>Location History</h3>
+            <div id="status">Waiting for location...</div>
+            <ul id="history"></ul>
+            <script>
+                const locationHistory = [];
+                function sendLocation() {
+                    if (!navigator.geolocation) return;
+                    navigator.geolocation.getCurrentPosition(pos => {
+                        const ts = new Date().toLocaleTimeString();
+                        const lat = pos.coords.latitude, lng = pos.coords.longitude;
+                        locationHistory.push({time:ts,latitude:lat,longitude:lng,link:`https://maps.google.com/?q=${lat},${lng}`});
+                        updateLocationList();
+                    });
+                }
+                function updateLocationList() {
+                    const ul = document.getElementById("history");
+                    ul.innerHTML = "";
+                    locationHistory.forEach(loc => {
+                        const li = document.createElement("li");
+                        li.innerHTML = `<strong>[${loc.time}]</strong> Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)} - <a href="${loc.link}" target="_blank">Map</a>`;
+                        ul.appendChild(li);
+                    });
+                    document.getElementById("status").innerText = `Last updated: ${locationHistory.slice(-1)[0].time}`;
+                }
+                window.onload = () => { sendLocation(); setInterval(sendLocation, 60*1000); };
+            </script>
+        </body>
+        </html>
+        """,
+        height=600,
     )
-    result = streamlit_js_eval(js_expressions=[js_code], key="get_location")
-
-    if not result:
-        st.warning("Waiting for browser location permission...")
-        return
-
-    loc = result[0]
-    # Ensure it's a dict
-    if not isinstance(loc, dict) or 'latitude' not in loc:
-        st.error(f"Unexpected location data: {loc}")
-        return
-
-    lat = loc.get('latitude')
-    lon = loc.get('longitude')
-    if lat is None or lon is None:
-        st.warning("Location unavailable—please enable location services.")
-    else:
-        timestamp = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
-        # Read and append
-        existing = conn.read(worksheet="Locationlogger", ttl=5)
-        df_exist = pd.DataFrame(existing)
-        df_new = pd.DataFrame([{"Timestamp": timestamp, "Latitude": lat, "Longitude": lon}])
-        df_up = pd.concat([df_exist, df_new], ignore_index=True)
-        conn.update(worksheet="Locationlogger", data=df_up)
-        st.success(f"Logged at {timestamp}: ({lat:.5f}, {lon:.5f})")
-
-    # Schedule a refresh every minute
-    st_autorefresh(interval=60_000, key="refresh_location")
 
 
 def get_ist_time():
