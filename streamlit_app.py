@@ -11,6 +11,71 @@ import pytz
 
 import streamlit as st
 import streamlit.components.v1 as components
+from streamlit_js_eval import streamlit_js_eval
+from datetime import datetime
+import pytz
+import time
+import pandas as pd
+
+
+
+def log_location_history(conn, employee_name, lat, lng):
+    employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
+    designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
+    ist = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(ist)
+    date_str = now.strftime("%d-%m-%Y")
+    time_str = now.strftime("%H:%M")
+    gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
+    entry = {
+        "Employee Name": employee_name,
+        "Employee Code": employee_code,
+        "Designation": designation,
+        "Date": date_str,
+        "Time": time_str,
+        "Latitude": lat,
+        "Longitude": lng,
+        "Google Maps Link": gmaps_link
+    }
+    try:
+        existing = conn.read(worksheet="LocationHistory", usecols=list(range(len(LOCATION_HISTORY_COLUMNS))), ttl=5)
+        existing = existing.dropna(how="all")
+        new_df = pd.DataFrame([entry], columns=LOCATION_HISTORY_COLUMNS)
+        updated = pd.concat([existing, new_df], ignore_index=True)
+        conn.update(worksheet="LocationHistory", data=updated)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+def hourly_location_auto_log(conn, selected_employee):
+    if not selected_employee:
+        return
+    result = streamlit_js_eval(
+        js_expressions="""
+            new Promise((resolve) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude, ts: Date.now()}),
+                        err => resolve({latitude: null, longitude: null, ts: Date.now()})
+                    );
+                } else {
+                    resolve({latitude: null, longitude: null, ts: Date.now()});
+                }
+            });
+        """,
+        key=f"geo_hourly_{int(time.time() // 3600)}"
+    ) or {}
+
+    lat = result.get("latitude")
+    lng = result.get("longitude")
+
+    if lat and lng:
+        current_hour = datetime.now(pytz.timezone('Asia/Kolkata')).strftime("%Y-%m-%d %H")
+        logged_key = f"hourly_logged_{selected_employee}_{current_hour}"
+        if not st.session_state.get(logged_key, False):
+            success, error = log_location_history(conn, selected_employee, lat, lng)
+            if success:
+                st.session_state[logged_key] = True
 
 st.set_page_config(page_title="Location Logger", layout="centered")
 
@@ -171,6 +236,17 @@ SALES_SHEET_COLUMNS = [
     "Invoice PDF Path",
     "Remarks",
     "Delivery Status"  # Added new column for delivery status
+]
+
+LOCATION_HISTORY_COLUMNS = [
+    "Employee Name",
+    "Employee Code",
+    "Designation",
+    "Date",
+    "Time",
+    "Latitude",
+    "Longitude",
+    "Google Maps Link"
 ]
 
 VISIT_SHEET_COLUMNS = [
@@ -365,6 +441,7 @@ def save_uploaded_file(uploaded_file, folder):
 
 
 def demo_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Demo Management")
     selected_employee = st.session_state.employee_name
 
@@ -560,6 +637,7 @@ def demo_page():
 
 
 def support_ticket_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Support Ticket Management")
     selected_employee = st.session_state.employee_name
     employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
@@ -767,6 +845,7 @@ def support_ticket_page():
             st.error(f"Error retrieving support tickets: {str(e)}")
 
 def travel_hotel_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Travel & Hotel Booking")
     selected_employee = st.session_state.employee_name
     employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
@@ -1438,6 +1517,7 @@ def authenticate_employee(employee_name, passkey):
         return False
 
 def resources_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Company Resources")
     st.markdown("Download important company documents and product catalogs.")
     
@@ -1600,6 +1680,7 @@ def main():
                 demo_page()
 
 def sales_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
     sales_remarks = ""
@@ -2020,6 +2101,7 @@ def sales_page():
                         st.error(f"Error regenerating invoice: {e}")
 
 def visit_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
 
@@ -2143,6 +2225,7 @@ def visit_page():
 from streamlit_js_eval import streamlit_js_eval
 
 def attendance_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
 
