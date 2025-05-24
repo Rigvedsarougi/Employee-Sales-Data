@@ -2148,141 +2148,84 @@ def attendance_page():
         st.warning("You have already marked your attendance for today.")
         return
     
-    st.subheader("Attendance Status")
+    # Attendance status selection
     status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
     
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            live_location = st.text_input("Enter your current location (Google Maps link or address)", 
-                                        help="Please share your live location for verification",
-                                        key="location_input")
-            
-            st.title("📍 Location Logger")
-            st.markdown("This app tracks your location every minute (for demo). Data stays in the browser.")
-
-            # Inject the full HTML + JS
-            components.html(
-                """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8" />
-                    <style>
-                        body { font-family: sans-serif; padding: 10px; }
-                        ul { padding-left: 20px; }
-                    </style>
-                </head>
-                <body>
-                    <h3>Location History</h3>
-                    <div id="status">Waiting for location...</div>
-                    <ul id="history"></ul>
-
-                    <script>
-                        const START_HOUR = 0;
-                        const END_HOUR = 23;
-                        const locationHistory = [];
-
-                        function isWithinTimeRange() {
-                            const now = new Date();
-                            const hours = now.getHours();
-                            return hours >= START_HOUR && hours <= END_HOUR;
-                        }
-
-                        function sendLocation() {
-                            if (!navigator.geolocation) {
-                                console.log("Geolocation is not supported.");
-                                return;
-                            }
-
-                            navigator.geolocation.getCurrentPosition(
-                                (position) => {
-                                    const timestamp = new Date().toLocaleTimeString();
-                                    const latitude = position.coords.latitude;
-                                    const longitude = position.coords.longitude;
-
-                                    console.log(`[${timestamp}] Location: ${latitude}, ${longitude}`);
-
-                                    locationHistory.push({
-                                        time: timestamp,
-                                        latitude: latitude,
-                                        longitude: longitude,
-                                        link: `https://maps.google.com/?q=${latitude},${longitude}`
-                                    });
-
-                                    updateLocationList();
-                                },
-                                (err) => {
-                                    console.error("Error getting location:", err);
-                                }, {
-  enableHighAccuracy: true
-}
-                            );
-                        }
-
-                        function updateLocationList() {
-                            const listElement = document.getElementById("history");
-                            listElement.innerHTML = "";
-
-                            locationHistory.forEach((loc, index) => {
-                                const item = document.createElement("li");
-                                item.innerHTML = `
-                                    <strong>[${loc.time}]</strong> 
-                                    Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)}
-                                    - <a href="${loc.link}" target="_blank">Map</a>
-                                `;
-                                listElement.appendChild(item);
-                            });
-
-                            document.getElementById("status").innerText = `Last updated: ${locationHistory[locationHistory.length - 1].time}`;
-                        }
-
-                        window.onload = () => {
-                            if (isWithinTimeRange()) {
-                                sendLocation();
-                            }
-
-                            setInterval(() => {
-                                if (isWithinTimeRange()) {
-                                    sendLocation();
-                                }
-                            }, 60 * 1000); // every minute
-                        };
-                    </script>
-                </body>
-                </html>
-                """,
-                height=600,
-            )
-
         
-        if st.button("Mark Attendance", key="mark_attendance_button"):
-            if not live_location:
-                st.error("Please provide your location")
-            else:
-                with st.spinner("Recording attendance..."):
-                    attendance_id, error = record_attendance(
-                        selected_employee,
-                        status,  # Will be "Present" or "Half Day"
-                        location_link=live_location
-                    )
-                    
-                    if error:
-                        st.error(f"Failed to record attendance: {error}")
-                    else:
-                        st.success(f"Attendance recorded successfully! ID: {attendance_id}")
-                        st.balloons()
-                        
-    
+        # HTML + JS tracker with send button
+        html_code = '''
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"/></head>
+        <body>
+          <h3>Location History</h3>
+          <div id="status">Waiting for location...</div>
+          <ul id="history"></ul>
+          <button id="send">Send to Python</button>
+          <script>
+            const history = [];
+            function record() {
+              navigator.geolocation.getCurrentPosition(pos => {
+                const now = new Date().toISOString();
+                const entry = {
+                  time: now,
+                  latitude: pos.coords.latitude,
+                  longitude: pos.coords.longitude,
+                  link: `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`
+                };
+                history.push(entry);
+                document.getElementById('history').innerHTML = history.map(h =>
+                  `<li>[${h.time.split('T')[1].split('.')[0]}] Lat: ${h.latitude.toFixed(5)}, Lng: ${h.longitude.toFixed(5)} - <a href="${h.link}" target="_blank">Map</a></li>`
+                ).join('');
+                document.getElementById('status').innerText = 'Last updated: ' + history.slice(-1)[0].time.split('T')[1].split('.')[0];
+              });
+            }
+            record();
+            setInterval(record, 60000);
+            document.getElementById('send').onclick = () => {
+              const payload = JSON.stringify(history);
+              window.parent.postMessage({
+                isStreamlitMessage: true,
+                data: payload
+              }, '*');
+            };
+          </script>
+        </body>
+        </html>
+        '''
+        
+        raw = components.html(html_code, height=500, scrolling=True)
+        
+        # When user clicks "Send to Python", raw will be the JSON string
+        if raw:
+            loc_history = pd.read_json(raw)
+            rows = []
+            code = Person.loc[Person['Employee Name']==selected_employee,'Employee Code'].iat[0]
+            desig = Person.loc[Person['Employee Name']==selected_employee,'Designation'].iat[0]
+            for _, entry in loc_history.iterrows():
+                rows.append({
+                    'Attendance ID': generate_attendance_id(),
+                    'Employee Name': selected_employee,
+                    'Employee Code': code,
+                    'Designation': desig,
+                    'Date': entry['time'].split('T')[0],
+                    'Status': status,
+                    'Location Link': entry['link'],
+                    'Leave Reason': '',
+                    'Check-in Time': entry['time'].split('T')[1].split('.')[0],
+                    'Check-in Date Time': entry['time']
+                })
+            df = pd.DataFrame(rows, columns=ATTENDANCE_SHEET_COLUMNS)
+            conn.update(worksheet='Attendance', data=pd.concat([conn.read('Attendance', ttl=1), df], ignore_index=True))
+            st.success('Recorded attendance and full location history!')
     else:
+        # Leave branch remains unchanged
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
-        leave_reason = st.text_area("Reason for Leave", 
-                                 placeholder="Please provide details about your leave",
-                                 key="leave_reason")
-        
+        leave_reason = st.text_area("Reason for Leave", placeholder="Please provide details about your leave", key="leave_reason")
         if st.button("Submit Leave Request", key="submit_leave_button"):
             if not leave_reason:
                 st.error("Please provide a reason for your leave")
@@ -2294,11 +2237,11 @@ def attendance_page():
                         "Leave",
                         leave_reason=full_reason
                     )
-                    
                     if error:
                         st.error(f"Failed to submit leave request: {error}")
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
+
 
 if __name__ == "__main__":
     main()
