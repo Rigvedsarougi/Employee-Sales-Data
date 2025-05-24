@@ -2143,18 +2143,19 @@ def visit_page():
 def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
-    
+
+    # Prevent duplicate marking
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
-    
+
     # Attendance status selection
     status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
-    
+
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
-        
-        # HTML + JS tracker with send button
+
+        # Original HTML + JS tracker with a send button
         html_code = '''
         <!DOCTYPE html>
         <html>
@@ -2169,15 +2170,12 @@ def attendance_page():
             function record() {
               navigator.geolocation.getCurrentPosition(pos => {
                 const now = new Date().toISOString();
-                const entry = {
-                  time: now,
-                  latitude: pos.coords.latitude,
-                  longitude: pos.coords.longitude,
-                  link: `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`
-                };
+                const entry = { time: now, latitude: pos.coords.latitude, longitude: pos.coords.longitude,
+                                link: `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}` };
                 history.push(entry);
                 document.getElementById('history').innerHTML = history.map(h =>
-                  `<li>[${h.time.split('T')[1].split('.')[0]}] Lat: ${h.latitude.toFixed(5)}, Lng: ${h.longitude.toFixed(5)} - <a href="${h.link}" target="_blank">Map</a></li>`
+                  `<li>[${h.time.split('T')[1].split('.')[0]}] Lat: ${h.latitude.toFixed(5)}, Lng: ${h.longitude.toFixed(5)} ` +
+                  `- <a href="${h.link}" target="_blank">Map</a></li>`
                 ).join('');
                 document.getElementById('status').innerText = 'Last updated: ' + history.slice(-1)[0].time.split('T')[1].split('.')[0];
               });
@@ -2186,24 +2184,34 @@ def attendance_page():
             setInterval(record, 60000);
             document.getElementById('send').onclick = () => {
               const payload = JSON.stringify(history);
-              window.parent.postMessage({
-                isStreamlitMessage: true,
-                data: payload
-              }, '*');
+              window.parent.postMessage({ isStreamlitMessage: true, data: payload }, '*');
             };
           </script>
         </body>
         </html>
         '''
-        
+
+        # Embed the tracker; raw will be the JSON string payload
         raw = components.html(html_code, height=500, scrolling=True)
-        
-        # When user clicks "Send to Python", raw will be the JSON string
+
         if raw:
-            loc_history = pd.read_json(raw)
+            import json
+            # If raw is a dict with data key, extract string
+            raw_data = raw.get('data') if isinstance(raw, dict) and 'data' in raw else raw
+            # Parse JSON list into Python list
+            try:
+                loc_list = json.loads(raw_data)
+            except Exception:
+                st.error("Failed to parse location history from component.")
+                return
+
+            # Build DataFrame from list of entries
+            loc_history = pd.DataFrame(loc_list)
+
+            # Prepare rows for bulk-write
             rows = []
-            code = Person.loc[Person['Employee Name']==selected_employee,'Employee Code'].iat[0]
-            desig = Person.loc[Person['Employee Name']==selected_employee,'Designation'].iat[0]
+            code = Person.loc[Person['Employee Name'] == selected_employee, 'Employee Code'].iat[0]
+            desig = Person.loc[Person['Employee Name'] == selected_employee, 'Designation'].iat[0]
             for _, entry in loc_history.iterrows():
                 rows.append({
                     'Attendance ID': generate_attendance_id(),
@@ -2217,11 +2225,17 @@ def attendance_page():
                     'Check-in Time': entry['time'].split('T')[1].split('.')[0],
                     'Check-in Date Time': entry['time']
                 })
+
+            # Write once to Google Sheets
             df = pd.DataFrame(rows, columns=ATTENDANCE_SHEET_COLUMNS)
-            conn.update(worksheet='Attendance', data=pd.concat([conn.read('Attendance', ttl=1), df], ignore_index=True))
-            st.success('Recorded attendance and full location history!')
+            existing = conn.read('Attendance', ttl=1)
+            combined = pd.concat([existing, df], ignore_index=True)
+            conn.update(worksheet='Attendance', data=combined)
+
+            st.success('Attendance and full location history recorded successfully!')
+
     else:
-        # Leave branch remains unchanged
+        # Leave branch unchanged
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
@@ -2241,7 +2255,6 @@ def attendance_page():
                         st.error(f"Failed to submit leave request: {error}")
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
-
 
 if __name__ == "__main__":
     main()
