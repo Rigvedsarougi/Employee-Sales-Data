@@ -2140,130 +2140,160 @@ def visit_page():
             except Exception as e:
                 st.error(f"Error retrieving visit data: {e}")
 
+import json
+
 def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
 
-    # Prevent duplicate marking
+    # Prevent double-marking
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
 
-    # Attendance status selection
+    st.subheader("Attendance Status")
     status = st.radio(
         "Select Status", ["Present", "Half Day", "Leave"],
         index=0, key="attendance_status"
     )
 
+    # If marking present/half-day, collect and log location history
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
+        live_location = st.text_input(
+            "Enter your current location (Google Maps link or address)",
+            help="Please share your live location for verification",
+            key="location_input"
+        )
 
-        # Original HTML + JS tracker with a send button
-        html_code = '''
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"/></head>
-        <body>
-          <h3>Location History</h3>
-          <div id="status">Waiting for location...</div>
-          <ul id="history"></ul>
-          <button id="send">Send to Python</button>
-          <script>
-            const history = [];
-            function record() {
-              navigator.geolocation.getCurrentPosition(pos => {
-                const now = new Date().toISOString();
-                const entry = {
-                  time: now,
-                  latitude: pos.coords.latitude,
-                  longitude: pos.coords.longitude,
-                  link: `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`
-                };
-                history.push(entry);
-                document.getElementById('history').innerHTML = history.map(h =>
-                  `<li>[${h.time.split('T')[1].split('.')[0]}] ` +
-                  `Lat: ${h.latitude.toFixed(5)}, Lng: ${h.longitude.toFixed(5)} - ` +
-                  `<a href="${h.link}" target="_blank">Map</a></li>`
-                ).join('');
-                document.getElementById('status').innerText =
-                  'Last updated: ' + history.slice(-1)[0].time.split('T')[1].split('.')[0];
-              });
-            }
-            record();
-            setInterval(record, 60000);
-            document.getElementById('send').onclick = () => {
-              const payload = JSON.stringify(history);
-              window.parent.postMessage({ isStreamlitMessage: true, data: payload }, '*');
-            };
-          </script>
-        </body>
-        </html>
-        '''
+        # Hidden textarea to receive JSON from JS
+        st.markdown(
+            """
+            <textarea id='location_history' style='display:none;'></textarea>
+            """,
+            unsafe_allow_html=True
+        )
 
-        # Embed tracker; raw receives the postMessage payload
-        raw = components.html(html_code, height=500, scrolling=True)
+        # Inject JS to collect and serialize browser location history
+        components.html(
+            """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset='utf-8' />
+                <style> body { font-family: sans-serif; padding: 10px; } ul { padding-left: 20px; } </style>
+            </head>
+            <body>
+                <h3>Location History</h3>
+                <div id='status'>Waiting for location...</div>
+                <ul id='history'></ul>
 
-        if raw:
-            import json
-            # Determine actual data payload
-            if isinstance(raw, dict) and 'data' in raw:
-                payload = raw['data']
-            elif isinstance(raw, str):
-                payload = raw
-            elif isinstance(raw, list):
-                loc_list = raw
+                <script>
+                    const locationHistory = [];
+
+                    function sendLocation() {
+                        if (!navigator.geolocation) return;
+                        navigator.geolocation.getCurrentPosition(
+                            pos => {
+                                const timestamp = new Date().toISOString();
+                                const latitude = pos.coords.latitude;
+                                const longitude = pos.coords.longitude;
+                                locationHistory.push({ time: timestamp, latitude, longitude });
+
+                                // Write JSON into hidden textarea
+                                document.getElementById('location_history').value =
+                                    JSON.stringify(locationHistory);
+
+                                updateLocationList();
+                            },
+                            err => console.error(err),
+                            { enableHighAccuracy: true }
+                        );
+                    }
+
+                    function updateLocationList() {
+                        const list = document.getElementById('history');
+                        list.innerHTML = '';
+                        locationHistory.forEach(loc => {
+                            const item = document.createElement('li');
+                            item.innerHTML = `<strong>[${new Date(loc.time).toLocaleTimeString()}]</strong> ` +
+                                `Lat: ${loc.latitude.toFixed(5)}, Lng: ${loc.longitude.toFixed(5)}`;
+                            list.appendChild(item);
+                        });
+                        if (locationHistory.length)
+                            document.getElementById('status').innerText =
+                                `Last updated: ${new Date(locationHistory.slice(-1)[0].time).toLocaleTimeString()}`;
+                    }
+
+                    // Start tracking every minute
+                    window.onload = () => { sendLocation(); setInterval(sendLocation, 60_000); };
+                </script>
+            </body>
+            </html>
+            """,
+            height=500,
+            scrolling=True
+        )
+
+        if st.button("Mark Attendance", key="mark_attendance_button"):
+            if not live_location:
+                st.error("Please provide your location link or address.")
             else:
-                st.error(f"Unexpected payload from component: {raw!r}")
-                return
+                with st.spinner("Recording attendance and saving history..."):
+                    # First, record the attendance entry
+                    attendance_id, error = record_attendance(
+                        selected_employee,
+                        status,
+                        location_link=live_location
+                    )
 
-            # Parse JSON string if needed
-            if 'loc_list' not in locals():
-                try:
-                    loc_list = json.loads(payload)
-                except Exception as e:
-                    st.error(f"Failed to parse location history: {e}")
-                    return
+                    if error:
+                        st.error(f"Failed to record attendance: {error}")
+                        return
 
-            # Build DataFrame
-            loc_history = pd.DataFrame(loc_list)
+                    # Parse the JSON from the hidden textarea
+                    history_json = st.session_state.get('location_history', None)
+                    try:
+                        history = json.loads(history_json) if history_json else []
+                    except json.JSONDecodeError:
+                        st.error("Invalid location history data.")
+                        history = []
 
-            # Prepare rows for bulk-write
-            rows = []
-            code = Person.loc[Person['Employee Name'] == selected_employee, 'Employee Code'].iat[0]
-            desig = Person.loc[Person['Employee Name'] == selected_employee, 'Designation'].iat[0]
-            for _, entry in loc_history.iterrows():
-                rows.append({
-                    'Attendance ID': generate_attendance_id(),
-                    'Employee Name': selected_employee,
-                    'Employee Code': code,
-                    'Designation': desig,
-                    'Date': entry['time'].split('T')[0],
-                    'Status': status,
-                    'Location Link': entry['link'],
-                    'Leave Reason': '',
-                    'Check-in Time': entry['time'].split('T')[1].split('.')[0],
-                    'Check-in Date Time': entry['time']
-                })
-
-            # Bulk write to Google Sheets
-            df = pd.DataFrame(rows, columns=ATTENDANCE_SHEET_COLUMNS)
-            existing = conn.read('Attendance', ttl=1)
-            combined = pd.concat([existing, df], ignore_index=True)
-            conn.update(worksheet='Attendance', data=combined)
-
-            st.success('Attendance and full location history recorded successfully!')
+                    # Prepare and write to a new LocationHistory sheet
+                    if history:
+                        rows = []
+                        code = Person.loc[Person['Employee Name'] == selected_employee, 'Employee Code'].iat[0]
+                        for loc in history:
+                            rows.append({
+                                "Employee Name": selected_employee,
+                                "Employee Code": code,
+                                "Timestamp": loc['time'],
+                                "Latitude": loc['latitude'],
+                                "Longitude": loc['longitude'],
+                                "Status": status
+                            })
+                        df_locs = pd.DataFrame(rows)
+                        existing = conn.read(worksheet="LocationHistory", ttl=5).dropna(how="all")
+                        conn.update(worksheet="LocationHistory", data=pd.concat([existing, df_locs], ignore_index=True))
+                        st.success(f"Attendance {attendance_id} recorded and {len(rows)} location points saved.")
+                        st.balloons()
+                    else:
+                        st.success(f"Attendance {attendance_id} recorded. No location points found.")
+                        st.balloons()
 
     else:
-        # Leave branch unchanged
+        # Leave flow
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
         leave_reason = st.text_area(
-            "Reason for Leave", placeholder="Please provide details about your leave", key="leave_reason"
+            "Reason for Leave", key="leave_reason",
+            placeholder="Provide details for your leave"
         )
+
         if st.button("Submit Leave Request", key="submit_leave_button"):
             if not leave_reason:
-                st.error("Please provide a reason for your leave")
+                st.error("Please provide a reason for your leave.")
             else:
                 full_reason = f"{leave_type}: {leave_reason}"
                 with st.spinner("Submitting leave request..."):
@@ -2273,8 +2303,10 @@ def attendance_page():
                         leave_reason=full_reason
                     )
                     if error:
-                        st.error(f"Failed to submit leave request: {error}")
+                        st.error(f"Failed to submit leave: {error}")
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
+                        st.balloons()
+
 if __name__ == "__main__":
     main()
