@@ -126,8 +126,7 @@ def location_logger_component():
         </body>
         </html>
         """,
-        height=400,
-        key="location_logger"
+        height=400
     )
 
 def get_ist_time():
@@ -2306,18 +2305,21 @@ def attendance_page():
         # Display the location logger component
         location_logger_component()
         
-        # Handle location data from the component
+        # Initialize session state for location data
         if 'location_data' not in st.session_state:
             st.session_state.location_data = None
             
         # Check for messages from the component
-        component_value = components.get_component_value("location_logger")
-        if component_value:
-            st.session_state.location_data = component_value
+        try:
+            component_value = components.get_component_value()
+            if component_value:
+                st.session_state.location_data = component_value
+        except:
+            pass
             
         if st.button("Mark Attendance", key="mark_attendance_button"):
             if not st.session_state.location_data:
-                st.error("Please wait for location data to be captured")
+                st.error("Please wait for location data to be captured or enable location permissions")
             else:
                 with st.spinner("Recording attendance..."):
                     # Get current date and time
@@ -2385,6 +2387,6 @@ def attendance_page():
                         st.error(f"Failed to submit leave request: {error}")
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
-
+                        
 if __name__ == "__main__":
     main()
