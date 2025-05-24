@@ -2140,34 +2140,37 @@ def visit_page():
             except Exception as e:
                 st.error(f"Error retrieving visit data: {e}")
 
-# --- attendance_page() with live geolocation logging ---
 from streamlit_js_eval import streamlit_js_eval
 
 def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
-    
+
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         return
 
     st.subheader("Attendance Status")
     status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
-    
+
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification (Auto)")
-        # Request location from browser using JS
+
         result = streamlit_js_eval(
             js_expressions="""
                 new Promise((resolve) => {
-                    navigator.geolocation.getCurrentPosition(
-                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                        err => resolve({latitude: null, longitude: null})
-                    );
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                            err => resolve({latitude: null, longitude: null})
+                        );
+                    } else {
+                        resolve({latitude: null, longitude: null});
+                    }
                 });
             """,
             key="geo"
-        )
+        ) or {}
 
         lat = result.get("latitude")
         lng = result.get("longitude")
@@ -2179,7 +2182,6 @@ def attendance_page():
             gmaps_link = ""
             st.info("Waiting for location permission...")
 
-        # Allow attendance only if location is fetched
         if lat and lng and st.button("Mark Attendance", key="mark_attendance_button"):
             with st.spinner("Recording attendance..."):
                 attendance_id, error = record_attendance(
@@ -2192,13 +2194,14 @@ def attendance_page():
                 else:
                     st.success(f"Attendance recorded successfully! ID: {attendance_id}")
                     st.balloons()
+
     else:
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
-        leave_reason = st.text_area("Reason for Leave", 
-                                    placeholder="Please provide details about your leave",
-                                    key="leave_reason")
+        leave_reason = st.text_area("Reason for Leave",
+                                   placeholder="Please provide details about your leave",
+                                   key="leave_reason")
         if st.button("Submit Leave Request", key="submit_leave_button"):
             if not leave_reason:
                 st.error("Please provide a reason for your leave")
@@ -2214,6 +2217,7 @@ def attendance_page():
                         st.error(f"Failed to submit leave request: {error}")
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
+
 
 if __name__ == "__main__":
     main()
