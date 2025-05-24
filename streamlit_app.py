@@ -2150,7 +2150,10 @@ def attendance_page():
         return
 
     # Attendance status selection
-    status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
+    status = st.radio(
+        "Select Status", ["Present", "Half Day", "Leave"],
+        index=0, key="attendance_status"
+    )
 
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification")
@@ -2170,14 +2173,20 @@ def attendance_page():
             function record() {
               navigator.geolocation.getCurrentPosition(pos => {
                 const now = new Date().toISOString();
-                const entry = { time: now, latitude: pos.coords.latitude, longitude: pos.coords.longitude,
-                                link: `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}` };
+                const entry = {
+                  time: now,
+                  latitude: pos.coords.latitude,
+                  longitude: pos.coords.longitude,
+                  link: `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`
+                };
                 history.push(entry);
                 document.getElementById('history').innerHTML = history.map(h =>
-                  `<li>[${h.time.split('T')[1].split('.')[0]}] Lat: ${h.latitude.toFixed(5)}, Lng: ${h.longitude.toFixed(5)} ` +
-                  `- <a href="${h.link}" target="_blank">Map</a></li>`
+                  `<li>[${h.time.split('T')[1].split('.')[0]}] ` +
+                  `Lat: ${h.latitude.toFixed(5)}, Lng: ${h.longitude.toFixed(5)} - ` +
+                  `<a href="${h.link}" target="_blank">Map</a></li>`
                 ).join('');
-                document.getElementById('status').innerText = 'Last updated: ' + history.slice(-1)[0].time.split('T')[1].split('.')[0];
+                document.getElementById('status').innerText =
+                  'Last updated: ' + history.slice(-1)[0].time.split('T')[1].split('.')[0];
               });
             }
             record();
@@ -2191,21 +2200,31 @@ def attendance_page():
         </html>
         '''
 
-        # Embed the tracker; raw will be the JSON string payload
+        # Embed tracker; raw receives the postMessage payload
         raw = components.html(html_code, height=500, scrolling=True)
 
         if raw:
             import json
-            # If raw is a dict with data key, extract string
-            raw_data = raw.get('data') if isinstance(raw, dict) and 'data' in raw else raw
-            # Parse JSON list into Python list
-            try:
-                loc_list = json.loads(raw_data)
-            except Exception:
-                st.error("Failed to parse location history from component.")
+            # Determine actual data payload
+            if isinstance(raw, dict) and 'data' in raw:
+                payload = raw['data']
+            elif isinstance(raw, str):
+                payload = raw
+            elif isinstance(raw, list):
+                loc_list = raw
+            else:
+                st.error(f"Unexpected payload from component: {raw!r}")
                 return
 
-            # Build DataFrame from list of entries
+            # Parse JSON string if needed
+            if 'loc_list' not in locals():
+                try:
+                    loc_list = json.loads(payload)
+                except Exception as e:
+                    st.error(f"Failed to parse location history: {e}")
+                    return
+
+            # Build DataFrame
             loc_history = pd.DataFrame(loc_list)
 
             # Prepare rows for bulk-write
@@ -2226,7 +2245,7 @@ def attendance_page():
                     'Check-in Date Time': entry['time']
                 })
 
-            # Write once to Google Sheets
+            # Bulk write to Google Sheets
             df = pd.DataFrame(rows, columns=ATTENDANCE_SHEET_COLUMNS)
             existing = conn.read('Attendance', ttl=1)
             combined = pd.concat([existing, df], ignore_index=True)
@@ -2239,7 +2258,9 @@ def attendance_page():
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
-        leave_reason = st.text_area("Reason for Leave", placeholder="Please provide details about your leave", key="leave_reason")
+        leave_reason = st.text_area(
+            "Reason for Leave", placeholder="Please provide details about your leave", key="leave_reason"
+        )
         if st.button("Submit Leave Request", key="submit_leave_button"):
             if not leave_reason:
                 st.error("Please provide a reason for your leave")
@@ -2255,6 +2276,5 @@ def attendance_page():
                         st.error(f"Failed to submit leave request: {error}")
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
-
 if __name__ == "__main__":
     main()
