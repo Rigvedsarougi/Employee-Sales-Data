@@ -374,6 +374,7 @@ Products = pd.read_csv('Invoice - Products.csv')
 Outlet = pd.read_csv('Invoice - Outlet.csv')
 Person = pd.read_csv('Invoice - Person.csv')
 Distributors = pd.read_csv('Invoice - Distributors.csv')
+citystate = pd.read_csv('India City - State.csv')
 
 # Company Details with ALLGEN TRADING logo
 company_name = "BIOLUME SKIN SCIENCE PRIVATE LIMITED"
@@ -440,6 +441,15 @@ def save_uploaded_file(uploaded_file, folder):
         return file_path
     return None
 
+def get_states():
+    """Return sorted list of unique states from citystate DataFrame"""
+    return sorted(citystate['State'].unique().tolist())
+
+def get_cities(state):
+    """Return sorted list of cities for a given state"""
+    if not state:
+        return []
+    return sorted(citystate[citystate['State'] == state]['City'].unique().tolist())
 
 def demo_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
@@ -469,12 +479,31 @@ def demo_page():
             st.text_input("Address", value=outlet_address, disabled=True, key="demo_outlet_address_display")
             st.text_input("State", value=outlet_state, disabled=True, key="demo_outlet_state_display")
             st.text_input("City", value=outlet_city, disabled=True, key="demo_outlet_city_display")
+
         else:
-            outlet_name    = st.text_input("Outlet Name", key="demo_outlet_name")
+            outlet_name = st.text_input("Outlet Name", key="demo_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="demo_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="demo_outlet_address")
-            outlet_state   = st.text_input("Outlet State", "", key="demo_outlet_state")
-            outlet_city    = st.text_input("Outlet City", "", key="demo_outlet_city")
+            
+            # State and City dropdowns
+            selected_state = st.selectbox(
+                "State", 
+                get_states(), 
+                key="demo_state_select",
+                index=get_states().index("Uttar Pradesh") if "Uttar Pradesh" in get_states() else 0
+            )
+            cities = get_cities(selected_state)
+            selected_city = st.selectbox(
+                "City", 
+                cities, 
+                key="demo_city_select",
+                index=cities.index("Noida") if "Noida" in cities else 0
+            )
+            
+            # Keep these as hidden fields to maintain compatibility with existing code
+            st.text_input("Outlet State", value=selected_state, key="demo_outlet_state", disabled=True, label_visibility="collapsed")
+            st.text_input("Outlet City", value=selected_city, key="demo_outlet_city", disabled=True, label_visibility="collapsed")
+        
 
         st.subheader("Demo Details")
         demo_date     = st.date_input("Demo Date", key="demo_date")
@@ -1845,13 +1874,33 @@ def sales_page():
             st.text_input("Address", value=address, disabled=True, key="outlet_address_display")
             st.text_input("State", value=state, disabled=True, key="outlet_state_display")
             st.text_input("City", value=city, disabled=True, key="outlet_city_display")
+
+        
         else:
             customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
-            gst_number    = st.text_input("GST Number", key="manual_gst_number")
+            gst_number = st.text_input("GST Number", key="manual_gst_number")
             contact_number = st.text_input("Contact Number", key="manual_contact_number")
-            address        = st.text_area("Address", key="manual_address")
-            state          = st.text_input("State", "", key="manual_state")
-            city           = st.text_input("City", "", key="manual_city")
+            address = st.text_area("Address", key="manual_address")
+            
+            # State and City dropdowns
+            selected_state = st.selectbox(
+                "State", 
+                get_states(), 
+                key="manual_state_select",
+                index=get_states().index("Uttar Pradesh") if "Uttar Pradesh" in get_states() else 0
+            )
+            cities = get_cities(selected_state)
+            selected_city = st.selectbox(
+                "City", 
+                cities, 
+                key="manual_city_select",
+                index=cities.index("Noida") if "Noida" in cities else 0
+            )
+            
+            # Keep these as hidden fields to maintain compatibility with existing code
+            st.text_input("State", value=selected_state, key="manual_state", disabled=True, label_visibility="collapsed")
+            st.text_input("City", value=selected_city, key="manual_city", disabled=True, label_visibility="collapsed")
+        
     
         if st.button("Generate Invoice", key="generate_invoice_button"):
             if selected_products and customer_name:
@@ -2157,12 +2206,31 @@ def visit_page():
             st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
             st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
             st.text_input("Outlet City", value=outlet_city, disabled=True, key="outlet_city_display")
+
+            
         else:
             outlet_name = st.text_input("Outlet Name", key="visit_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="visit_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="visit_outlet_address")
-            outlet_state = st.text_input("Outlet State", "", key="visit_outlet_state")
-            outlet_city = st.text_input("Outlet City", "", key="visit_outlet_city")
+            
+            # State and City dropdowns
+            selected_state = st.selectbox(
+                "State", 
+                get_states(), 
+                key="visit_state_select",
+                index=get_states().index("Uttar Pradesh") if "Uttar Pradesh" in get_states() else 0
+            )
+            cities = get_cities(selected_state)
+            selected_city = st.selectbox(
+                "City", 
+                cities, 
+                key="visit_city_select",
+                index=cities.index("Noida") if "Noida" in cities else 0
+            )
+            
+            # Keep these as hidden fields to maintain compatibility with existing code
+            st.text_input("Outlet State", value=selected_state, key="visit_outlet_state", disabled=True, label_visibility="collapsed")
+            st.text_input("Outlet City", value=selected_city, key="visit_outlet_city", disabled=True, label_visibility="collapsed")
 
         st.subheader("Visit Details")
         visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
