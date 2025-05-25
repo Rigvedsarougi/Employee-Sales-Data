@@ -442,7 +442,6 @@ def save_uploaded_file(uploaded_file, folder):
 
 
 def demo_page():
-    hourly_location_auto_log(conn, st.session_state.employee_name, page = "Demos")
     st.title("Demo Management")
     selected_employee = st.session_state.employee_name
 
@@ -658,7 +657,6 @@ def demo_page():
 
 
 def support_ticket_page():
-    hourly_location_auto_log(conn, st.session_state.employee_name, page = "Support Ticket")
     st.title("Support Ticket Management")
     selected_employee = st.session_state.employee_name
     employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
@@ -885,7 +883,6 @@ def support_ticket_page():
             st.error(f"Error retrieving support tickets: {str(e)}")
 
 def travel_hotel_page():
-    hourly_location_auto_log(conn, st.session_state.employee_name, page = "Travel & Hotel")
     st.title("Travel & Hotel Booking")
     selected_employee = st.session_state.employee_name
     employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
@@ -1576,7 +1573,6 @@ def authenticate_employee(employee_name, passkey):
         return False
 
 def resources_page():
-    hourly_location_auto_log(conn, st.session_state.employee_name, page = "Resources")
     st.title("Company Resources")
     st.markdown("Download important company documents and product catalogs.")
     
@@ -1739,7 +1735,6 @@ def main():
                 demo_page()
 
 def sales_page():
-    hourly_location_auto_log(conn, st.session_state.employee_name, page = "Sales")
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
     sales_remarks = ""
@@ -2180,7 +2175,6 @@ def sales_page():
                         st.error(f"Error regenerating invoice: {e}")
 
 def visit_page():
-    hourly_location_auto_log(conn, st.session_state.employee_name, page = "Visits")
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
 
@@ -2325,7 +2319,6 @@ def visit_page():
 from streamlit_js_eval import streamlit_js_eval
 
 def attendance_page():
-    hourly_location_auto_log(conn, st.session_state.employee_name, page = "Attendance")
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
 
