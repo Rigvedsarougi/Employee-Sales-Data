@@ -48,35 +48,33 @@ def log_location_history(conn, employee_name, lat, lng, page):
     except Exception as e:
         return False, str(e)
 
-def hourly_location_auto_log(conn, selected_employee):
-    if not selected_employee:
-        return
+def hourly_location_auto_log(conn, selected_employee, page):
     result = streamlit_js_eval(
         js_expressions="""
             new Promise((resolve) => {
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
-                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude, ts: Date.now()}),
-                        err => resolve({latitude: null, longitude: null, ts: Date.now()})
+                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                        err => resolve({latitude: null, longitude: null})
                     );
                 } else {
-                    resolve({latitude: null, longitude: null, ts: Date.now()});
+                    resolve({latitude: null, longitude: null});
                 }
             });
         """,
-        key=f"geo_hourly_{int(time.time() // 3600)}"
+        key=f"hourly_auto_log_{page}_{int(time.time())}"
     ) or {}
 
     lat = result.get("latitude")
     lng = result.get("longitude")
-
     if lat and lng:
-        current_hour = datetime.now(pytz.timezone('Asia/Kolkata')).strftime("%Y-%m-%d %H")
-        logged_key = f"hourly_logged_{selected_employee}_{current_hour}"
+        current_hour = datetime.now(pytz.timezone('Asia/Kolkata')).strftime("%Y-%m-%d-%H")
+        logged_key = f"hourly_logged_{selected_employee}_{current_hour}_{page}"
         if not st.session_state.get(logged_key, False):
-            success, error = log_location_history(conn, selected_employee, lat, lng)
+            success, error = log_location_history(conn, selected_employee, lat, lng, page)
             if success:
                 st.session_state[logged_key] = True
+
 
 st.set_page_config(page_title="Location Logger", layout="centered")
 
