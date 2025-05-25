@@ -681,10 +681,6 @@ def demo_page():
                 key="demo_city_select",
                 index=cities.index("Noida") if "Noida" in cities else 0
             )
-            
-            # Hidden fields for compatibility
-            st.text_input("Outlet State", value=selected_state, key="demo_outlet_state", disabled=True, label_visibility="collapsed")
-            st.text_input("Outlet City", value=selected_city, key="demo_outlet_city", disabled=True, label_visibility="collapsed")
 
         st.subheader("Demo Details")
         demo_date = st.date_input("Demo Date", key="demo_date")
@@ -998,10 +994,6 @@ def sales_page():
                 key="manual_city_select",
                 index=cities.index("Noida") if "Noida" in cities else 0
             )
-            
-            # Hidden fields for compatibility
-            st.text_input("State", value=selected_state, key="manual_state", disabled=True, label_visibility="collapsed")
-            st.text_input("City", value=selected_city, key="manual_city", disabled=True, label_visibility="collapsed")
     
         if st.button("Generate Invoice", key="generate_invoice_button"):
             validation_errors = []
@@ -1312,10 +1304,6 @@ def visit_page():
                 key="visit_city_select",
                 index=cities.index("Noida") if "Noida" in cities else 0
             )
-            
-            # Hidden fields for compatibility
-            st.text_input("Outlet State", value=selected_state, key="visit_outlet_state", disabled=True, label_visibility="collapsed")
-            st.text_input("Outlet City", value=selected_city, key="visit_outlet_city", disabled=True, label_visibility="collapsed")
 
         st.subheader("Visit Details")
         visit_purpose = st.selectbox("Visit Purpose*", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
