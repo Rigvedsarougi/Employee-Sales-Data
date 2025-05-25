@@ -267,7 +267,8 @@ VISIT_SHEET_COLUMNS = [
     "Visit Notes",
     "Visit Selfie Path",
     "Visit Status",
-    "Remarks"
+    "Remarks",
+    "Visit Location Link"
 ]
 
 ATTENDANCE_SHEET_COLUMNS = [
@@ -2109,7 +2110,7 @@ def visit_page():
     visit_remarks = ""
 
     tab1, tab2 = st.tabs(["New Visit", "Visit History"])
-    
+
     with tab1:
         st.subheader("Outlet Details")
         outlet_option = st.radio("Outlet Selection", ["Enter manually", "Select from list"], key="visit_outlet_option")
@@ -2118,14 +2119,11 @@ def visit_page():
             outlet_names = Outlet['Shop Name'].tolist()
             selected_outlet = st.selectbox("Select Outlet", outlet_names, key="visit_outlet_select")
             outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
-            
             outlet_name = selected_outlet
             outlet_contact = outlet_details['Contact']
             outlet_address = outlet_details['Address']
             outlet_state = outlet_details['State']
             outlet_city = outlet_details['City']
-            
-            # Show outlet details like distributor details
             st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display")
             st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
             st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
@@ -2136,43 +2134,69 @@ def visit_page():
             outlet_address = st.text_area("Outlet Address", key="visit_outlet_address")
             outlet_state = st.text_input("Outlet State", "", key="visit_outlet_state")
             outlet_city = st.text_input("Outlet City", "", key="visit_outlet_city")
-
+    
         st.subheader("Visit Details")
         visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
         visit_notes = st.text_area("Visit Notes", key="visit_notes")
-        
+    
         st.subheader("Time Tracking")
         col1, col2 = st.columns(2)
         with col1:
             entry_time = st.time_input("Entry Time", value=None, key="visit_entry_time")
         with col2:
             exit_time = st.time_input("Exit Time", value=None, key="visit_exit_time")
-
+    
+        # ---- Location Fetching Block ----
+        st.subheader("Location Verification (Auto)")
+        result = streamlit_js_eval(
+            js_expressions="""
+                new Promise((resolve) => {
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                            err => resolve({latitude: null, longitude: null})
+                        );
+                    } else {
+                        resolve({latitude: null, longitude: null});
+                    }
+                });
+            """,
+            key="visit_geo"
+        ) or {}
+        lat = result.get("latitude")
+        lng = result.get("longitude")
+        if lat and lng:
+            gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
+            st.success(f"Fetched Location: [View on Google Maps]({gmaps_link})")
+        else:
+            gmaps_link = ""
+            st.info("Waiting for location permission...")
+    
+        # ---- Submission ----
         if st.button("Record Visit", key="record_visit_button"):
             if outlet_name:
                 today = get_ist_time().date()
-                
                 if entry_time is None:
                     entry_time = get_ist_time().time()
                 if exit_time is None:
                     exit_time = get_ist_time().time()
-                    
                 entry_datetime = datetime.combine(today, entry_time)
                 exit_datetime = datetime.combine(today, exit_time)
-                
-                # No visit selfie upload
                 visit_selfie_path = None
-                
+    
+                # Optionally, you can add gmaps_link as a new column to VISIT_SHEET_COLUMNS if you want to log it!
                 visit_id = record_visit(
                     selected_employee, outlet_name, outlet_contact, outlet_address,
-                    outlet_state, outlet_city, visit_purpose, visit_notes, 
-                    visit_selfie_path, entry_datetime, exit_datetime,
-                    visit_remarks
+                    outlet_state, outlet_city, visit_purpose, visit_notes,
+                    visit_selfie_path, entry_datetime, exit_datetime, visit_remarks
                 )
-                
+                # Optionally, log the location to a separate history sheet too
+                if lat and lng:
+                    log_location_history(conn, selected_employee, lat, lng)
                 st.success(f"Visit {visit_id} recorded successfully!")
             else:
                 st.error("Please fill all required fields.")
+
     
     with tab2:
         st.subheader("Previous Visits")
