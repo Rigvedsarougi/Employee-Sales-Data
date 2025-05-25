@@ -837,8 +837,6 @@ def demo_page():
         csv = filtered.to_csv(index=False).encode('utf-8')
         st.download_button("Download Demo History", csv, "demo_history.csv", "text/csv", key='download-demo-csv')
 
-# [Rest of your functions remain unchanged...]
-
 def sales_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Sales Management")
@@ -847,7 +845,10 @@ def sales_page():
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
     with tab1:
-        discount_category = Person[Person['Employee Name'] == selected_employee]['Discount Category'].values[0]
+        # Determine discount category for this employee
+        discount_category = Person[
+            Person['Employee Name'] == selected_employee
+        ]['Discount Category'].values[0]
     
         st.subheader("Transaction Details")
         transaction_type = st.selectbox(
@@ -869,72 +870,55 @@ def sales_page():
     
         if selected_products:
             st.markdown("### Product Prices & Discounts")
-            price_cols = st.columns(4)
-            with price_cols[0]:
-                st.markdown("**Product**")
-            with price_cols[1]:
-                st.markdown("**Price (INR)**")
-            with price_cols[2]:
-                st.markdown("**Discount %**")
-            with price_cols[3]:
-                st.markdown("**Quantity**")
-    
-            subtotal = 0.0
+            st.columns([4, 2, 2, 2])  # headers spacing
             for product in selected_products:
-                product_data = Products[Products['Product Name'] == product].iloc[0]
-                unit_price = float(product_data.get(discount_category, product_data['Price']))
+                product_data = Products[
+                    Products['Product Name'] == product
+                ].iloc[0]
+                unit_price = float(
+                    product_data.get(discount_category, product_data['Price'])
+                )
     
                 cols = st.columns(4)
-                with cols[0]:
-                    st.text(product)
-                with cols[1]:
-                    st.text(f"₹{unit_price:.2f}")
+                cols[0].text(product)
+                cols[1].text(f"₹{unit_price:.2f}")
     
-                with cols[2]:
-                    disc_str = st.text_input(
-                        "Discount %",
-                        key=f"discount_{product}",
-                        placeholder="Discount %",
-                        label_visibility="collapsed"
-                    )
-                    try:
-                        prod_discount = float(disc_str)
-                    except:
-                        prod_discount = 0.0
-                    product_discounts.append(prod_discount)
+                disc_str = cols[2].text_input(
+                    "Discount %", key=f"discount_{product}", placeholder="0", label_visibility="collapsed"
+                )
+                try:
+                    prod_discount = float(disc_str)
+                except:
+                    prod_discount = 0.0
+                product_discounts.append(prod_discount)
     
-                with cols[3]:
-                    qty_str = st.text_input(
-                        "Quantity*",
-                        key=f"qty_{product}",
-                        placeholder="Quantity",
-                        label_visibility="collapsed"
-                    )
-                    try:
-                        qty = int(qty_str)
-                    except:
-                        qty = 1
-                    quantities.append(qty)
+                qty_str = cols[3].text_input(
+                    "Quantity*", key=f"qty_{product}", placeholder="1", label_visibility="collapsed"
+                )
+                try:
+                    qty = int(qty_str)
+                except:
+                    qty = 1
+                quantities.append(qty)
     
-                subtotal += unit_price * (1 - prod_discount / 100) * qty
-    
+            # Show totals
+            subtotal = sum(
+                float(Products.loc[Products['Product Name']==p, discount_category if discount_category in Products.columns else 'Price']) 
+                * (1 - d/100) * q
+                for p, d, q in zip(selected_products, product_discounts, quantities)
+            )
             st.markdown("---")
-            st.markdown("### Final Amount Calculation")
             st.markdown(f"Subtotal: ₹{subtotal:.2f}")
-            tax_amount = subtotal * 0.18
-            st.markdown(f"GST (18%): ₹{tax_amount:.2f}")
-            st.markdown(f"**Grand Total: ₹{subtotal + tax_amount:.2f}**")
+            gst = subtotal * 0.18
+            st.markdown(f"GST (18%): ₹{gst:.2f}")
+            st.markdown(f"**Grand Total: ₹{subtotal + gst:.2f}**")
     
         st.subheader("Payment Details")
         payment_status = st.selectbox("Payment Status*", ["pending", "paid"], key="payment_status")
         amount_paid = 0.0
         if payment_status == "paid":
             amount_paid = st.number_input(
-                "Amount Paid (INR)*",
-                min_value=0.0,
-                value=0.0,
-                step=1.0,
-                key="amount_paid"
+                "Amount Paid (INR)*", min_value=0.0, value=0.0, step=1.0, key="amount_paid"
             )
     
         st.subheader("Distributor Details")
@@ -943,83 +927,82 @@ def sales_page():
         distributor_contact_number = distributor_email = distributor_territory = ""
     
         if distributor_option == "Select from list":
-            distributor_names = Distributors['Firm Name'].tolist()
-            selected_distributor = st.selectbox("Select Distributor", distributor_names, key="distributor_select")
-            dd = Distributors[Distributors['Firm Name'] == selected_distributor].iloc[0]
-            distributor_firm_name = selected_distributor
+            names = Distributors['Firm Name'].tolist()
+            sel = st.selectbox("Select Distributor", names, key="distributor_select")
+            dd = Distributors[Distributors['Firm Name']==sel].iloc[0]
+            distributor_firm_name = sel
             distributor_id = dd['Distributor ID']
             distributor_contact_person = dd['Contact Person']
             distributor_contact_number = dd['Contact Number']
             distributor_email = dd['Email ID']
             distributor_territory = dd['Territory']
     
-            st.text_input("Distributor ID", value=distributor_id, disabled=True, key="distributor_id_display")
-            st.text_input("Contact Person", value=distributor_contact_person, disabled=True, key="distributor_contact_person_display")
-            st.text_input("Contact Number", value=distributor_contact_number, disabled=True, key="distributor_contact_number_display")
-            st.text_input("Email", value=distributor_email, disabled=True, key="distributor_email_display")
-            st.text_input("Territory", value=distributor_territory, disabled=True, key="distributor_territory_display")
+            st.text_input("Distributor ID", value=distributor_id, disabled=True)
+            st.text_input("Contact Person", value=distributor_contact_person, disabled=True)
+            st.text_input("Contact Number", value=distributor_contact_number, disabled=True)
+            st.text_input("Email", value=distributor_email, disabled=True)
+            st.text_input("Territory", value=distributor_territory, disabled=True)
     
         st.subheader("Outlet Details")
         outlet_option = st.radio("Outlet Selection*", ["Enter manually", "Select from list"], key="outlet_option")
+        
         if outlet_option == "Select from list":
             outlet_names = Outlet['Shop Name'].tolist()
-            chosen_outlet = st.selectbox("Select Outlet", outlet_names, key="outlet_select")
-            od = Outlet[Outlet['Shop Name'] == chosen_outlet].iloc[0]
-            customer_name, gst_number = chosen_outlet, od['GST']
-            contact_number, address = od['Contact'], od['Address']
-            state, city = od['State'], od['City']
+            chosen = st.selectbox("Select Outlet", outlet_names, key="outlet_select")
+            od = Outlet[Outlet['Shop Name']==chosen].iloc[0]
     
+            customer_name = chosen
+            gst_number     = od['GST']
+            contact_number = od['Contact']
+            address        = od['Address']
+    
+            # **Ensure these are always set**
+            selected_state = od['State']
+            selected_city  = od['City']
+    
+            # Show read-only
             st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
             st.text_input("Contact Number*", value=contact_number, disabled=True, key="outlet_contact_display")
             st.text_input("Address*", value=address, disabled=True, key="outlet_address_display")
-            st.text_input("State", value=state, disabled=True, key="outlet_state_display")
-            st.text_input("City", value=city, disabled=True, key="outlet_city_display")
+            st.text_input("State", value=selected_state, disabled=True, key="outlet_state_display")
+            st.text_input("City", value=selected_city, disabled=True, key="outlet_city_display")
         else:
             customer_name = st.text_input("Outlet Name*", key="manual_outlet_name")
-            gst_number = st.text_input("GST Number", key="manual_gst_number")
-            contact_number = st.text_input("Contact Number*", key="manual_contact_number")
-            address = st.text_area("Address*", key="manual_address")
-            
-            # State and City dropdowns
+            gst_number    = st.text_input("GST Number", key="manual_gst_number")
+            contact_number= st.text_input("Contact Number*", key="manual_contact_number")
+            address       = st.text_area("Address*", key="manual_address")
+    
+            # **Also set these**
             selected_state = st.selectbox(
-                "State*", 
-                get_states(), 
-                key="manual_state_select",
+                "State*", get_states(), key="manual_state_select",
                 index=get_states().index("Uttar Pradesh") if "Uttar Pradesh" in get_states() else 0
             )
             cities = get_cities(selected_state)
             selected_city = st.selectbox(
-                "City*", 
-                cities, 
-                key="manual_city_select",
+                "City*", cities, key="manual_city_select",
                 index=cities.index("Noida") if "Noida" in cities else 0
             )
     
         if st.button("Generate Invoice", key="generate_invoice_button"):
-            validation_errors = []
-            
+            errors = []
             if not selected_products:
-                validation_errors.append("Please select at least one product")
-            
+                errors.append("Please select at least one product")
             if not customer_name:
-                validation_errors.append("Outlet Name is required")
-            
+                errors.append("Outlet Name is required")
             if not contact_number:
-                validation_errors.append("Contact Number is required")
-            
+                errors.append("Contact Number is required")
             if not address:
-                validation_errors.append("Address is required")
-            
-            if payment_status == "paid" and amount_paid <= 0:
-                validation_errors.append("Amount Paid must be greater than 0 for paid invoices")
-            
-            if validation_errors:
-                for error in validation_errors:
-                    st.error(error)
+                errors.append("Address is required")
+            if payment_status=="paid" and amount_paid<=0:
+                errors.append("Amount Paid must be > 0 for paid invoices")
+    
+            if errors:
+                for e in errors:
+                    st.error(e)
             else:
                 invoice_number = generate_invoice_number()
                 pdf, pdf_path = generate_invoice(
-                    customer_name, gst_number, contact_number, address, 
+                    customer_name, gst_number, contact_number, address,
                     selected_state, selected_city,
                     selected_products, quantities, product_discounts, discount_category,
                     selected_employee, payment_status, amount_paid, None, None,
@@ -1028,14 +1011,11 @@ def sales_page():
                     distributor_contact_number, distributor_email, distributor_territory,
                     sales_remarks,
                 )
-                
                 with open(pdf_path, "rb") as f:
                     st.download_button(
-                        "Download Invoice",
-                        f,
+                        "Download Invoice", f,
                         file_name=f"{invoice_number}.pdf",
-                        mime="application/pdf",
-                        key=f"download_{invoice_number}"
+                        mime="application/pdf"
                     )
                 st.success(f"Invoice {invoice_number} generated successfully!")
                 st.balloons()
