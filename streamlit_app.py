@@ -88,6 +88,196 @@ def get_ist_time():
     ist = pytz.timezone('Asia/Kolkata')
     return utc_now.astimezone(ist)
 
+def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, product_discounts,
+                    discount_category, employee_name, payment_status, amount_paid, employee_selfie_path, payment_receipt_path, invoice_number,
+                    transaction_type, distributor_firm_name="", distributor_id="", distributor_contact_person="",
+                    distributor_contact_number="", distributor_email="", distributor_territory="", remarks="", invoice_date=None):
+    pdf = PDF()
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    current_date = invoice_date if invoice_date else get_ist_time().strftime("%d-%m-%Y")  # Use provided date or current date
+
+
+    # Transaction Type
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, f"Transaction Type: {transaction_type.upper()}", ln=True)
+    
+    # Sales Person
+    pdf.ln(0)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(0, 10, f"Sales Person: {employee_name}", ln=True, align='L')
+    
+    # Distributor details if available
+    if distributor_firm_name:
+        pdf.cell(0, 10, f"Distributor: {distributor_firm_name} ({distributor_id})", ln=True, align='L')
+        pdf.cell(0, 10, f"Contact: {distributor_contact_person} | {distributor_contact_number}", ln=True, align='L')
+        pdf.cell(0, 10, f"Territory: {distributor_territory}", ln=True, align='L')
+    
+    pdf.ln(5)
+
+    # Customer details
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "Bill To:", ln=True)
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(100, 6, f"Name: {customer_name}")
+    pdf.cell(90, 6, f"Date: {current_date}", ln=True, align='R')
+    pdf.cell(100, 6, f"GSTIN/UN: {gst_number}")
+    pdf.cell(90, 6, f"Contact: {contact_number}", ln=True, align='R')
+    pdf.cell(100, 6, "Address: ", ln=True)
+    pdf.multi_cell(0, 6, address)
+    pdf.ln(1)
+    
+    # Invoice number
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(0, 10, f"Invoice Number: {invoice_number}", ln=True)
+    pdf.ln(5)
+    
+    # Table header
+    pdf.set_fill_color(200, 220, 255)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(10, 10, "S.No", border=1, align='C', fill=True)
+    pdf.cell(70, 10, "Product Name", border=1, align='C', fill=True)
+    pdf.cell(20, 10, "HSN/SAC", border=1, align='C', fill=True)
+    pdf.cell(20, 10, "Qty", border=1, align='C', fill=True)
+    pdf.cell(25, 10, "Rate (INR)", border=1, align='C', fill=True)
+    pdf.cell(25, 10, "Discount (%)", border=1, align='C', fill=True)
+    pdf.cell(25, 10, "Amount (INR)", border=1, align='C', fill=True)
+    pdf.ln()
+
+    # Table rows
+    pdf.set_font('Arial', '', 10)
+    sales_data = []
+    tax_rate = 0.18  # 18% GST
+    
+    # Calculate subtotal with product discounts
+    subtotal = 0
+    for idx, (product, quantity, prod_discount) in enumerate(zip(selected_products, quantities, product_discounts)):
+        product_data = Products[Products['Product Name'] == product].iloc[0]
+        
+        if discount_category in product_data:
+            unit_price = float(product_data[discount_category])
+        else:
+            unit_price = float(product_data['Price'])
+        
+        # Apply product discount
+        discounted_unit_price = unit_price * (1 - prod_discount/100)
+        item_total = discounted_unit_price * quantity
+        subtotal += item_total
+        
+        pdf.cell(10, 8, str(idx + 1), border=1)
+        pdf.cell(70, 8, product, border=1)
+        pdf.cell(20, 8, "3304", border=1, align='C')
+        pdf.cell(20, 8, str(quantity), border=1, align='C')
+        pdf.cell(25, 8, f"{unit_price:.2f}", border=1, align='R')
+        pdf.cell(25, 8, f"{prod_discount:.2f}%", border=1, align='R')
+        pdf.cell(25, 8, f"{item_total:.2f}", border=1, align='R')
+        pdf.ln()
+
+    # Calculate taxes
+    tax_amount = subtotal * tax_rate
+    cgst_amount = tax_amount / 2
+    sgst_amount = tax_amount / 2
+    grand_total = subtotal + tax_amount
+
+    # Display totals
+    pdf.ln(10)
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(160, 10, "Subtotal", border=0, align='R')
+    pdf.cell(30, 10, f"{subtotal:.2f}", border=1, align='R')
+    pdf.ln()
+    
+    pdf.cell(160, 10, "Taxable Amount", border=0, align='R')
+    pdf.cell(30, 10, f"{subtotal:.2f}", border=1, align='R')
+    pdf.ln()
+    
+    pdf.cell(160, 10, "CGST (9%)", border=0, align='R')
+    pdf.cell(30, 10, f"{cgst_amount:.2f}", border=1, align='R')
+    pdf.ln()
+    
+    pdf.cell(160, 10, "SGST (9%)", border=0, align='R')
+    pdf.cell(30, 10, f"{sgst_amount:.2f}", border=1, align='R')
+    pdf.ln()
+    
+    pdf.cell(160, 10, "Grand Total", border=0, align='R')
+    pdf.cell(30, 10, f"{grand_total:.2f} INR", border=1, align='R', fill=True)
+    pdf.ln(10)
+    
+    # Payment Status
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, f"Payment Status: {payment_status.upper()}", ln=True)
+    if payment_status == "paid":
+        pdf.cell(0, 10, f"Amount Paid: {amount_paid} INR", ln=True)
+    pdf.ln(10)
+    
+    # Details
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "Details:", ln=True)
+    pdf.set_font("Arial", '', 10)
+    pdf.multi_cell(0, 5, bank_details)
+    
+    # Prepare sales data for logging
+    for idx, (product, quantity, prod_discount) in enumerate(zip(selected_products, quantities, product_discounts)):
+        product_data = Products[Products['Product Name'] == product].iloc[0]
+        
+        if discount_category in product_data:
+            unit_price = float(product_data[discount_category])
+        else:
+            unit_price = float(product_data['Price'])
+            
+        # Apply product discount
+        discounted_unit_price = unit_price * (1 - prod_discount/100)
+        item_total = discounted_unit_price * quantity
+        
+        sales_data.append({
+            "Invoice Number": invoice_number,
+            "Invoice Date": current_date,
+            "Employee Name": employee_name,
+            "Employee Code": Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0],
+            "Designation": Person[Person['Employee Name'] == employee_name]['Designation'].values[0],
+            "Discount Category": discount_category,
+            "Transaction Type": transaction_type,
+            "Outlet Name": customer_name,
+            "Outlet Contact": contact_number,
+            "Outlet Address": address,
+            "Outlet State": state,
+            "Outlet City": city,
+            "Distributor Firm Name": distributor_firm_name,
+            "Distributor ID": distributor_id,
+            "Distributor Contact Person": distributor_contact_person,
+            "Distributor Contact Number": distributor_contact_number,
+            "Distributor Email": distributor_email,
+            "Distributor Territory": distributor_territory,
+            "Product ID": product_data['Product ID'],
+            "Product Name": product,
+            "Product Category": product_data['Product Category'],
+            "Quantity": quantity,
+            "Unit Price": unit_price,
+            "Product Discount (%)": prod_discount,
+            "Discounted Unit Price": discounted_unit_price,
+            "Total Price": item_total,
+            "GST Rate": "18%",
+            "CGST Amount": (item_total * tax_rate) / 2,
+            "SGST Amount": (item_total * tax_rate) / 2,
+            "Grand Total": item_total + (item_total * tax_rate),
+            "Payment Status": payment_status,
+            "Amount Paid": amount_paid if payment_status == "paid" else 0,
+            "Payment Receipt Path": payment_receipt_path if payment_status == "paid" else "",
+            "Employee Selfie Path": employee_selfie_path,
+            "Invoice PDF Path": f"invoices/{invoice_number}.pdf",
+            "Remarks": remarks,
+            "Delivery Status": "pending"  # Default status is pending
+        })
+
+    # Save the PDF
+    pdf_path = f"invoices/{invoice_number}.pdf"
+    pdf.output(pdf_path)
+    
+    # Log sales data to Google Sheets
+    sales_df = pd.DataFrame(sales_data)
+    log_sales_to_gsheet(conn, sales_df)
+
+    return pdf, pdf_path
+
 def display_login_header():
     col1, col2, col3 = st.columns([1, 3, 1])
     
