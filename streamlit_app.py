@@ -79,6 +79,30 @@ def hourly_location_auto_log(conn, selected_employee):
 
 st.set_page_config(page_title="Location Logger", layout="centered")
 
+def log_login_location(conn, employee_name):
+    result = streamlit_js_eval(
+        js_expressions="""
+            new Promise((resolve) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                        err => resolve({latitude: null, longitude: null})
+                    );
+                } else {
+                    resolve({latitude: null, longitude: null});
+                }
+            });
+        """,
+        key=f"login_geo_{int(time.time())}"
+    ) or {}
+
+    lat = result.get("latitude")
+    lng = result.get("longitude")
+
+    if lat and lng:
+        log_location_history(conn, employee_name, lat, lng)
+
+
 def get_ist_time():
     """Get current time in Indian Standard Time (IST)"""
     utc_now = datetime.now(pytz.utc)
@@ -267,10 +291,8 @@ VISIT_SHEET_COLUMNS = [
     "Visit Notes",
     "Visit Selfie Path",
     "Visit Status",
-    "Remarks",
-    "Visit Location Link"
+    "Remarks"
 ]
-
 
 ATTENDANCE_SHEET_COLUMNS = [
     "Attendance ID",
@@ -1422,11 +1444,12 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
     return pdf, pdf_path
 
 def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, outlet_state, outlet_city, 
-                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time, remarks="", visit_location_link=""):
+                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time, remarks=""):
     visit_id = generate_visit_id()
     visit_date = get_ist_time().strftime("%d-%m-%Y")
+    
     duration = (exit_time - entry_time).total_seconds() / 60
-
+    
     visit_data = {
         "Visit ID": visit_id,
         "Employee Name": employee_name,
@@ -1445,14 +1468,13 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, out
         "Visit Notes": visit_notes,
         "Visit Selfie Path": visit_selfie_path,
         "Visit Status": "completed",
-        "Remarks": remarks,
-        "Visit Location Link": visit_location_link   # <--- HERE!
+        "Remarks": remarks
     }
-
-    visit_df = pd.DataFrame([visit_data], columns=VISIT_SHEET_COLUMNS)
+    
+    visit_df = pd.DataFrame([visit_data])
     log_visit_to_gsheet(conn, visit_df)
+    
     return visit_id
-
 
 def record_attendance(employee_name, status, location_link="", leave_reason=""):
     try:
@@ -1615,14 +1637,21 @@ def main():
                     key="login_button",
                     use_container_width=True
                 )
-                
+
                 if login_button:
                     if authenticate_employee(employee_name, passkey):
                         st.session_state.authenticated = True
                         st.session_state.employee_name = employee_name
+                
+                        # Log location on login (only once per login)
+                        if not st.session_state.get("login_location_logged", False):
+                            log_login_location(conn, employee_name)
+                            st.session_state["login_location_logged"] = True
+                        
                         st.rerun()
                     else:
                         st.error("Invalid Password. Please try again.")
+
     else:
         # Show option boxes after login
         st.title("Select Mode")
@@ -2106,24 +2135,28 @@ def visit_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
+
+    # Empty remarks since we removed the location input
     visit_remarks = ""
 
     tab1, tab2 = st.tabs(["New Visit", "Visit History"])
-
-    # --- New Visit Tab ---
+    
     with tab1:
         st.subheader("Outlet Details")
         outlet_option = st.radio("Outlet Selection", ["Enter manually", "Select from list"], key="visit_outlet_option")
-
+        
         if outlet_option == "Select from list":
             outlet_names = Outlet['Shop Name'].tolist()
             selected_outlet = st.selectbox("Select Outlet", outlet_names, key="visit_outlet_select")
             outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
+            
             outlet_name = selected_outlet
             outlet_contact = outlet_details['Contact']
             outlet_address = outlet_details['Address']
             outlet_state = outlet_details['State']
             outlet_city = outlet_details['City']
+            
+            # Show outlet details like distributor details
             st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display")
             st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
             st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
@@ -2138,7 +2171,7 @@ def visit_page():
         st.subheader("Visit Details")
         visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
         visit_notes = st.text_area("Visit Notes", key="visit_notes")
-
+        
         st.subheader("Time Tracking")
         col1, col2 = st.columns(2)
         with col1:
@@ -2146,55 +2179,32 @@ def visit_page():
         with col2:
             exit_time = st.time_input("Exit Time", value=None, key="visit_exit_time")
 
-        # --- Location Auto-Capture ---
-        st.subheader("Location Verification (Auto)")
-        result = streamlit_js_eval(
-            js_expressions="""
-                new Promise((resolve) => {
-                    if (navigator.geolocation) {
-                        navigator.geolocation.getCurrentPosition(
-                            pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                            err => resolve({latitude: null, longitude: null})
-                        );
-                    } else {
-                        resolve({latitude: null, longitude: null});
-                    }
-                });
-            """,
-            key="visit_geo"
-        ) or {}
-
-        lat = result.get("latitude")
-        lng = result.get("longitude")
-        if lat and lng:
-            gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
-            st.success(f"Fetched Location: [View on Google Maps]({gmaps_link})")
-        else:
-            gmaps_link = ""
-            st.info("Waiting for location permission...")
-
-        # ---- Submission ----
         if st.button("Record Visit", key="record_visit_button"):
             if outlet_name:
                 today = get_ist_time().date()
+                
                 if entry_time is None:
                     entry_time = get_ist_time().time()
                 if exit_time is None:
                     exit_time = get_ist_time().time()
+                    
                 entry_datetime = datetime.combine(today, entry_time)
                 exit_datetime = datetime.combine(today, exit_time)
+                
+                # No visit selfie upload
                 visit_selfie_path = None
-
+                
                 visit_id = record_visit(
                     selected_employee, outlet_name, outlet_contact, outlet_address,
-                    outlet_state, outlet_city, visit_purpose, visit_notes,
-                    visit_selfie_path, entry_datetime, exit_datetime, visit_remarks, gmaps_link
+                    outlet_state, outlet_city, visit_purpose, visit_notes, 
+                    visit_selfie_path, entry_datetime, exit_datetime,
+                    visit_remarks
                 )
+                
                 st.success(f"Visit {visit_id} recorded successfully!")
             else:
                 st.error("Please fill all required fields.")
-
-    # --- Visit History Tab ---
+    
     with tab2:
         st.subheader("Previous Visits")
         col1, col2, col3 = st.columns(3)
@@ -2204,14 +2214,15 @@ def visit_page():
             visit_date_search = st.date_input("Visit Date", key="visit_date_search")
         with col3:
             outlet_name_search = st.text_input("Outlet Name", key="visit_outlet_search")
-
+            
         if st.button("Search Visits", key="search_visits_button"):
             try:
                 visit_data = conn.read(worksheet="Visits", ttl=5)
                 visit_data = visit_data.dropna(how="all")
+                
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
                 filtered_data = visit_data[visit_data['Employee Code'] == employee_code]
-
+                
                 if visit_id_search:
                     filtered_data = filtered_data[filtered_data['Visit ID'].str.contains(visit_id_search, case=False)]
                 if visit_date_search:
@@ -2219,13 +2230,16 @@ def visit_page():
                     filtered_data = filtered_data[filtered_data['Visit Date'] == date_str]
                 if outlet_name_search:
                     filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
-
+                
                 if not filtered_data.empty:
+                    # Display only the most relevant columns
                     display_columns = [
                         'Visit ID', 'Visit Date', 'Outlet Name', 'Visit Purpose', 'Visit Notes',
-                        'Entry Time', 'Exit Time', 'Visit Duration (minutes)', 'Remarks', 'Visit Location Link'
+                        'Entry Time', 'Exit Time', 'Visit Duration (minutes)', 'Remarks'
                     ]
                     st.dataframe(filtered_data[display_columns])
+                    
+                    # Add download option
                     csv = filtered_data.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         "Download as CSV",
@@ -2238,7 +2252,6 @@ def visit_page():
                     st.warning("No matching visit records found")
             except Exception as e:
                 st.error(f"Error retrieving visit data: {e}")
-
 
 from streamlit_js_eval import streamlit_js_eval
 
