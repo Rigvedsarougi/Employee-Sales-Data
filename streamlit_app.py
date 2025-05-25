@@ -1007,19 +1007,24 @@ def sales_page():
     
         st.subheader("Outlet Details")
         outlet_option = st.radio("Outlet Selection*", ["Enter manually", "Select from list"], key="outlet_option")
+        
+        # Initialize state and city variables
+        selected_state = ""
+        selected_city = ""
+        
         if outlet_option == "Select from list":
             outlet_names = Outlet['Shop Name'].tolist()
             chosen_outlet = st.selectbox("Select Outlet", outlet_names, key="outlet_select")
             od = Outlet[Outlet['Shop Name'] == chosen_outlet].iloc[0]
             customer_name, gst_number = chosen_outlet, od['GST']
             contact_number, address = od['Contact'], od['Address']
-            state, city = od['State'], od['City']
+            selected_state, selected_city = od['State'], od['City']
     
             st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
             st.text_input("Contact Number*", value=contact_number, disabled=True, key="outlet_contact_display")
             st.text_input("Address*", value=address, disabled=True, key="outlet_address_display")
-            st.text_input("State", value=state, disabled=True, key="outlet_state_display")
-            st.text_input("City", value=city, disabled=True, key="outlet_city_display")
+            st.text_input("State", value=selected_state, disabled=True, key="outlet_state_display")
+            st.text_input("City", value=selected_city, disabled=True, key="outlet_city_display")
         else:
             customer_name = st.text_input("Outlet Name*", key="manual_outlet_name")
             gst_number = st.text_input("GST Number", key="manual_gst_number")
