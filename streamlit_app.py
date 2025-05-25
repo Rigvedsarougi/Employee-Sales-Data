@@ -267,8 +267,10 @@ VISIT_SHEET_COLUMNS = [
     "Visit Notes",
     "Visit Selfie Path",
     "Visit Status",
-    "Remarks"
+    "Remarks",
+    "Visit Location Link"
 ]
+
 
 ATTENDANCE_SHEET_COLUMNS = [
     "Attendance ID",
