@@ -19,7 +19,7 @@ import pandas as pd
 
 
 
-def log_location_history(conn, employee_name, lat, lng):
+def log_location_history(conn, employee_name, lat, lng, page):
     employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
     designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
     ist = pytz.timezone('Asia/Kolkata')
@@ -35,7 +35,8 @@ def log_location_history(conn, employee_name, lat, lng):
         "Time": time_str,
         "Latitude": lat,
         "Longitude": lng,
-        "Google Maps Link": gmaps_link
+        "Google Maps Link": gmaps_link,
+        "Page": page
     }
     try:
         existing = conn.read(worksheet="LocationHistory", usecols=list(range(len(LOCATION_HISTORY_COLUMNS))), ttl=5)
@@ -246,8 +247,10 @@ LOCATION_HISTORY_COLUMNS = [
     "Time",
     "Latitude",
     "Longitude",
-    "Google Maps Link"
+    "Google Maps Link",
+    "Page"
 ]
+
 
 VISIT_SHEET_COLUMNS = [
     "Visit ID",
@@ -538,6 +541,26 @@ def demo_page():
                     conn.update(worksheet="Demos", data=pd.concat([existing, df_new], ignore_index=True))
                     st.success(f"Demo {demo_id} recorded successfully!")
                     st.balloons()
+                    # --- Location Logging ---
+                    result = streamlit_js_eval(
+                        js_expressions="""
+                            new Promise((resolve) => {
+                                if (navigator.geolocation) {
+                                    navigator.geolocation.getCurrentPosition(
+                                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                                        err => resolve({latitude: null, longitude: null})
+                                    );
+                                } else {
+                                    resolve({latitude: null, longitude: null});
+                                }
+                            });
+                        """,
+                        key=f"log_action_location_demo_{int(time.time())}"
+                    ) or {}
+                    lat = result.get("latitude")
+                    lng = result.get("longitude")
+                    if lat and lng:
+                        log_location_history(conn, st.session_state.employee_name, lat, lng, page="Demo")
                 except Exception as e:
                     st.error(f"Failed to record demo: {e}")
             else:
@@ -740,6 +763,25 @@ def support_ticket_page():
                             **Priority:** {priority}
                             """)
                             st.balloons()
+                            result = streamlit_js_eval(
+                                js_expressions="""
+                                    new Promise((resolve) => {
+                                        if (navigator.geolocation) {
+                                            navigator.geolocation.getCurrentPosition(
+                                                pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                                                err => resolve({latitude: null, longitude: null})
+                                            );
+                                        } else {
+                                            resolve({latitude: null, longitude: null});
+                                        }
+                                    });
+                                """,
+                                key=f"log_action_location_ticket_{int(time.time())}"
+                            ) or {}
+                            lat = result.get("latitude")
+                            lng = result.get("longitude")
+                            if lat and lng:
+                                log_location_history(conn, st.session_state.employee_name, lat, lng, page="Support Ticket")
                         else:
                             st.error(f"Failed to submit ticket: {error}")
     
@@ -945,6 +987,25 @@ def travel_hotel_page():
                             **Request ID:** {request_id}
                             """)
                             st.balloons()
+                            result = streamlit_js_eval(
+                                js_expressions="""
+                                    new Promise((resolve) => {
+                                        if (navigator.geolocation) {
+                                            navigator.geolocation.getCurrentPosition(
+                                                pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                                                err => resolve({latitude: null, longitude: null})
+                                            );
+                                        } else {
+                                            resolve({latitude: null, longitude: null});
+                                        }
+                                    });
+                                """,
+                                key=f"log_action_location_travel_{int(time.time())}"
+                            ) or {}
+                            lat = result.get("latitude")
+                            lng = result.get("longitude")
+                            if lat and lng:
+                                log_location_history(conn, st.session_state.employee_name, lat, lng, page="Travel/Hotel")
                         else:
                             st.error(f"Failed to submit request: {error}")
     
@@ -1848,6 +1909,26 @@ def sales_page():
                     )
                 st.success(f"Invoice {invoice_number} generated successfully!")
                 st.balloons()
+                result = streamlit_js_eval(
+                    js_expressions="""
+                        new Promise((resolve) => {
+                            if (navigator.geolocation) {
+                                navigator.geolocation.getCurrentPosition(
+                                    pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                                    err => resolve({latitude: null, longitude: null})
+                                );
+                            } else {
+                                resolve({latitude: null, longitude: null});
+                            }
+                        });
+                    """,
+                    key=f"log_action_location_sales_{int(time.time())}"
+                ) or {}
+                lat = result.get("latitude")
+                lng = result.get("longitude")
+                if lat and lng:
+                    log_location_history(conn, st.session_state.employee_name, lat, lng, page="Sales")
+            
             else:
                 st.error("Please fill all required fields and select products.")
 
@@ -2171,6 +2252,27 @@ def visit_page():
                 )
                 
                 st.success(f"Visit {visit_id} recorded successfully!")
+                st.balloons()
+                # --- Location Logging ---
+                result = streamlit_js_eval(
+                    js_expressions="""
+                        new Promise((resolve) => {
+                            if (navigator.geolocation) {
+                                navigator.geolocation.getCurrentPosition(
+                                    pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                                    err => resolve({latitude: null, longitude: null})
+                                );
+                            } else {
+                                resolve({latitude: null, longitude: null});
+                            }
+                        });
+                    """,
+                    key=f"log_action_location_visit_{int(time.time())}"
+                ) or {}
+                lat = result.get("latitude")
+                lng = result.get("longitude")
+                if lat and lng:
+                    log_location_history(conn, st.session_state.employee_name, lat, lng, page="Visit")
             else:
                 st.error("Please fill all required fields.")
     
