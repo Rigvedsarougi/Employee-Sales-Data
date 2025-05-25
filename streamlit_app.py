@@ -19,7 +19,7 @@ import pandas as pd
 
 
 
-def log_location_history(conn, employee_name, lat, lng, page):
+def log_location_history(conn, employee_name, lat, lng):
     employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
     designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
     ist = pytz.timezone('Asia/Kolkata')
@@ -35,8 +35,7 @@ def log_location_history(conn, employee_name, lat, lng, page):
         "Time": time_str,
         "Latitude": lat,
         "Longitude": lng,
-        "Google Maps Link": gmaps_link,
-        "Page": page
+        "Google Maps Link": gmaps_link
     }
     try:
         existing = conn.read(worksheet="LocationHistory", usecols=list(range(len(LOCATION_HISTORY_COLUMNS))), ttl=5)
@@ -48,33 +47,35 @@ def log_location_history(conn, employee_name, lat, lng, page):
     except Exception as e:
         return False, str(e)
 
-def hourly_location_auto_log(conn, selected_employee, page):
+def hourly_location_auto_log(conn, selected_employee):
+    if not selected_employee:
+        return
     result = streamlit_js_eval(
         js_expressions="""
             new Promise((resolve) => {
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
-                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                        err => resolve({latitude: null, longitude: null})
+                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude, ts: Date.now()}),
+                        err => resolve({latitude: null, longitude: null, ts: Date.now()})
                     );
                 } else {
-                    resolve({latitude: null, longitude: null});
+                    resolve({latitude: null, longitude: null, ts: Date.now()});
                 }
             });
         """,
-        key=f"hourly_auto_log_{page}_{int(time.time())}"
+        key=f"geo_hourly_{int(time.time() // 30)}" #goooooooooooooo
     ) or {}
 
     lat = result.get("latitude")
     lng = result.get("longitude")
+
     if lat and lng:
-        current_hour = datetime.now(pytz.timezone('Asia/Kolkata')).strftime("%Y-%m-%d-%H")
-        logged_key = f"hourly_logged_{selected_employee}_{current_hour}_{page}"
+        current_hour = datetime.now(pytz.timezone('Asia/Kolkata')).strftime("%Y-%m-%d %H")
+        logged_key = f"hourly_logged_{selected_employee}_{current_hour}"
         if not st.session_state.get(logged_key, False):
-            success, error = log_location_history(conn, selected_employee, lat, lng, page)
+            success, error = log_location_history(conn, selected_employee, lat, lng)
             if success:
                 st.session_state[logged_key] = True
-
 
 st.set_page_config(page_title="Location Logger", layout="centered")
 
@@ -245,10 +246,8 @@ LOCATION_HISTORY_COLUMNS = [
     "Time",
     "Latitude",
     "Longitude",
-    "Google Maps Link",
-    "Page"
+    "Google Maps Link"
 ]
-
 
 VISIT_SHEET_COLUMNS = [
     "Visit ID",
@@ -442,6 +441,7 @@ def save_uploaded_file(uploaded_file, folder):
 
 
 def demo_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Demo Management")
     selected_employee = st.session_state.employee_name
 
@@ -538,26 +538,6 @@ def demo_page():
                     conn.update(worksheet="Demos", data=pd.concat([existing, df_new], ignore_index=True))
                     st.success(f"Demo {demo_id} recorded successfully!")
                     st.balloons()
-                    # --- Location Logging ---
-                    result = streamlit_js_eval(
-                        js_expressions="""
-                            new Promise((resolve) => {
-                                if (navigator.geolocation) {
-                                    navigator.geolocation.getCurrentPosition(
-                                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                                        err => resolve({latitude: null, longitude: null})
-                                    );
-                                } else {
-                                    resolve({latitude: null, longitude: null});
-                                }
-                            });
-                        """,
-                        key=f"log_action_location_demo_{int(time.time())}"
-                    ) or {}
-                    lat = result.get("latitude")
-                    lng = result.get("longitude")
-                    if lat and lng:
-                        log_location_history(conn, st.session_state.employee_name, lat, lng, page="Demo")
                 except Exception as e:
                     st.error(f"Failed to record demo: {e}")
             else:
@@ -657,6 +637,7 @@ def demo_page():
 
 
 def support_ticket_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Support Ticket Management")
     selected_employee = st.session_state.employee_name
     employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
@@ -759,25 +740,6 @@ def support_ticket_page():
                             **Priority:** {priority}
                             """)
                             st.balloons()
-                            result = streamlit_js_eval(
-                                js_expressions="""
-                                    new Promise((resolve) => {
-                                        if (navigator.geolocation) {
-                                            navigator.geolocation.getCurrentPosition(
-                                                pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                                                err => resolve({latitude: null, longitude: null})
-                                            );
-                                        } else {
-                                            resolve({latitude: null, longitude: null});
-                                        }
-                                    });
-                                """,
-                                key=f"log_action_location_ticket_{int(time.time())}"
-                            ) or {}
-                            lat = result.get("latitude")
-                            lng = result.get("longitude")
-                            if lat and lng:
-                                log_location_history(conn, st.session_state.employee_name, lat, lng, page="Support Ticket")
                         else:
                             st.error(f"Failed to submit ticket: {error}")
     
@@ -883,6 +845,7 @@ def support_ticket_page():
             st.error(f"Error retrieving support tickets: {str(e)}")
 
 def travel_hotel_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Travel & Hotel Booking")
     selected_employee = st.session_state.employee_name
     employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
@@ -982,25 +945,6 @@ def travel_hotel_page():
                             **Request ID:** {request_id}
                             """)
                             st.balloons()
-                            result = streamlit_js_eval(
-                                js_expressions="""
-                                    new Promise((resolve) => {
-                                        if (navigator.geolocation) {
-                                            navigator.geolocation.getCurrentPosition(
-                                                pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                                                err => resolve({latitude: null, longitude: null})
-                                            );
-                                        } else {
-                                            resolve({latitude: null, longitude: null});
-                                        }
-                                    });
-                                """,
-                                key=f"log_action_location_travel_{int(time.time())}"
-                            ) or {}
-                            lat = result.get("latitude")
-                            lng = result.get("longitude")
-                            if lat and lng:
-                                log_location_history(conn, st.session_state.employee_name, lat, lng, page="Travel/Hotel")
                         else:
                             st.error(f"Failed to submit request: {error}")
     
@@ -1573,6 +1517,7 @@ def authenticate_employee(employee_name, passkey):
         return False
 
 def resources_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Company Resources")
     st.markdown("Download important company documents and product catalogs.")
     
@@ -1735,6 +1680,7 @@ def main():
                 demo_page()
 
 def sales_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
     sales_remarks = ""
@@ -1902,26 +1848,6 @@ def sales_page():
                     )
                 st.success(f"Invoice {invoice_number} generated successfully!")
                 st.balloons()
-                result = streamlit_js_eval(
-                    js_expressions="""
-                        new Promise((resolve) => {
-                            if (navigator.geolocation) {
-                                navigator.geolocation.getCurrentPosition(
-                                    pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                                    err => resolve({latitude: null, longitude: null})
-                                );
-                            } else {
-                                resolve({latitude: null, longitude: null});
-                            }
-                        });
-                    """,
-                    key=f"log_action_location_sales_{int(time.time())}"
-                ) or {}
-                lat = result.get("latitude")
-                lng = result.get("longitude")
-                if lat and lng:
-                    log_location_history(conn, st.session_state.employee_name, lat, lng, page="Sales")
-            
             else:
                 st.error("Please fill all required fields and select products.")
 
@@ -2175,6 +2101,7 @@ def sales_page():
                         st.error(f"Error regenerating invoice: {e}")
 
 def visit_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
 
@@ -2244,27 +2171,6 @@ def visit_page():
                 )
                 
                 st.success(f"Visit {visit_id} recorded successfully!")
-                st.balloons()
-                # --- Location Logging ---
-                result = streamlit_js_eval(
-                    js_expressions="""
-                        new Promise((resolve) => {
-                            if (navigator.geolocation) {
-                                navigator.geolocation.getCurrentPosition(
-                                    pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                                    err => resolve({latitude: null, longitude: null})
-                                );
-                            } else {
-                                resolve({latitude: null, longitude: null});
-                            }
-                        });
-                    """,
-                    key=f"log_action_location_visit_{int(time.time())}"
-                ) or {}
-                lat = result.get("latitude")
-                lng = result.get("longitude")
-                if lat and lng:
-                    log_location_history(conn, st.session_state.employee_name, lat, lng, page="Visit")
             else:
                 st.error("Please fill all required fields.")
     
@@ -2319,6 +2225,7 @@ def visit_page():
 from streamlit_js_eval import streamlit_js_eval
 
 def attendance_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
 
