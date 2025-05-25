@@ -278,6 +278,39 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
 
     return pdf, pdf_path
 
+def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, outlet_state, outlet_city, 
+                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time, remarks=""):
+    visit_id = generate_visit_id()
+    visit_date = get_ist_time().strftime("%d-%m-%Y")
+    
+    duration = (exit_time - entry_time).total_seconds() / 60
+    
+    visit_data = {
+        "Visit ID": visit_id,
+        "Employee Name": employee_name,
+        "Employee Code": Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0],
+        "Designation": Person[Person['Employee Name'] == employee_name]['Designation'].values[0],
+        "Outlet Name": outlet_name,
+        "Outlet Contact": outlet_contact,
+        "Outlet Address": outlet_address,
+        "Outlet State": outlet_state,
+        "Outlet City": outlet_city,
+        "Visit Date": visit_date,
+        "Entry Time": entry_time.strftime("%H:%M:%S"),
+        "Exit Time": exit_time.strftime("%H:%M:%S"),
+        "Visit Duration (minutes)": round(duration, 2),
+        "Visit Purpose": visit_purpose,
+        "Visit Notes": visit_notes,
+        "Visit Selfie Path": visit_selfie_path,
+        "Visit Status": "completed",
+        "Remarks": remarks
+    }
+    
+    visit_df = pd.DataFrame([visit_data])
+    log_visit_to_gsheet(conn, visit_df)
+    
+    return visit_id
+
 def display_login_header():
     col1, col2, col3 = st.columns([1, 3, 1])
     
