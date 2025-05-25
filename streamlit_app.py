@@ -311,6 +311,42 @@ def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, out
     
     return visit_id
 
+def record_attendance(employee_name, status, location_link="", leave_reason=""):
+    try:
+        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
+        designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
+        current_date = get_ist_time().strftime("%d-%m-%Y")
+        current_datetime = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
+        check_in_time = get_ist_time().strftime("%H:%M:%S")
+        
+        attendance_id = generate_attendance_id()
+        
+        attendance_data = {
+            "Attendance ID": attendance_id,
+            "Employee Name": employee_name,
+            "Employee Code": employee_code,
+            "Designation": designation,
+            "Date": current_date,
+            "Status": status,
+            "Location Link": location_link,
+            "Leave Reason": leave_reason,
+            "Check-in Time": check_in_time,
+            "Check-in Date Time": current_datetime
+        }
+        
+        attendance_df = pd.DataFrame([attendance_data])
+        
+        success, error = log_attendance_to_gsheet(conn, attendance_df)
+        
+        if success:
+            return attendance_id, None
+        else:
+            return None, error
+            
+    except Exception as e:
+        return None, f"Error creating attendance record: {str(e)}"
+
+
 def display_login_header():
     col1, col2, col3 = st.columns([1, 3, 1])
     
