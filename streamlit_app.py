@@ -11,6 +11,44 @@ import pytz
 import streamlit.components.v1 as components
 from streamlit_js_eval import streamlit_js_eval
 import time
+import gspread
+from google.oauth2.service_account import Credentials
+
+# Initialize gspread client
+def init_gsheet_connection():
+    sa_info = st.secrets["connections"]["gsheets"]
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds = Credentials.from_service_account_info(sa_info, scopes=scopes)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open_by_url(sa_info["spreadsheet"])
+    return spreadsheet
+
+# Initialize connection
+spreadsheet = init_gsheet_connection()
+
+def get_worksheet(worksheet_name):
+    try:
+        return spreadsheet.worksheet(worksheet_name)
+    except gspread.exceptions.WorksheetNotFound:
+        # Create worksheet if it doesn't exist
+        worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=50)
+        # Add headers if it's a known worksheet type
+        if worksheet_name == "Sales":
+            worksheet.append_row(SALES_SHEET_COLUMNS)
+        elif worksheet_name == "Visits":
+            worksheet.append_row(VISIT_SHEET_COLUMNS)
+        elif worksheet_name == "Attendance":
+            worksheet.append_row(ATTENDANCE_SHEET_COLUMNS)
+        elif worksheet_name == "Tickets":
+            worksheet.append_row(TICKET_SHEET_COLUMNS)
+        elif worksheet_name == "TravelHotelRequests":
+            worksheet.append_row(TRAVEL_HOTEL_COLUMNS)
+        elif worksheet_name == "Demos":
+            worksheet.append_row(DEMO_SHEET_COLUMNS)
+        return worksheet
 
 def get_states():
     """Return sorted list of unique states from citystate DataFrame"""
@@ -635,6 +673,14 @@ def save_uploaded_file(uploaded_file, folder):
         return file_path
     return None
 
+def log_demo_to_gsheet(demo_data):
+    try:
+        worksheet = get_worksheet("Demos")
+        data_to_append = demo_data.values.tolist()
+        worksheet.append_rows(data_to_append)
+    except Exception as e:
+        st.error(f"Failed to record demo: {e}")
+
 def demo_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Demo Management")
@@ -713,7 +759,7 @@ def demo_page():
                 co = datetime.combine(demo_date, check_out_time)
                 duration = (co - ci).total_seconds() / 60.0
                 demo_id = f"DEMO-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
-
+        
                 demo_data = {
                     "Demo ID": demo_id,
                     "Employee Name": selected_employee,
@@ -737,15 +783,11 @@ def demo_page():
                     "Products": "|".join(selected_products),
                     "Quantities": "|".join(quantities)
                 }
-
-                try:
-                    existing = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5).dropna(how="all")
-                    df_new = pd.DataFrame([demo_data], columns=DEMO_SHEET_COLUMNS)
-                    conn.update(worksheet="Demos", data=pd.concat([existing, df_new], ignore_index=True))
-                    st.success(f"Demo {demo_id} recorded successfully!")
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"Failed to record demo: {e}")
+        
+                demo_df = pd.DataFrame([demo_data], columns=DEMO_SHEET_COLUMNS)
+                log_demo_to_gsheet(demo_df)
+                st.success(f"Demo {demo_id} recorded successfully!")
+                st.balloons()
             else:
                 st.error("Please fill all required fields (Outlet + ≥1 product).")
 
@@ -755,12 +797,16 @@ def demo_page():
         @st.cache_data(ttl=300)
         def load_demo_data():
             try:
-                df = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5)
-                df = df.dropna(how="all")
-                df['Demo Date'] = pd.to_datetime(df['Demo Date'], dayfirst=True, errors='coerce')
-                df['Duration (minutes)'] = pd.to_numeric(df['Duration (minutes)'], errors='coerce')
-                code = Person.loc[Person['Employee Name']==selected_employee,'Employee Code'].iat[0]
-                return df[df['Employee Code']==code].sort_values('Demo Date', ascending=False)
+                worksheet = get_worksheet("Demos")
+                records = worksheet.get_all_records()
+                df = pd.DataFrame.from_records(records)
+                
+                if not df.empty:
+                    df['Demo Date'] = pd.to_datetime(df['Demo Date'], dayfirst=True, errors='coerce')
+                    df['Duration (minutes)'] = pd.to_numeric(df['Duration (minutes)'], errors='coerce')
+                    code = Person.loc[Person['Employee Name']==selected_employee,'Employee Code'].iat[0]
+                    return df[df['Employee Code']==code].sort_values('Demo Date', ascending=False)
+                return pd.DataFrame()
             except Exception as e:
                 st.error(f"Error loading demo data: {e}")
                 return pd.DataFrame()
@@ -1046,28 +1092,33 @@ def sales_page():
         @st.cache_data(ttl=300)
         def load_sales_data():
             try:
-                sales_data = conn.read(worksheet="Sales", ttl=5)
-                sales_data = sales_data.dropna(how='all')
-                sales_data['Outlet Name'] = sales_data['Outlet Name'].astype(str)
-                sales_data['Invoice Number'] = sales_data['Invoice Number'].astype(str)
+                worksheet = get_worksheet("Sales")
+                records = worksheet.get_all_records()
+                sales_data = pd.DataFrame.from_records(records)
                 
-                try:
-                    sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True, errors='coerce')
-                except:
-                    sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], errors='coerce')
-                
-                numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)', 'Quantity']
-                for col in numeric_cols:
-                    if col in sales_data.columns:
-                        sales_data[col] = pd.to_numeric(sales_data[col], errors='coerce')
-                
-                employee_code = Person[Person['Employee Name'] == st.session_state.employee_name]['Employee Code'].values[0]
-                filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
-                filtered_data = filtered_data[filtered_data['Invoice Date'].notna()]
-                return filtered_data
+                if not sales_data.empty:
+                    sales_data['Outlet Name'] = sales_data['Outlet Name'].astype(str)
+                    sales_data['Invoice Number'] = sales_data['Invoice Number'].astype(str)
+                    
+                    try:
+                        sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True, errors='coerce')
+                    except:
+                        sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], errors='coerce')
+                    
+                    numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)', 'Quantity']
+                    for col in numeric_cols:
+                        if col in sales_data.columns:
+                            sales_data[col] = pd.to_numeric(sales_data[col], errors='coerce')
+                    
+                    employee_code = Person[Person['Employee Name'] == st.session_state.employee_name]['Employee Code'].values[0]
+                    filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
+                    filtered_data = filtered_data[filtered_data['Invoice Date'].notna()]
+                    return filtered_data
+                return pd.DataFrame()
             except Exception as e:
                 st.error(f"Error loading sales data: {e}")
                 return pd.DataFrame()
+        
     
         sales_data = load_sales_data()
         
@@ -2012,72 +2063,70 @@ def travel_hotel_page():
         except Exception as e:
             st.error(f"Error retrieving travel/hotel requests: {str(e)}")
 
-def log_ticket_to_gsheet(conn, ticket_data):
+def log_ticket_to_gsheet(ticket_data):
     try:
-        existing_data = conn.read(worksheet="Tickets", usecols=list(range(len(TICKET_SHEET_COLUMNS))), ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        updated_data = pd.concat([existing_data, ticket_data], ignore_index=True)
-        conn.update(worksheet="Tickets", data=updated_data)
+        worksheet = get_worksheet("Tickets")
+        data_to_append = ticket_data.values.tolist()
+        worksheet.append_rows(data_to_append)
         return True, None
     except Exception as e:
         return False, str(e)
 
-def log_travel_hotel_request(conn, request_data):
+def log_travel_hotel_request(request_data):
     try:
-        existing_data = conn.read(worksheet="TravelHotelRequests", usecols=list(range(len(TRAVEL_HOTEL_COLUMNS))), ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        updated_data = pd.concat([existing_data, request_data], ignore_index=True)
-        conn.update(worksheet="TravelHotelRequests", data=updated_data)
+        worksheet = get_worksheet("TravelHotelRequests")
+        data_to_append = request_data.values.tolist()
+        worksheet.append_rows(data_to_append)
         return True, None
     except Exception as e:
         return False, str(e)
 
-def log_sales_to_gsheet(conn, sales_data):
+def log_sales_to_gsheet(sales_data):
     try:
-        existing_sales_data = conn.read(worksheet="Sales", ttl=5)
-        existing_sales_data = existing_sales_data.dropna(how='all')
-        sales_data = sales_data.reindex(columns=SALES_SHEET_COLUMNS)
-        updated_sales_data = pd.concat([existing_sales_data, sales_data], ignore_index=True)
-        updated_sales_data = updated_sales_data.drop_duplicates(subset=["Invoice Number", "Product Name"], keep="last")
-        conn.update(worksheet="Sales", data=updated_sales_data)
+        worksheet = get_worksheet("Sales")
+        # Convert DataFrame to list of lists
+        data_to_append = sales_data.values.tolist()
+        # Append new rows
+        worksheet.append_rows(data_to_append)
         st.success("Sales data successfully logged to Google Sheets!")
     except Exception as e:
         st.error(f"Error logging sales data: {e}")
         st.stop()
 
-def update_delivery_status(conn, invoice_number, product_name, new_status):
+def update_delivery_status(invoice_number, product_name, new_status):
     try:
-        sales_data = conn.read(worksheet="Sales", ttl=5)
-        sales_data = sales_data.dropna(how='all')
-        mask = (sales_data['Invoice Number'] == invoice_number) & (sales_data['Product Name'] == product_name)
-        sales_data.loc[mask, 'Delivery Status'] = new_status
-        conn.update(worksheet="Sales", data=sales_data)
-        return True
+        worksheet = get_worksheet("Sales")
+        records = worksheet.get_all_records()
+        
+        # Find matching rows
+        for i, record in enumerate(records, start=2):  # start=2 because header is row 1
+            if (record.get('Invoice Number') == invoice_number and 
+                record.get('Product Name') == product_name):
+                # Update the specific cell
+                worksheet.update_cell(i, SALES_SHEET_COLUMNS.index('Delivery Status') + 1, new_status)
+                return True
+        
+        st.warning("No matching record found to update")
+        return False
     except Exception as e:
         st.error(f"Error updating delivery status: {e}")
         return False
 
-def log_visit_to_gsheet(conn, visit_data):
+def log_visit_to_gsheet(visit_data):
     try:
-        existing_visit_data = conn.read(worksheet="Visits", ttl=5)
-        existing_visit_data = existing_visit_data.dropna(how='all')
-        visit_data = visit_data.reindex(columns=VISIT_SHEET_COLUMNS)
-        updated_visit_data = pd.concat([existing_visit_data, visit_data], ignore_index=True)
-        updated_visit_data = updated_visit_data.drop_duplicates(subset=["Visit ID"], keep="last")
-        conn.update(worksheet="Visits", data=updated_visit_data)
+        worksheet = get_worksheet("Visits")
+        data_to_append = visit_data.values.tolist()
+        worksheet.append_rows(data_to_append)
         st.success("Visit data successfully logged to Google Sheets!")
     except Exception as e:
         st.error(f"Error logging visit data: {e}")
         st.stop()
 
-def log_attendance_to_gsheet(conn, attendance_data):
+def log_attendance_to_gsheet(attendance_data):
     try:
-        existing_data = conn.read(worksheet="Attendance", ttl=5)
-        existing_data = existing_data.dropna(how='all')
-        attendance_data = attendance_data.reindex(columns=ATTENDANCE_SHEET_COLUMNS)
-        updated_data = pd.concat([existing_data, attendance_data], ignore_index=True)
-        updated_data = updated_data.drop_duplicates(subset=["Attendance ID"], keep="last")
-        conn.update(worksheet="Attendance", data=updated_data)
+        worksheet = get_worksheet("Attendance")
+        data_to_append = attendance_data.values.tolist()
+        worksheet.append_rows(data_to_append)
         return True, None
     except Exception as e:
         return False, str(e)
