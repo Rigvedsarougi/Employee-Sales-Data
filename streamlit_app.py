@@ -47,6 +47,7 @@ def log_location_history(conn, employee_name, lat, lng):
     except Exception as e:
         return False, str(e)
 
+
 def hourly_location_auto_log(conn, selected_employee):
     if not selected_employee:
         return
@@ -78,30 +79,6 @@ def hourly_location_auto_log(conn, selected_employee):
                 st.session_state[logged_key] = True
 
 st.set_page_config(page_title="Location Logger", layout="centered")
-
-def log_login_location(conn, employee_name):
-    result = streamlit_js_eval(
-        js_expressions="""
-            new Promise((resolve) => {
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                        err => resolve({latitude: null, longitude: null})
-                    );
-                } else {
-                    resolve({latitude: null, longitude: null});
-                }
-            });
-        """,
-        key=f"login_geo_{int(time.time())}"
-    ) or {}
-
-    lat = result.get("latitude")
-    lng = result.get("longitude")
-
-    if lat and lng:
-        log_location_history(conn, employee_name, lat, lng)
-
 
 def get_ist_time():
     """Get current time in Indian Standard Time (IST)"""
@@ -1613,12 +1590,12 @@ def main():
     if not st.session_state.authenticated:
         # Display the centered logo and heading
         display_login_header()
-        
+
         employee_names = Person['Employee Name'].tolist()
-        
+
         # Create centered form
         form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
-        
+
         with form_col2:
             with st.container():
                 employee_name = st.selectbox(
@@ -1631,7 +1608,7 @@ def main():
                     type="password", 
                     key="passkey_input"
                 )
-                
+
                 login_button = st.button(
                     "Log in", 
                     key="login_button",
@@ -1640,61 +1617,79 @@ def main():
 
                 if login_button:
                     if authenticate_employee(employee_name, passkey):
+                        # Immediately fetch and log location after login
+                        result = streamlit_js_eval(
+                            js_expressions="""
+                                new Promise((resolve) => {
+                                    if (navigator.geolocation) {
+                                        navigator.geolocation.getCurrentPosition(
+                                            pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                                            err => resolve({latitude: null, longitude: null})
+                                        );
+                                    } else {
+                                        resolve({latitude: null, longitude: null});
+                                    }
+                                });
+                            """,
+                            key=f"geo_login_{employee_name}_{int(time.time())}"
+                        ) or {}
+
+                        lat = result.get("latitude")
+                        lng = result.get("longitude")
+                        if lat and lng:
+                            log_location_history(conn, employee_name, lat, lng)
+                            gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
+                            st.success(f"Login location logged: [View on Google Maps]({gmaps_link})")
+                            # Brief pause for user to see the message
+                            time.sleep(1.5)
                         st.session_state.authenticated = True
                         st.session_state.employee_name = employee_name
-                
-                        # Log location on login (only once per login)
-                        if not st.session_state.get("login_location_logged", False):
-                            log_login_location(conn, employee_name)
-                            st.session_state["login_location_logged"] = True
-                        
                         st.rerun()
                     else:
                         st.error("Invalid Password. Please try again.")
-
     else:
         # Show option boxes after login
         st.title("Select Mode")
         col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-        
+
         with col1:
             if st.button("Sales", use_container_width=True, key="sales_mode"):
                 st.session_state.selected_mode = "Sales"
                 st.rerun()
-        
+
         with col2:
             if st.button("Visit", use_container_width=True, key="visit_mode"):
                 st.session_state.selected_mode = "Visit"
                 st.rerun()
-        
+
         with col3:
             if st.button("Attendance", use_container_width=True, key="attendance_mode"):
                 st.session_state.selected_mode = "Attendance"
                 st.rerun()
-                
+
         with col4:
             if st.button("Resources", use_container_width=True, key="resources_mode"):
                 st.session_state.selected_mode = "Resources"
                 st.rerun()
-                
+
         with col5:
             if st.button("Support Ticket", use_container_width=True, key="ticket_mode"):
                 st.session_state.selected_mode = "Support Ticket"
                 st.rerun()
-                
+
         with col6:
             if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
                 st.session_state.selected_mode = "Travel/Hotel"
                 st.rerun()
-                
+
         with col7:
             if st.button("Demo", use_container_width=True, key="demo_mode"):
                 st.session_state.selected_mode = "Demo"
                 st.rerun()
-        
+
         if st.session_state.selected_mode:
             add_back_button()
-            
+
             if st.session_state.selected_mode == "Sales":
                 sales_page()
             elif st.session_state.selected_mode == "Visit":
@@ -1709,6 +1704,7 @@ def main():
                 travel_hotel_page()
             elif st.session_state.selected_mode == "Demo":
                 demo_page()
+
 
 def sales_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
