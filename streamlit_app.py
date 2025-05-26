@@ -17,87 +17,35 @@ import pytz
 import time
 import pandas as pd
 
-import streamlit as st
-import gspread
-import pandas as pd
-from datetime import datetime
-import pytz
-from google.oauth2.service_account import Credentials
 
-# Import constants and Person dataframe from your main app module
-from streamlit_app import (
-    SALES_SHEET_COLUMNS,
-    VISIT_SHEET_COLUMNS,
-    ATTENDANCE_SHEET_COLUMNS,
-    TICKET_SHEET_COLUMNS,
-    TRAVEL_HOTEL_COLUMNS,
-    DEMO_SHEET_COLUMNS,
-    LOCATION_HISTORY_COLUMNS,
-    Person
-)
-
-# ---------- GSheet Connection & Utilities ----------
-
-def init_gsheet_connection():
-    """
-    Initialize gspread client using Streamlit secrets and return a Spreadsheet object
-    """
-    sa_info = st.secrets["connections"]["gsheets"]
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    creds = Credentials.from_service_account_info(sa_info, scopes=scopes)
-    client = gspread.authorize(creds)
-    spreadsheet = client.open_by_url(sa_info["spreadsheet"])
-    return spreadsheet
-
-# Use append-based spreadsheet for all write operations
-spreadsheet = init_gsheet_connection()
-
-# Map worksheet names to their header constants
-HEADER_MAP = {
-    "Sales": SALES_SHEET_COLUMNS,
-    "Visits": VISIT_SHEET_COLUMNS,
-    "Attendance": ATTENDANCE_SHEET_COLUMNS,
-    "Tickets": TICKET_SHEET_COLUMNS,
-    "TravelHotelRequests": TRAVEL_HOTEL_COLUMNS,
-    "Demos": DEMO_SHEET_COLUMNS,
-    "LocationHistory": LOCATION_HISTORY_COLUMNS,
-}
-
-
-def get_worksheet(worksheet_name):
-    """
-    Return a gspread Worksheet object, creating it with headers if it doesn't exist
-    """
-    try:
-        ws = spreadsheet.worksheet(worksheet_name)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = spreadsheet.add_worksheet(title=worksheet_name, rows="1000", cols="50")
-        headers = HEADER_MAP.get(worksheet_name)
-        if headers:
-            ws.append_row(headers)
-    return ws
 
 def log_location_history(conn, employee_name, lat, lng):
-    """
-    Append a single location history entry rather than rewriting entire sheet
-    """
-    ws = get_worksheet("LocationHistory")
+    employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
+    designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
-    entry = [
-        employee_name,
-        Person.loc[Person['Employee Name']==employee_name,'Employee Code'].iat[0],
-        Person.loc[Person['Employee Name']==employee_name,'Designation'].iat[0],
-        now.strftime("%d-%m-%Y"),
-        now.strftime("%H:%M"),
-        lat,
-        lng,
-        f"https://maps.google.com/?q={lat},{lng}"
-    ]
-    ws.append_row(entry)
+    date_str = now.strftime("%d-%m-%Y")
+    time_str = now.strftime("%H:%M")
+    gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
+    entry = {
+        "Employee Name": employee_name,
+        "Employee Code": employee_code,
+        "Designation": designation,
+        "Date": date_str,
+        "Time": time_str,
+        "Latitude": lat,
+        "Longitude": lng,
+        "Google Maps Link": gmaps_link
+    }
+    try:
+        existing = conn.read(worksheet="LocationHistory", usecols=list(range(len(LOCATION_HISTORY_COLUMNS))), ttl=5)
+        existing = existing.dropna(how="all")
+        new_df = pd.DataFrame([entry], columns=LOCATION_HISTORY_COLUMNS)
+        updated = pd.concat([existing, new_df], ignore_index=True)
+        conn.update(worksheet="LocationHistory", data=updated)
+        return True, None
+    except Exception as e:
+        return False, str(e)
 
 
 def hourly_location_auto_log(conn, selected_employee):
@@ -1193,59 +1141,93 @@ def travel_hotel_page():
             st.error(f"Error retrieving travel/hotel requests: {str(e)}")
 
 
-def log_ticket_to_gsheet(ticket_data: pd.DataFrame):
-    """
-    Append ticket_data rows to the Tickets sheet
-    """
-    ws = get_worksheet("Tickets")
-    for _, row in ticket_data.iterrows():
-        ws.append_row([row.get(col, "") for col in TICKET_SHEET_COLUMNS])
+def log_ticket_to_gsheet(conn, ticket_data):
+    try:
+        existing_data = conn.read(worksheet="Tickets", usecols=list(range(len(TICKET_SHEET_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how="all")
+        updated_data = pd.concat([existing_data, ticket_data], ignore_index=True)
+        conn.update(worksheet="Tickets", data=updated_data)
+        return True, None
+    except Exception as e:
+        return False, str(e)
 
-def log_travel_hotel_request(conn, request_data: pd.DataFrame):
-    """
-    Append travel/hotel request rows to the TravelHotelRequests sheet
-    """
-    ws = get_worksheet("TravelHotelRequests")
-    for _, row in request_data.iterrows():
-        ws.append_row([row.get(col, "") for col in TRAVEL_HOTEL_COLUMNS])
+def log_travel_hotel_request(conn, request_data):
+    try:
+        existing_data = conn.read(worksheet="TravelHotelRequests", usecols=list(range(len(TRAVEL_HOTEL_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how="all")
+        updated_data = pd.concat([existing_data, request_data], ignore_index=True)
+        conn.update(worksheet="TravelHotelRequests", data=updated_data)
+        return True, None
+    except Exception as e:
+        return False, str(e)
 
-def log_sales_to_gsheet(sales_data: pd.DataFrame):
-    """
-    Append sales_data rows to the Sales sheet
-    """
-    ws = get_worksheet("Sales")
-    for _, row in sales_data.iterrows():
-        ws.append_row([row.get(col, "") for col in SALES_SHEET_COLUMNS])
-    st.success("Sales data appended successfully.")
+def log_sales_to_gsheet(conn, sales_data):
+    try:
+        # Read all existing data first
+        existing_sales_data = conn.read(worksheet="Sales", ttl=5)
+        existing_sales_data = existing_sales_data.dropna(how="all")
+        
+        # Ensure columns match (in case sheet structure changes)
+        sales_data = sales_data.reindex(columns=SALES_SHEET_COLUMNS)
+        
+        # Concatenate and drop any potential duplicates
+        updated_sales_data = pd.concat([existing_sales_data, sales_data], ignore_index=True)
+        updated_sales_data = updated_sales_data.drop_duplicates(subset=["Invoice Number", "Product Name"], keep="last")
+        
+        # Write back all data
+        conn.update(worksheet="Sales", data=updated_sales_data)
+        st.success("Sales data successfully logged to Google Sheets!")
+    except Exception as e:
+        st.error(f"Error logging sales data: {e}")
+        st.stop()
 
-def update_delivery_status(conn, invoice_number: str, product_name: str, new_status: str):
-    """
-    Update the 'Delivery Status' column for specific invoice/product rows without appending
-    """
-    ws = get_worksheet("Sales")
-    records = ws.get_all_records()
-    for idx, record in enumerate(records, start=2):  # skip header row
-        if record.get('Invoice Number') == invoice_number and record.get('Product Name') == product_name:
-            col_index = SALES_SHEET_COLUMNS.index('Delivery Status') + 1
-            ws.update_cell(idx, col_index, new_status)
-    st.success(f"Delivery status for {invoice_number} updated to '{new_status}'.")
+def update_delivery_status(conn, invoice_number, product_name, new_status):
+    try:
+        # Read all existing data
+        sales_data = conn.read(worksheet="Sales", ttl=5)
+        sales_data = sales_data.dropna(how="all")
+        
+        # Update the delivery status for the specific record
+        mask = (sales_data['Invoice Number'] == invoice_number) & (sales_data['Product Name'] == product_name)
+        sales_data.loc[mask, 'Delivery Status'] = new_status
+        
+        # Write back the updated data
+        conn.update(worksheet="Sales", data=sales_data)
+        return True
+    except Exception as e:
+        st.error(f"Error updating delivery status: {e}")
+        return False
 
-def log_visit_to_gsheet(visit_data: pd.DataFrame):
-    """
-    Append visit_data rows to the Visits sheet
-    """
-    ws = get_worksheet("Visits")
-    for _, row in visit_data.iterrows():
-        ws.append_row([row.get(col, "") for col in VISIT_SHEET_COLUMNS])
-    st.success("Visit data appended successfully.")
+def log_visit_to_gsheet(conn, visit_data):
+    try:
+        existing_visit_data = conn.read(worksheet="Visits", ttl=5)
+        existing_visit_data = existing_visit_data.dropna(how="all")
+        
+        visit_data = visit_data.reindex(columns=VISIT_SHEET_COLUMNS)
+        
+        updated_visit_data = pd.concat([existing_visit_data, visit_data], ignore_index=True)
+        updated_visit_data = updated_visit_data.drop_duplicates(subset=["Visit ID"], keep="last")
+        
+        conn.update(worksheet="Visits", data=updated_visit_data)
+        st.success("Visit data successfully logged to Google Sheets!")
+    except Exception as e:
+        st.error(f"Error logging visit data: {e}")
+        st.stop()
 
-def log_attendance_to_gsheet(attendance_data: pd.DataFrame):
-    """
-    Append attendance_data rows to the Attendance sheet
-    """
-    ws = get_worksheet("Attendance")
-    for _, row in attendance_data.iterrows():
-        ws.append_row([row.get(col, "") for col in ATTENDANCE_SHEET_COLUMNS])
+def log_attendance_to_gsheet(conn, attendance_data):
+    try:
+        existing_data = conn.read(worksheet="Attendance", ttl=5)
+        existing_data = existing_data.dropna(how="all")
+        
+        attendance_data = attendance_data.reindex(columns=ATTENDANCE_SHEET_COLUMNS)
+        
+        updated_data = pd.concat([existing_data, attendance_data], ignore_index=True)
+        updated_data = updated_data.drop_duplicates(subset=["Attendance ID"], keep="last")
+        
+        conn.update(worksheet="Attendance", data=updated_data)
+        return True, None
+    except Exception as e:
+        return False, str(e)
 
 
 def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, product_discounts,
