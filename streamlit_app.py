@@ -1,11 +1,15 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+from fpdf import FPDF
+from datetime import datetime, time
 import os
 import uuid
 from PIL import Image
 from datetime import datetime, time, timedelta
 import pytz
+import streamlit.components.v1 as components
+from streamlit_js_eval import streamlit_js_eval
 import time
 
 # Hide Streamlit style elements
