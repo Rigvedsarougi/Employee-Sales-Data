@@ -1650,18 +1650,42 @@ def main():
     else:
         # Show option boxes after login
         st.title("Select Mode")
-        col1, col2 = st.columns(2)
+        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
         with col1:
+            if st.button("Sales", use_container_width=True, key="sales_mode"):
+                st.session_state.selected_mode = "Sales"
+                st.rerun()
+
+        with col2:
+            if st.button("Visit", use_container_width=True, key="visit_mode"):
+                st.session_state.selected_mode = "Visit"
+                st.rerun()
+
+        with col3:
             if st.button("Attendance", use_container_width=True, key="attendance_mode"):
                 st.session_state.selected_mode = "Attendance"
                 st.rerun()
 
-        with col2:
+        with col4:
             if st.button("Resources", use_container_width=True, key="resources_mode"):
                 st.session_state.selected_mode = "Resources"
                 st.rerun()
 
+        with col5:
+            if st.button("Support Ticket", use_container_width=True, key="ticket_mode"):
+                st.session_state.selected_mode = "Support Ticket"
+                st.rerun()
+
+        with col6:
+            if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
+                st.session_state.selected_mode = "Travel/Hotel"
+                st.rerun()
+
+        with col7:
+            if st.button("Demo", use_container_width=True, key="demo_mode"):
+                st.session_state.selected_mode = "Demo"
+                st.rerun()
 
         if st.session_state.selected_mode:
             add_back_button()
