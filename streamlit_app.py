@@ -24,6 +24,18 @@ from datetime import datetime
 import pytz
 from google.oauth2.service_account import Credentials
 
+# Import constants and Person dataframe from your main app module
+from streamlit_app import (
+    SALES_SHEET_COLUMNS,
+    VISIT_SHEET_COLUMNS,
+    ATTENDANCE_SHEET_COLUMNS,
+    TICKET_SHEET_COLUMNS,
+    TRAVEL_HOTEL_COLUMNS,
+    DEMO_SHEET_COLUMNS,
+    LOCATION_HISTORY_COLUMNS,
+    Person
+)
+
 # ---------- GSheet Connection & Utilities ----------
 
 def init_gsheet_connection():
