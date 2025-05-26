@@ -17,7 +17,35 @@ import pytz
 import time
 import pandas as pd
 
+def get_browser_geolocation_with_auto_reload(refresh_interval_minutes=60):
+    # JS: Get location
+    result = streamlit_js_eval(
+        js_expressions="""
+            new Promise((resolve) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                        err => resolve({latitude: null, longitude: null})
+                    );
+                } else {
+                    resolve({latitude: null, longitude: null});
+                }
+            });
+        """,
+        key="geo"
+    ) or {}
 
+    # JS: Auto-reload after N minutes (non-blocking)
+    streamlit_js_eval(
+        js_expressions=f"""
+            setTimeout(function() {{
+                window.location.reload();
+            }}, {refresh_interval_minutes * 60 * 1000});
+        """,
+        key="reload"
+    )
+
+    return result.get("latitude"), result.get("longitude")
 
 def log_location_history(conn, employee_name, lat, lng):
     employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
@@ -51,6 +79,7 @@ def log_location_history(conn, employee_name, lat, lng):
 def hourly_location_auto_log(conn, selected_employee):
     if not selected_employee:
         return
+
     result = streamlit_js_eval(
         js_expressions="""
             new Promise((resolve) => {
@@ -70,13 +99,18 @@ def hourly_location_auto_log(conn, selected_employee):
     lat = result.get("latitude")
     lng = result.get("longitude")
 
-    if lat and lng:
+    if lat is not None and lng is not None:
         current_hour = datetime.now(pytz.timezone('Asia/Kolkata')).strftime("%Y-%m-%d %H")
         logged_key = f"hourly_logged_{selected_employee}_{current_hour}"
         if not st.session_state.get(logged_key, False):
+            # log_location_history is assumed to be a user-defined function that logs data and returns (success, error)
             success, error = log_location_history(conn, selected_employee, lat, lng)
             if success:
                 st.session_state[logged_key] = True
+            else:
+                st.error(f"Failed to log location: {error}")
+    else:
+        st.warning("Unable to fetch location data.")
 
 st.set_page_config(page_title="Location Logger", layout="centered")
 
@@ -2252,7 +2286,7 @@ def visit_page():
 from streamlit_js_eval import streamlit_js_eval
 
 def attendance_page():
-    hourly_location_auto_log(conn, st.session_state.employee_name)
+    # hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
 
@@ -2266,28 +2300,13 @@ def attendance_page():
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification (Auto)")
 
-        result = streamlit_js_eval(
-            js_expressions="""
-                new Promise((resolve) => {
-                    if (navigator.geolocation) {
-                        navigator.geolocation.getCurrentPosition(
-                            pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                            err => resolve({latitude: null, longitude: null})
-                        );
-                    } else {
-                        resolve({latitude: null, longitude: null});
-                    }
-                });
-            """,
-            key="geo"
-        ) or {}
+        lat, lng = get_browser_geolocation_with_auto_reload()
 
-        lat = result.get("latitude")
-        lng = result.get("longitude")
-
-        if lat and lng:
+        if lat is not None and lng is not None:
             gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
             st.success(f"Fetched Location: [View on Google Maps]({gmaps_link})")
+            kolkata_time = datetime.now(pytz.timezone("Asia/Kolkata"))
+            st.write(f"Last updated (Asia/Kolkata): {kolkata_time.strftime('%Y-%m-%d %H:%M:%S')}")
         else:
             gmaps_link = ""
             st.info("Waiting for location permission...")
