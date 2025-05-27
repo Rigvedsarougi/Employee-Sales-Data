@@ -278,9 +278,12 @@ ATTENDANCE_SHEET_COLUMNS = [
     "Designation",
     "Date",
     "Status",
-    "Location Link",
+    "Check-in Location Link",
+    "Check-out Location Link",
     "Leave Reason",
     "Check-in Time",
+    "Check-out Time",
+    "Duration (hours)",
     "Check-in Date Time"
 ]
 
@@ -1470,9 +1473,12 @@ def record_attendance(employee_name, status, location_link="", leave_reason=""):
             "Designation": designation,
             "Date": current_date,
             "Status": status,
-            "Location Link": location_link,
+            "Check-in Location Link": location_link,
+            "Check-out Location Link": "",
             "Leave Reason": leave_reason,
             "Check-in Time": check_in_time,
+            "Check-out Time": "",
+            "Duration (hours)": "",
             "Check-in Date Time": current_datetime
         }
         
@@ -1516,6 +1522,104 @@ def authenticate_employee(employee_name, passkey):
         return str(passkey) == str(employee_code)
     except:
         return False
+
+def checkout_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
+    st.title("Checkout Management")
+    selected_employee = st.session_state.employee_name
+
+    # Check if user has checked in today
+    try:
+        existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how="all")
+        
+        if existing_data.empty:
+            st.error("Please check in first before checking out")
+            return
+        
+        current_date = get_ist_time().strftime("%d-%m-%Y")
+        employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+        
+        checkin_records = existing_data[
+            (existing_data['Employee Code'] == employee_code) & 
+            (existing_data['Date'] == current_date)
+        ]
+        
+        if checkin_records.empty:
+            st.error("Please check in first before checking out")
+            return
+            
+        if 'Check-out Time' in checkin_records.columns and not checkin_records['Check-out Time'].isna().all():
+            st.warning("You have already checked out for today")
+            return
+    except Exception as e:
+        st.error(f"Error checking attendance records: {str(e)}")
+        return
+
+    st.subheader("Location Verification (Auto)")
+
+    result = streamlit_js_eval(
+        js_expressions="""
+            new Promise((resolve) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                        err => resolve({latitude: null, longitude: null})
+                    );
+                } else {
+                    resolve({latitude: null, longitude: null});
+                }
+            });
+        """,
+        key="geo_checkout"
+    ) or {}
+
+    lat = result.get("latitude")
+    lng = result.get("longitude")
+
+    if lat and lng:
+        gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
+        st.success(f"Fetched Location: [View on Google Maps]({gmaps_link})")
+    else:
+        gmaps_link = ""
+        st.info("Waiting for location permission...")
+
+    if lat and lng and st.button("Check Out", key="checkout_button"):
+        with st.spinner("Recording checkout..."):
+            try:
+                # Update the existing attendance record
+                existing_data = conn.read(worksheet="Attendance", ttl=5)
+                existing_data = existing_data.dropna(how="all")
+                
+                current_date = get_ist_time().strftime("%d-%m-%Y")
+                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+                
+                # Find the record to update
+                mask = (
+                    (existing_data['Employee Code'] == employee_code) & 
+                    (existing_data['Date'] == current_date)
+                )
+                
+                if not mask.any():
+                    st.error("No check-in record found for today")
+                    return
+                
+                # Update the record
+                existing_data.loc[mask, 'Check-out Time'] = get_ist_time().strftime("%H:%M:%S")
+                existing_data.loc[mask, 'Check-out Location Link'] = gmaps_link
+                
+                # Calculate duration
+                checkin_time = pd.to_datetime(existing_data.loc[mask, 'Check-in Time'].iloc[0])
+                checkout_time = pd.to_datetime(get_ist_time().strftime("%H:%M:%S"))
+                duration = (checkout_time - checkin_time).total_seconds() / 3600  # in hours
+                existing_data.loc[mask, 'Duration (hours)'] = round(duration, 2)
+                
+                # Write back to sheet
+                conn.update(worksheet="Attendance", data=existing_data)
+                st.success("Checkout recorded successfully!")
+                st.balloons()
+            except Exception as e:
+                st.error(f"Failed to record checkout: {str(e)}")
 
 def resources_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
@@ -1650,41 +1754,21 @@ def main():
     else:
         # Show option boxes after login
         st.title("Select Mode")
-        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+        col1, col2, col3 = st.columns(3)
 
         with col1:
-            if st.button("Sales", use_container_width=True, key="sales_mode"):
-                st.session_state.selected_mode = "Sales"
-                st.rerun()
-
-        with col2:
-            if st.button("Visit", use_container_width=True, key="visit_mode"):
-                st.session_state.selected_mode = "Visit"
-                st.rerun()
-
-        with col3:
             if st.button("Attendance", use_container_width=True, key="attendance_mode"):
                 st.session_state.selected_mode = "Attendance"
                 st.rerun()
 
-        with col4:
+        with col2:
             if st.button("Resources", use_container_width=True, key="resources_mode"):
                 st.session_state.selected_mode = "Resources"
                 st.rerun()
 
-        with col5:
-            if st.button("Support Ticket", use_container_width=True, key="ticket_mode"):
-                st.session_state.selected_mode = "Support Ticket"
-                st.rerun()
-
-        with col6:
-            if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
-                st.session_state.selected_mode = "Travel/Hotel"
-                st.rerun()
-
-        with col7:
-            if st.button("Demo", use_container_width=True, key="demo_mode"):
-                st.session_state.selected_mode = "Demo"
+        with col3:  # Add this after the existing columns
+            if st.button("Checkout", use_container_width=True, key="checkout_mode"):
+                st.session_state.selected_mode = "Checkout"
                 st.rerun()
 
         if st.session_state.selected_mode:
@@ -1698,6 +1782,8 @@ def main():
                 attendance_page()
             elif st.session_state.selected_mode == "Resources":
                 resources_page()
+            elif st.session_state.selected_mode == "Checkout":
+                checkout_page()
             elif st.session_state.selected_mode == "Support Ticket":
                 support_ticket_page()
             elif st.session_state.selected_mode == "Travel/Hotel":
