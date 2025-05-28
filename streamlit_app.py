@@ -1580,7 +1580,7 @@ def add_back_button():
         st.rerun()
 
 def main():
-    # Initialize session_state
+    # 1) Initialize session state
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
     if 'selected_mode' not in st.session_state:
@@ -1588,12 +1588,12 @@ def main():
     if 'employee_name' not in st.session_state:
         st.session_state.employee_name = None
 
-    # --- 1) COOKIE CHECK ON STARTUP ---
+    # 2) COOKIE CHECK ON STARTUP
     cookie_res = streamlit_js_eval(
         js_expressions="""
-        new Promise(resolve => {
-            resolve({ cookie: document.cookie });
-        });
+            new Promise(resolve => {
+                resolve({ cookie: document.cookie });
+            });
         """,
         key="cookie_check"
     ) or {}
@@ -1608,18 +1608,17 @@ def main():
         except Exception:
             pass
 
-    # --- 2) SHOW LOGIN FORM IF NOT AUTHENTICATED ---
+    # 3) SHOW LOGIN FORM IF NOT AUTHENTICATED
     if not st.session_state.authenticated:
         display_login_header()
         employee_names = Person['Employee Name'].tolist()
-
-        col1, col2, col3 = st.columns([1,2,1])
+        col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             name = st.selectbox("Select Your Name", employee_names, key="employee_select")
             passkey = st.text_input("Enter Your Employee Code", type="password", key="passkey_input")
             if st.button("Log in", key="login_button"):
                 if authenticate_employee(name, passkey):
-                    # set a persistent cookie for 1 year and reload
+                    # Set persistent cookie for 1 year and reload page
                     components.html(f"""
                         <script>
                         document.cookie = "auth={name}|{passkey}; path=/; max-age={60*60*24*365}";
@@ -1629,20 +1628,28 @@ def main():
                     return
                 else:
                     st.error("Invalid credentials, please try again.")
-        return
+        return  # stop here until login
 
-    # --- 3) LOGGED-IN UI & MODE SELECTION ---
+    # 4) AUTHENTICATED — MODE SELECTION UI
     st.title("Select Mode")
-    modes = ["Sales","Visit","Attendance","Resources","Support Ticket","Travel/Hotel","Demo"]
+    modes = [
+        ("Sales", "sales_mode"),
+        ("Visit", "visit_mode"),
+        ("Attendance", "attendance_mode"),
+        ("Resources", "resources_mode"),
+        ("Support Ticket", "ticket_mode"),
+        ("Travel/Hotel", "travel_mode"),
+        ("Demo", "demo_mode")
+    ]
     cols = st.columns(len(modes))
-    for c, mode in zip(cols, modes):
-        if c.button(mode, use_container_width=True, key=f"mode_{mode}"):
+    for col, (mode, key) in zip(cols, modes):
+        if col.button(mode, use_container_width=True, key=key):
             st.session_state.selected_mode = mode
-            components.html("<script>window.location.reload();</script>", height=0)
-            return
+            st.rerun()
 
-    # --- 4) LOGOUT BUTTON ---
+    # 5) LOGOUT BUTTON
     if st.button("← Logout", key="logout_button"):
+        # Clear the auth cookie and reload
         components.html("""
             <script>
             document.cookie = "auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
@@ -1651,7 +1658,7 @@ def main():
         """, height=0)
         return
 
-    # --- 5) DISPATCH TO THE SELECTED PAGE (with back button) ---
+    # 6) DISPATCH TO THE SELECTED PAGE
     if st.session_state.selected_mode:
         add_back_button()
         mode = st.session_state.selected_mode
@@ -1669,6 +1676,7 @@ def main():
             travel_hotel_page()
         elif mode == "Demo":
             demo_page()
+
 
 
 
