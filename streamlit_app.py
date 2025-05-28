@@ -278,12 +278,9 @@ ATTENDANCE_SHEET_COLUMNS = [
     "Designation",
     "Date",
     "Status",
-    "Check-in Location Link",
-    "Check-out Location Link",
+    "Location Link",
     "Leave Reason",
     "Check-in Time",
-    "Check-out Time",
-    "Duration (hours)",
     "Check-in Date Time"
 ]
 
@@ -1473,12 +1470,9 @@ def record_attendance(employee_name, status, location_link="", leave_reason=""):
             "Designation": designation,
             "Date": current_date,
             "Status": status,
-            "Check-in Location Link": location_link,
-            "Check-out Location Link": "",
+            "Location Link": location_link,
             "Leave Reason": leave_reason,
             "Check-in Time": check_in_time,
-            "Check-out Time": "",
-            "Duration (hours)": "",
             "Check-in Date Time": current_datetime
         }
         
@@ -1522,104 +1516,6 @@ def authenticate_employee(employee_name, passkey):
         return str(passkey) == str(employee_code)
     except:
         return False
-
-def checkout_page():
-    hourly_location_auto_log(conn, st.session_state.employee_name)
-    st.title("Checkout Management")
-    selected_employee = st.session_state.employee_name
-
-    # Check if user has checked in today
-    try:
-        existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        
-        if existing_data.empty:
-            st.error("Please check in first before checking out")
-            return
-        
-        current_date = get_ist_time().strftime("%d-%m-%Y")
-        employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-        
-        checkin_records = existing_data[
-            (existing_data['Employee Code'] == employee_code) & 
-            (existing_data['Date'] == current_date)
-        ]
-        
-        if checkin_records.empty:
-            st.error("Please check in first before checking out")
-            return
-            
-        if 'Check-out Time' in checkin_records.columns and not checkin_records['Check-out Time'].isna().all():
-            st.warning("You have already checked out for today")
-            return
-    except Exception as e:
-        st.error(f"Error checking attendance records: {str(e)}")
-        return
-
-    st.subheader("Location Verification (Auto)")
-
-    result = streamlit_js_eval(
-        js_expressions="""
-            new Promise((resolve) => {
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                        err => resolve({latitude: null, longitude: null})
-                    );
-                } else {
-                    resolve({latitude: null, longitude: null});
-                }
-            });
-        """,
-        key="geo_checkout"
-    ) or {}
-
-    lat = result.get("latitude")
-    lng = result.get("longitude")
-
-    if lat and lng:
-        gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
-        st.success(f"Fetched Location: [View on Google Maps]({gmaps_link})")
-    else:
-        gmaps_link = ""
-        st.info("Waiting for location permission...")
-
-    if lat and lng and st.button("Check Out", key="checkout_button"):
-        with st.spinner("Recording checkout..."):
-            try:
-                # Update the existing attendance record
-                existing_data = conn.read(worksheet="Attendance", ttl=5)
-                existing_data = existing_data.dropna(how="all")
-                
-                current_date = get_ist_time().strftime("%d-%m-%Y")
-                employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-                
-                # Find the record to update
-                mask = (
-                    (existing_data['Employee Code'] == employee_code) & 
-                    (existing_data['Date'] == current_date)
-                )
-                
-                if not mask.any():
-                    st.error("No check-in record found for today")
-                    return
-                
-                # Update the record
-                existing_data.loc[mask, 'Check-out Time'] = get_ist_time().strftime("%H:%M:%S")
-                existing_data.loc[mask, 'Check-out Location Link'] = gmaps_link
-                
-                # Calculate duration
-                checkin_time = pd.to_datetime(existing_data.loc[mask, 'Check-in Time'].iloc[0])
-                checkout_time = pd.to_datetime(get_ist_time().strftime("%H:%M:%S"))
-                duration = (checkout_time - checkin_time).total_seconds() / 3600  # in hours
-                existing_data.loc[mask, 'Duration (hours)'] = round(duration, 2)
-                
-                # Write back to sheet
-                conn.update(worksheet="Attendance", data=existing_data)
-                st.success("Checkout recorded successfully!")
-                st.balloons()
-            except Exception as e:
-                st.error(f"Failed to record checkout: {str(e)}")
 
 def resources_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
@@ -1684,6 +1580,7 @@ def add_back_button():
         st.rerun()
 
 def main():
+    # Initialize session state
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
     if 'selected_mode' not in st.session_state:
@@ -1691,105 +1588,91 @@ def main():
     if 'employee_name' not in st.session_state:
         st.session_state.employee_name = None
 
-    if not st.session_state.authenticated:
-        # Display the centered logo and heading
-        display_login_header()
+    # --- 1) COOKIE CHECK ON STARTUP ---
+    cookie_res = streamlit_js_eval(
+        js_expressions="""
+        new Promise(resolve => {
+            resolve({ cookie: document.cookie });
+        });
+        """,
+        key="cookie_check"
+    ) or {}
+    cookie_str = cookie_res.get("cookie", "")
+    if not st.session_state.authenticated and "auth=" in cookie_str:
+        auth_val = cookie_str.split("auth=")[1].split(";")[0]
+        try:
+            name, code = auth_val.split("|", 1)
+            if authenticate_employee(name, code):
+                st.session_state.authenticated = True
+                st.session_state.employee_name = name
+        except Exception:
+            pass
 
+    # --- 2) SHOW LOGIN FORM IF NOT AUTHENTICATED ---
+    if not st.session_state.authenticated:
+        display_login_header()
         employee_names = Person['Employee Name'].tolist()
 
-        # Create centered form
         form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
-
         with form_col2:
-            with st.container():
-                employee_name = st.selectbox(
-                    "Select Your Name", 
-                    employee_names, 
-                    key="employee_select"
-                )
-                passkey = st.text_input(
-                    "Enter Your Employee Code", 
-                    type="password", 
-                    key="passkey_input"
-                )
+            name = st.selectbox("Select Your Name", employee_names, key="employee_select")
+            passkey = st.text_input("Enter Your Employee Code", type="password", key="passkey_input")
+            if st.button("Log in", key="login_button"):
+                if authenticate_employee(name, passkey):
+                    # set persistent cookie for 1 year
+                    components.html(f"""
+                        <script>
+                        document.cookie = "auth={name}|{passkey}; path=/; max-age={60*60*24*365}";
+                        </script>
+                    """, height=0)
+                    st.session_state.authenticated = True
+                    st.session_state.employee_name = name
+                    st.experimental_rerun()
+                else:
+                    st.error("Invalid credentials, please try again.")
+        return
 
-                login_button = st.button(
-                    "Log in", 
-                    key="login_button",
-                    use_container_width=True
-                )
+    # --- 3) LOGGED-IN UI & MODE SELECTION ---
+    st.title("Select Mode")
+    modes = ["Sales","Visit","Attendance","Resources","Support Ticket","Travel/Hotel","Demo"]
+    cols = st.columns(len(modes))
+    for c, mode in zip(cols, modes):
+        if c.button(mode, use_container_width=True, key=f"mode_{mode}"):
+            st.session_state.selected_mode = mode
+            st.experimental_rerun()
 
-                if login_button:
-                    if authenticate_employee(employee_name, passkey):
-                        # Immediately fetch and log location after login
-                        result = streamlit_js_eval(
-                            js_expressions="""
-                                new Promise((resolve) => {
-                                    if (navigator.geolocation) {
-                                        navigator.geolocation.getCurrentPosition(
-                                            pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                                            err => resolve({latitude: null, longitude: null})
-                                        );
-                                    } else {
-                                        resolve({latitude: null, longitude: null});
-                                    }
-                                });
-                            """,
-                            key=f"geo_login_{employee_name}_{int(time.time())}"
-                        ) or {}
+    # --- LOGOUT BUTTON ---
+    if st.button("← Logout", key="logout_button"):
+        # clear the auth cookie
+        components.html("""
+            <script>
+            document.cookie = "auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            </script>
+        """, height=0)
+        st.session_state.authenticated = False
+        st.session_state.selected_mode = None
+        st.session_state.employee_name = None
+        st.experimental_rerun()
 
-                        lat = result.get("latitude")
-                        lng = result.get("longitude")
-                        if lat and lng:
-                            log_location_history(conn, employee_name, lat, lng)
-                            gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
-                            st.success(f"Login location logged: [View on Google Maps]({gmaps_link})")
-                            # Brief pause for user to see the message
-                            time.sleep(1.5)
-                        st.session_state.authenticated = True
-                        st.session_state.employee_name = employee_name
-                        st.rerun()
-                    else:
-                        st.error("Invalid Password. Please try again.")
-    else:
-        # Show option boxes after login
-        st.title("Select Mode")
-        col1, col2, col3 = st.columns(3)
+    # --- DISPATCH TO SELECTED PAGE ---
+    if st.session_state.selected_mode:
+        add_back_button()
+        mode = st.session_state.selected_mode
+        if mode == "Sales":
+            sales_page()
+        elif mode == "Visit":
+            visit_page()
+        elif mode == "Attendance":
+            attendance_page()
+        elif mode == "Resources":
+            resources_page()
+        elif mode == "Support Ticket":
+            support_ticket_page()
+        elif mode == "Travel/Hotel":
+            travel_hotel_page()
+        elif mode == "Demo":
+            demo_page()
 
-        with col1:
-            if st.button("Attendance", use_container_width=True, key="attendance_mode"):
-                st.session_state.selected_mode = "Attendance"
-                st.rerun()
-
-        with col2:
-            if st.button("Resources", use_container_width=True, key="resources_mode"):
-                st.session_state.selected_mode = "Resources"
-                st.rerun()
-
-        with col3:  # Add this after the existing columns
-            if st.button("Checkout", use_container_width=True, key="checkout_mode"):
-                st.session_state.selected_mode = "Checkout"
-                st.rerun()
-
-        if st.session_state.selected_mode:
-            add_back_button()
-
-            if st.session_state.selected_mode == "Sales":
-                sales_page()
-            elif st.session_state.selected_mode == "Visit":
-                visit_page()
-            elif st.session_state.selected_mode == "Attendance":
-                attendance_page()
-            elif st.session_state.selected_mode == "Resources":
-                resources_page()
-            elif st.session_state.selected_mode == "Checkout":
-                checkout_page()
-            elif st.session_state.selected_mode == "Support Ticket":
-                support_ticket_page()
-            elif st.session_state.selected_mode == "Travel/Hotel":
-                travel_hotel_page()
-            elif st.session_state.selected_mode == "Demo":
-                demo_page()
 
 
 def sales_page():
