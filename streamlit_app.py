@@ -1580,7 +1580,7 @@ def add_back_button():
         st.rerun()
 
 def main():
-    # Initialize session state
+    # Initialize session_state
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
     if 'selected_mode' not in st.session_state:
@@ -1613,21 +1613,20 @@ def main():
         display_login_header()
         employee_names = Person['Employee Name'].tolist()
 
-        form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
-        with form_col2:
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
             name = st.selectbox("Select Your Name", employee_names, key="employee_select")
             passkey = st.text_input("Enter Your Employee Code", type="password", key="passkey_input")
             if st.button("Log in", key="login_button"):
                 if authenticate_employee(name, passkey):
-                    # set persistent cookie for 1 year
+                    # set a persistent cookie for 1 year and reload
                     components.html(f"""
                         <script>
                         document.cookie = "auth={name}|{passkey}; path=/; max-age={60*60*24*365}";
+                        window.location.reload();
                         </script>
                     """, height=0)
-                    st.session_state.authenticated = True
-                    st.session_state.employee_name = name
-                    st.experimental_rerun()
+                    return
                 else:
                     st.error("Invalid credentials, please try again.")
         return
@@ -1639,22 +1638,20 @@ def main():
     for c, mode in zip(cols, modes):
         if c.button(mode, use_container_width=True, key=f"mode_{mode}"):
             st.session_state.selected_mode = mode
-            st.experimental_rerun()
+            components.html("<script>window.location.reload();</script>", height=0)
+            return
 
-    # --- LOGOUT BUTTON ---
+    # --- 4) LOGOUT BUTTON ---
     if st.button("← Logout", key="logout_button"):
-        # clear the auth cookie
         components.html("""
             <script>
             document.cookie = "auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            window.location.reload();
             </script>
         """, height=0)
-        st.session_state.authenticated = False
-        st.session_state.selected_mode = None
-        st.session_state.employee_name = None
-        st.experimental_rerun()
+        return
 
-    # --- DISPATCH TO SELECTED PAGE ---
+    # --- 5) DISPATCH TO THE SELECTED PAGE (with back button) ---
     if st.session_state.selected_mode:
         add_back_button()
         mode = st.session_state.selected_mode
