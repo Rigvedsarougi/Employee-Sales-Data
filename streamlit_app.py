@@ -2266,7 +2266,7 @@ def attendance_page():
     # Add the new station dropdown
     station_type = st.selectbox(
         "Station Type",
-        ["In Station", "Out Station"],
+        ["HQ Location", "Out Station"],
         key="station_type"
     )
 
