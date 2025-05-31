@@ -1471,7 +1471,7 @@ def record_attendance(employee_name, status, location_link="", leave_reason=""):
             "Date": current_date,
             "Status": status,
             "Location Link": location_link,
-            "Leave Reason": leave_reason,
+            "Leave Reason": leave_reason,  # This now includes station type
             "Check-in Time": check_in_time,
             "Check-in Date Time": current_datetime
         }
@@ -1580,7 +1580,6 @@ def add_back_button():
         st.rerun()
 
 def main():
-    # 1) Initialize session state
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
     if 'selected_mode' not in st.session_state:
@@ -1588,103 +1587,123 @@ def main():
     if 'employee_name' not in st.session_state:
         st.session_state.employee_name = None
 
-    # 2) COOKIE CHECK ON STARTUP
-    cookie_res = streamlit_js_eval(
-        js_expressions="""
-        new Promise(resolve => {
-            resolve({ cookie: document.cookie });
-        });
-        """,
-        key="cookie_check"
-    ) or {}
-    cookie_str = cookie_res.get("cookie", "")
-    if not st.session_state.authenticated and "auth=" in cookie_str:
-        auth_val = cookie_str.split("auth=")[1].split(";")[0]
-        try:
-            name, code = auth_val.split("|", 1)
-            if authenticate_employee(name, code):
-                st.session_state.authenticated = True
-                st.session_state.employee_name = name
-        except Exception:
-            pass
-
-    # 3) LOGIN FORM IF NOT AUTHENTICATED
     if not st.session_state.authenticated:
+        # Display the centered logo and heading
         display_login_header()
+
         employee_names = Person['Employee Name'].tolist()
-        col1, col2, col3 = st.columns([1, 2, 1])
+
+        # Create centered form
+        form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
+
+        with form_col2:
+            with st.container():
+                employee_name = st.selectbox(
+                    "Select Your Name", 
+                    employee_names, 
+                    key="employee_select"
+                )
+                passkey = st.text_input(
+                    "Enter Your Employee Code", 
+                    type="password", 
+                    key="passkey_input"
+                )
+
+                login_button = st.button(
+                    "Log in", 
+                    key="login_button",
+                    use_container_width=True
+                )
+
+                if login_button:
+                    if authenticate_employee(employee_name, passkey):
+                        # Immediately fetch and log location after login
+                        result = streamlit_js_eval(
+                            js_expressions="""
+                                new Promise((resolve) => {
+                                    if (navigator.geolocation) {
+                                        navigator.geolocation.getCurrentPosition(
+                                            pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                                            err => resolve({latitude: null, longitude: null})
+                                        );
+                                    } else {
+                                        resolve({latitude: null, longitude: null});
+                                    }
+                                });
+                            """,
+                            key=f"geo_login_{employee_name}_{int(time.time())}"
+                        ) or {}
+
+                        lat = result.get("latitude")
+                        lng = result.get("longitude")
+                        if lat and lng:
+                            log_location_history(conn, employee_name, lat, lng)
+                            gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
+                            st.success(f"Login location logged: [View on Google Maps]({gmaps_link})")
+                            # Brief pause for user to see the message
+                            time.sleep(1.5)
+                        st.session_state.authenticated = True
+                        st.session_state.employee_name = employee_name
+                        st.rerun()
+                    else:
+                        st.error("Invalid Password. Please try again.")
+    else:
+        # Show option boxes after login
+        st.title("Select Mode")
+        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+
+        with col1:
+            if st.button("Sales", use_container_width=True, key="sales_mode"):
+                st.session_state.selected_mode = "Sales"
+                st.rerun()
+
         with col2:
-            name = st.selectbox("Select Your Name", employee_names, key="employee_select")
-            passkey = st.text_input("Enter Your Employee Code", type="password", key="passkey_input")
-            if st.button("Log in", key="login_button"):
-                if authenticate_employee(name, passkey):
-                    # set session state and persistent cookie, then reload
-                    st.session_state.employee_name = name
-                    st.session_state.authenticated = True
-                    st.session_state.selected_mode = None
-                    components.html(f"""
-                        <script>
-                        document.cookie = "auth={name}|{passkey}; path=/; max-age={60*60*24*365}";
-                        window.location.reload();
-                        </script>
-                    """, height=0)
-                    return
-                else:
-                    st.error("Invalid credentials, please try again.")
-        return  # halt here until authenticated
+            if st.button("Visit", use_container_width=True, key="visit_mode"):
+                st.session_state.selected_mode = "Visit"
+                st.rerun()
 
-    # 4) AUTHENTICATED — MODE SELECTION UI
-    st.title("Select Mode")
-    modes = [
-        ("Sales", "sales_mode"),
-        ("Visit", "visit_mode"),
-        ("Attendance", "attendance_mode"),
-        ("Resources", "resources_mode"),
-        ("Support Ticket", "ticket_mode"),
-        ("Travel/Hotel", "travel_mode"),
-        ("Demo", "demo_mode")
-    ]
-    cols = st.columns(len(modes))
-    for col, (mode, key) in zip(cols, modes):
-        if col.button(mode, use_container_width=True, key=key):
-            st.session_state.selected_mode = mode
-            components.html("<script>window.location.reload();</script>", height=0)
-            return
+        with col3:
+            if st.button("Attendance", use_container_width=True, key="attendance_mode"):
+                st.session_state.selected_mode = "Attendance"
+                st.rerun()
 
-    # 5) LOGOUT BUTTON
-    if st.button("← Logout", key="logout_button"):
-        # clear session state and cookie, then reload
-        st.session_state.authenticated = False
-        st.session_state.employee_name = None
-        st.session_state.selected_mode = None
-        components.html("""
-            <script>
-            document.cookie = "auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-            window.location.reload();
-            </script>
-        """, height=0)
-        return
+        with col4:
+            if st.button("Resources", use_container_width=True, key="resources_mode"):
+                st.session_state.selected_mode = "Resources"
+                st.rerun()
 
-    # 6) DISPATCH TO THE SELECTED PAGE
-    if st.session_state.selected_mode:
-        mode = st.session_state.selected_mode
-        if mode == "Sales":
-            sales_page()
-        elif mode == "Visit":
-            visit_page()
-        elif mode == "Attendance":
-            attendance_page()
-        elif mode == "Resources":
-            resources_page()
-        elif mode == "Support Ticket":
-            support_ticket_page()
-        elif mode == "Travel/Hotel":
-            travel_hotel_page()
-        elif mode == "Demo":
-            demo_page()
+        with col5:
+            if st.button("Support Ticket", use_container_width=True, key="ticket_mode"):
+                st.session_state.selected_mode = "Support Ticket"
+                st.rerun()
 
+        with col6:
+            if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
+                st.session_state.selected_mode = "Travel/Hotel"
+                st.rerun()
 
+        with col7:
+            if st.button("Demo", use_container_width=True, key="demo_mode"):
+                st.session_state.selected_mode = "Demo"
+                st.rerun()
 
+        if st.session_state.selected_mode:
+            add_back_button()
+
+            if st.session_state.selected_mode == "Sales":
+                sales_page()
+            elif st.session_state.selected_mode == "Visit":
+                visit_page()
+            elif st.session_state.selected_mode == "Attendance":
+                attendance_page()
+            elif st.session_state.selected_mode == "Resources":
+                resources_page()
+            elif st.session_state.selected_mode == "Support Ticket":
+                support_ticket_page()
+            elif st.session_state.selected_mode == "Travel/Hotel":
+                travel_hotel_page()
+            elif st.session_state.selected_mode == "Demo":
+                demo_page()
 
 
 def sales_page():
@@ -2244,6 +2263,13 @@ def attendance_page():
     st.subheader("Attendance Status")
     status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
 
+    # Add the new station dropdown
+    station_type = st.selectbox(
+        "Station Type",
+        ["In Station", "Out Station"],
+        key="station_type"
+    )
+
     if status in ["Present", "Half Day"]:
         st.subheader("Location Verification (Auto)")
 
@@ -2275,10 +2301,13 @@ def attendance_page():
 
         if lat and lng and st.button("Mark Attendance", key="mark_attendance_button"):
             with st.spinner("Recording attendance..."):
+                # Include station type in the remarks
+                remarks = f"{station_type}"
                 attendance_id, error = record_attendance(
                     selected_employee,
                     status,
-                    location_link=gmaps_link
+                    location_link=gmaps_link,
+                    leave_reason=remarks  # Using leave_reason field to store station type
                 )
                 if error:
                     st.error(f"Failed to record attendance: {error}")
@@ -2297,7 +2326,8 @@ def attendance_page():
             if not leave_reason:
                 st.error("Please provide a reason for your leave")
             else:
-                full_reason = f"{leave_type}: {leave_reason}"
+                # Include station type in the leave reason
+                full_reason = f"{station_type} - {leave_type}: {leave_reason}"
                 with st.spinner("Submitting leave request..."):
                     attendance_id, error = record_attendance(
                         selected_employee,
