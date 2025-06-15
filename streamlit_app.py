@@ -12,6 +12,7 @@ import streamlit.components.v1 as components
 from streamlit_js_eval import streamlit_js_eval
 import time
 
+st.set_page_config(page_title="Location Logger", layout="centered")
 # Establish connections
 conn = st.connection("gsheets", type=GSheetsConnection)  # Original connection for Attendance/Location
 history_conn = st.connection("history_gsheets", type=GSheetsConnection)  # New connection for history data
