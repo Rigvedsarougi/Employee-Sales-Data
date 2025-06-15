@@ -13,6 +13,34 @@ from streamlit_js_eval import streamlit_js_eval
 import time
 
 st.set_page_config(page_title="Location Logger", layout="centered")
+
+st.set_page_config(page_title="Location Logger", layout="centered")
+    
+hide_streamlit_style = """
+        <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
+        </style>
+    """
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+    
+hide_footer_style = """
+        <style>
+        footer {
+            visibility: hidden;
+        }
+        footer:after {
+            content: '';
+            display: none;
+        }
+        .css-15tx938.e8zbici2 {
+            display: none !important;
+        }
+        </style>
+    """
+st.markdown(hide_footer_style, unsafe_allow_html=True)
 # Establish connections
 conn = st.connection("gsheets", type=GSheetsConnection)  # Original connection for Attendance/Location
 history_conn = st.connection("history_gsheets", type=GSheetsConnection)  # New connection for history data
@@ -2026,33 +2054,5 @@ def main():
             elif st.session_state.selected_mode == "Demo":
                 demo_page()
 
-if __name__ == "__main__":
-    st.set_page_config(page_title="Location Logger", layout="centered")
-    
-    hide_streamlit_style = """
-        <style>
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
-        .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
-        </style>
-    """
-    st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-    
-    hide_footer_style = """
-        <style>
-        footer {
-            visibility: hidden;
-        }
-        footer:after {
-            content: '';
-            display: none;
-        }
-        .css-15tx938.e8zbici2 {
-            display: none !important;
-        }
-        </style>
-    """
-    st.markdown(hide_footer_style, unsafe_allow_html=True)
-    
+if __name__ == "__main__":   
     main()
