@@ -950,9 +950,7 @@ def demo_page():
                 success, error = log_demo_to_gsheet(conn, pd.DataFrame([demo_data], columns=DEMO_SHEET_COLUMNS))
                 if success:
                     st.success(f"Demo {demo_id} recorded successfully!")
-                    with st.spinner("Processing completed..."):
-                        time.sleep(2)
-                    st.success("Demo recorded successfully!")
+                    
                 else:
                     st.error(f"Failed to record demo: {error}")
             else:
@@ -1147,9 +1145,7 @@ def support_ticket_page():
                             **Ticket ID:** {ticket_id}
                             **Priority:** {priority}
                             """)
-                            with st.spinner("Processing completed..."):
-                                time.sleep(2)
-                            st.success("Ticket submitted successfully!")
+                            
                         else:
                             st.error(f"Failed to submit ticket: {error}")
     
@@ -1352,9 +1348,7 @@ def travel_hotel_page():
                             Your travel request has been submitted successfully! 
                             **Request ID:** {request_id}
                             """)
-                            with st.spinner("Processing completed..."):
-                                time.sleep(2)
-                            st.success("Request submitted successfully!")
+                            
                         else:
                             st.error(f"Failed to submit request: {error}")
     
@@ -1445,9 +1439,7 @@ def travel_hotel_page():
                             Your hotel booking request has been submitted successfully! 
                             **Request ID:** {request_id}
                             """)
-                            with st.spinner("Processing completed..."):
-                                time.sleep(2)
-                            st.success("Request submitted successfully!")
+                            
                         else:
                             st.error(f"Failed to submit request: {error}")
     
@@ -1714,9 +1706,7 @@ def sales_page():
                         key=f"download_{invoice_number}"
                     )
                 st.success(f"Invoice {invoice_number} generated successfully!")
-                with st.spinner("Processing completed..."):
-                    time.sleep(2)
-                st.success("Invoice generated successfully!")
+                
             else:
                 st.error("Please fill all required fields and select products.")
 
@@ -1943,9 +1933,7 @@ def sales_page():
                             )
                         
                         st.success("Invoice regenerated successfully with original date!")
-                        with st.spinner("Processing completed..."):
-                            time.sleep(2)
-                        st.success("Invoice generated successfully!")
+                        
                     except Exception as e:
                         st.error(f"Error regenerating invoice: {e}")
 
@@ -2159,9 +2147,7 @@ def attendance_page():
                 else:
                     st.session_state.attendance_recorded = True  # Update session state
                     st.success(f"Attendance recorded successfully! ID: {attendance_id}")
-                    with st.spinner("Processing completed..."):
-                        time.sleep(2)
-                    st.success("Attendance recorded successfully!")
+                    
                     time.sleep(2)  # Give time to see the success message
                     st.rerun()  # Refresh to show the updated status
 
