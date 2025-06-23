@@ -2059,9 +2059,41 @@ def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
 
+    # Check if attendance already recorded today
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
-        return
+        
+        # Show existing attendance record
+        try:
+            existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
+            existing_data = existing_data.dropna(how='all')
+            
+            current_date = get_ist_time().strftime("%d-%m-%Y")
+            employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+            
+            today_record = existing_data[
+                (existing_data['Employee Code'] == employee_code) & 
+                (existing_data['Date'] == current_date)
+            ].iloc[0]
+            
+            st.subheader("Your Attendance Record for Today")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Status", today_record['Status'])
+                st.metric("Date", today_record['Date'])
+            with col2:
+                st.metric("Check-in Time", today_record['Check-in Time'])
+                if today_record['Status'] == "Leave":
+                    st.metric("Leave Reason", today_record['Leave Reason'])
+            
+            if today_record.get('Location Link'):
+                st.markdown(f"[View Check-in Location]({today_record['Location Link']})")
+            
+            return  # Exit the function to prevent further actions
+        
+        except Exception as e:
+            st.error(f"Error retrieving attendance record: {str(e)}")
+            return
 
     st.subheader("Attendance Status")
     status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
@@ -2113,16 +2145,19 @@ def attendance_page():
                 if error:
                     st.error(f"Failed to record attendance: {error}")
                 else:
+                    st.session_state.attendance_recorded = True  # Update session state
                     st.success(f"Attendance recorded successfully! ID: {attendance_id}")
                     st.balloons()
+                    time.sleep(2)  # Give time to see the success message
+                    st.rerun()  # Refresh to show the updated status
 
     else:
         st.subheader("Leave Details")
         leave_types = ["Sick Leave", "Personal Leave", "Vacation", "Other"]
         leave_type = st.selectbox("Leave Type", leave_types, key="leave_type")
         leave_reason = st.text_area("Reason for Leave",
-                                   placeholder="Please provide details about your leave",
-                                   key="leave_reason")
+                                  placeholder="Please provide details about your leave",
+                                  key="leave_reason")
         if st.button("Submit Leave Request", key="submit_leave_button"):
             if not leave_reason:
                 st.error("Please provide a reason for your leave")
@@ -2137,7 +2172,10 @@ def attendance_page():
                     if error:
                         st.error(f"Failed to submit leave request: {error}")
                     else:
+                        st.session_state.attendance_recorded = True  # Update session state
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
+                        time.sleep(2)  # Give time to see the success message
+                        st.rerun()  # Refresh to show the updated status
 
 def main():
     if not cookies.ready():
