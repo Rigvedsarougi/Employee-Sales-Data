@@ -21,3 +21,6 @@ bokeh
 googlemaps
 geopy
 streamlit_autorefresh
+streamlit-cookies-manager
+extra-streamlit-components
+python-dotenv
