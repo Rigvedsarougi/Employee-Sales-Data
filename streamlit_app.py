@@ -8,16 +8,9 @@ import uuid
 from PIL import Image
 from datetime import datetime, time, timedelta
 import pytz
-
-import streamlit as st
 import streamlit.components.v1 as components
 from streamlit_js_eval import streamlit_js_eval
-from datetime import datetime
-import pytz
 import time
-import pandas as pd
-
-
 
 def log_location_history(conn, employee_name, lat, lng):
     employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
@@ -46,7 +39,6 @@ def log_location_history(conn, employee_name, lat, lng):
         return True, None
     except Exception as e:
         return False, str(e)
-
 
 def hourly_location_auto_log(conn, selected_employee):
     if not selected_employee:
@@ -81,7 +73,6 @@ def hourly_location_auto_log(conn, selected_employee):
 st.set_page_config(page_title="Location Logger", layout="centered")
 
 def get_ist_time():
-    """Get current time in Indian Standard Time (IST)"""
     utc_now = datetime.now(pytz.utc)
     ist = pytz.timezone('Asia/Kolkata')
     return utc_now.astimezone(ist)
@@ -105,8 +96,6 @@ def display_login_header():
         </div>
         """, unsafe_allow_html=True)
 
-
-
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -126,17 +115,14 @@ hide_footer_style = """
         content: '';
         display: none;
     }
-    .css-15tx938.e8zbici2 {  /* This class targets the footer in some Streamlit builds */
+    .css-15tx938.e8zbici2 {
         display: none !important;
     }
     </style>
 """
-
 st.markdown(hide_footer_style, unsafe_allow_html=True)
 
-
 def validate_data_before_write(df, expected_columns):
-    """Validate data structure before writing to Google Sheets"""
     if not isinstance(df, pd.DataFrame):
         raise ValueError("Data must be a pandas DataFrame")
     
@@ -150,7 +136,6 @@ def validate_data_before_write(df, expected_columns):
     return True
 
 def backup_sheet(conn, worksheet_name):
-    """Create a timestamped backup of the worksheet"""
     try:
         data = conn.read(worksheet=worksheet_name, ttl=1)
         timestamp = get_ist_time().strftime("%Y%m%d_%H%M%S")
@@ -160,18 +145,14 @@ def backup_sheet(conn, worksheet_name):
         st.error(f"Warning: Failed to create backup - {str(e)}")
 
 def attempt_data_recovery(conn, worksheet_name):
-    """Attempt to recover from the most recent backup"""
     try:
-        # Get list of all worksheets
         all_sheets = conn.list_worksheets()
         backups = [s for s in all_sheets if s.startswith(f"{worksheet_name}_backup")]
         
         if backups:
-            # Sort backups by timestamp (newest first)
             backups.sort(reverse=True)
             latest_backup = backups[0]
             
-            # Restore from backup
             backup_data = conn.read(worksheet=latest_backup)
             conn.update(worksheet=worksheet_name, data=backup_data)
             return True
@@ -181,7 +162,6 @@ def attempt_data_recovery(conn, worksheet_name):
         return False
 
 def safe_sheet_operation(operation, *args, **kwargs):
-    """Wrapper for safe sheet operations with retry logic"""
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -194,9 +174,8 @@ def safe_sheet_operation(operation, *args, **kwargs):
                     if attempt_data_recovery(conn, worksheet_name):
                         st.success("Data recovery attempted from backup")
                 raise
-            time.sleep(1 * (attempt + 1))  # Exponential backoff
+            time.sleep(1 * (attempt + 1))
 
-# Constants
 SALES_SHEET_COLUMNS = [
     "Invoice Number",
     "Invoice Date",
@@ -236,9 +215,10 @@ SALES_SHEET_COLUMNS = [
     "Employee Selfie Path",
     "Invoice PDF Path",
     "Remarks",
-    "Delivery Status"  # Added new column for delivery status
+    "Delivery Status"
 ]
 
+SALES_HISTORY_SHEET = "SalesHistory"
 LOCATION_HISTORY_COLUMNS = [
     "Employee Name",
     "Employee Code",
@@ -271,6 +251,7 @@ VISIT_SHEET_COLUMNS = [
     "Remarks"
 ]
 
+VISIT_HISTORY_SHEET = "VisitHistory"
 ATTENDANCE_SHEET_COLUMNS = [
     "Attendance ID",
     "Employee Name",
@@ -284,7 +265,6 @@ ATTENDANCE_SHEET_COLUMNS = [
     "Check-in Date Time"
 ]
 
-# Add these constants at the top of app.py with other constants
 TICKET_SHEET_COLUMNS = [
     "Ticket ID",
     "Raised By (Employee Name)",
@@ -303,6 +283,7 @@ TICKET_SHEET_COLUMNS = [
     "Priority"
 ]
 
+TICKET_HISTORY_SHEET = "TicketHistory"
 TRAVEL_HOTEL_COLUMNS = [
     "Request ID",
     "Request Type",
@@ -325,6 +306,7 @@ TRAVEL_HOTEL_COLUMNS = [
     "Time Requested"
 ]
 
+TRAVEL_HISTORY_SHEET = "TravelHistory"
 DEMO_SHEET_COLUMNS = [
     "Demo ID",
     "Employee Name",
@@ -349,7 +331,7 @@ DEMO_SHEET_COLUMNS = [
     "Quantities"
 ]
 
-
+DEMO_HISTORY_SHEET = "DemoHistory"
 TICKET_CATEGORIES = [
     "HR Department",
     "MIS & Back Office",
@@ -366,16 +348,13 @@ PRIORITY_LEVELS = ["Low", "Medium", "High", "Critical"]
 TRAVEL_MODES = ["Bus", "Train", "Flight", "Taxi", "Other"]
 REQUEST_TYPES = ["Hotel", "Travel", "Travel & Hotel"]
 
-# Establishing a Google Sheets connection
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Load data
 Products = pd.read_csv('Invoice - Products.csv')
 Outlet = pd.read_csv('Invoice - Outlet.csv')
 Person = pd.read_csv('Invoice - Person.csv')
 Distributors = pd.read_csv('Invoice - Distributors.csv')
 
-# Company Details with ALLGEN TRADING logo
 company_name = "BIOLUME SKIN SCIENCE PRIVATE LIMITED"
 company_address = """Ground Floor Rampal Awana Complex,
 Rampal Awana Complex, Indra Market,
@@ -391,13 +370,11 @@ Prices, taxes, and availability are subject to change. Final billing may vary.
 Goods/services will be delivered only after confirmation and payment. No legal obligation is created by this document.
 """
 
-# Create directories for storing uploads
 os.makedirs("employee_selfies", exist_ok=True)
 os.makedirs("payment_receipts", exist_ok=True)
 os.makedirs("invoices", exist_ok=True)
 os.makedirs("visit_selfies", exist_ok=True)
 
-# Custom PDF class
 class PDF(FPDF):
     def header(self):
         if company_logo:
@@ -440,6 +417,457 @@ def save_uploaded_file(uploaded_file, folder):
         return file_path
     return None
 
+def log_sales_to_gsheet(conn, sales_data):
+    try:
+        existing_sales_data = conn.read(worksheet="Sales", ttl=5)
+        existing_sales_data = existing_sales_data.dropna(how='all')
+        
+        existing_history = conn.read(worksheet=SALES_HISTORY_SHEET, ttl=5)
+        existing_history = existing_history.dropna(how='all')
+        
+        sales_data = sales_data.reindex(columns=SALES_SHEET_COLUMNS)
+        
+        updated_sales_data = pd.concat([existing_sales_data, sales_data], ignore_index=True)
+        updated_sales_data = updated_sales_data.drop_duplicates(subset=["Invoice Number", "Product Name"], keep="last")
+        
+        updated_history = pd.concat([existing_history, sales_data], ignore_index=True)
+        
+        conn.update(worksheet="Sales", data=updated_sales_data)
+        conn.update(worksheet=SALES_HISTORY_SHEET, data=updated_history)
+        st.success("Sales data successfully logged to Google Sheets!")
+    except Exception as e:
+        st.error(f"Error logging sales data: {e}")
+        st.stop()
+
+def update_delivery_status(conn, invoice_number, product_name, new_status):
+    try:
+        sales_data = conn.read(worksheet="Sales", ttl=5)
+        sales_data = sales_data.dropna(how='all')
+        
+        mask = (sales_data['Invoice Number'] == invoice_number) & (sales_data['Product Name'] == product_name)
+        sales_data.loc[mask, 'Delivery Status'] = new_status
+        
+        conn.update(worksheet="Sales", data=sales_data)
+        return True
+    except Exception as e:
+        st.error(f"Error updating delivery status: {e}")
+        return False
+
+def log_visit_to_gsheet(conn, visit_data):
+    try:
+        existing_visit_data = conn.read(worksheet="Visits", ttl=5)
+        existing_visit_data = existing_visit_data.dropna(how='all')
+        
+        existing_history = conn.read(worksheet=VISIT_HISTORY_SHEET, ttl=5)
+        existing_history = existing_history.dropna(how='all')
+        
+        visit_data = visit_data.reindex(columns=VISIT_SHEET_COLUMNS)
+        
+        updated_visit_data = pd.concat([existing_visit_data, visit_data], ignore_index=True)
+        updated_visit_data = updated_visit_data.drop_duplicates(subset=["Visit ID"], keep="last")
+        
+        updated_history = pd.concat([existing_history, visit_data], ignore_index=True)
+        
+        conn.update(worksheet="Visits", data=updated_visit_data)
+        conn.update(worksheet=VISIT_HISTORY_SHEET, data=updated_history)
+        st.success("Visit data successfully logged to Google Sheets!")
+    except Exception as e:
+        st.error(f"Error logging visit data: {e}")
+        st.stop()
+
+def log_attendance_to_gsheet(conn, attendance_data):
+    try:
+        existing_data = conn.read(worksheet="Attendance", ttl=5)
+        existing_data = existing_data.dropna(how='all')
+        
+        attendance_data = attendance_data.reindex(columns=ATTENDANCE_SHEET_COLUMNS)
+        
+        updated_data = pd.concat([existing_data, attendance_data], ignore_index=True)
+        updated_data = updated_data.drop_duplicates(subset=["Attendance ID"], keep="last")
+        
+        conn.update(worksheet="Attendance", data=updated_data)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+def log_ticket_to_gsheet(conn, ticket_data):
+    try:
+        existing_data = conn.read(worksheet="Tickets", usecols=list(range(len(TICKET_SHEET_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how='all')
+        
+        existing_history = conn.read(worksheet=TICKET_HISTORY_SHEET, ttl=5)
+        existing_history = existing_history.dropna(how='all')
+        
+        updated_data = pd.concat([existing_data, ticket_data], ignore_index=True)
+        updated_history = pd.concat([existing_history, ticket_data], ignore_index=True)
+        
+        conn.update(worksheet="Tickets", data=updated_data)
+        conn.update(worksheet=TICKET_HISTORY_SHEET, data=updated_history)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+def log_travel_hotel_request(conn, request_data):
+    try:
+        existing_data = conn.read(worksheet="TravelHotelRequests", usecols=list(range(len(TRAVEL_HOTEL_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how='all')
+        
+        existing_history = conn.read(worksheet=TRAVEL_HISTORY_SHEET, ttl=5)
+        existing_history = existing_history.dropna(how='all')
+        
+        updated_data = pd.concat([existing_data, request_data], ignore_index=True)
+        updated_history = pd.concat([existing_history, request_data], ignore_index=True)
+        
+        conn.update(worksheet="TravelHotelRequests", data=updated_data)
+        conn.update(worksheet=TRAVEL_HISTORY_SHEET, data=updated_history)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+def log_demo_to_gsheet(conn, demo_data):
+    try:
+        existing_data = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how='all')
+        
+        existing_history = conn.read(worksheet=DEMO_HISTORY_SHEET, ttl=5)
+        existing_history = existing_history.dropna(how='all')
+        
+        updated_data = pd.concat([existing_data, demo_data], ignore_index=True)
+        updated_history = pd.concat([existing_history, demo_data], ignore_index=True)
+        
+        conn.update(worksheet="Demos", data=updated_data)
+        conn.update(worksheet=DEMO_HISTORY_SHEET, data=updated_history)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, product_discounts,
+                    discount_category, employee_name, payment_status, amount_paid, employee_selfie_path, payment_receipt_path, invoice_number,
+                    transaction_type, distributor_firm_name="", distributor_id="", distributor_contact_person="",
+                    distributor_contact_number="", distributor_email="", distributor_territory="", remarks="", invoice_date=None):
+    pdf = PDF()
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    current_date = invoice_date if invoice_date else get_ist_time().strftime("%d-%m-%Y")
+
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, f"Transaction Type: {transaction_type.upper()}", ln=True)
+    
+    pdf.ln(0)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(0, 10, f"Sales Person: {employee_name}", ln=True, align='L')
+    
+    if distributor_firm_name:
+        pdf.cell(0, 10, f"Distributor: {distributor_firm_name} ({distributor_id})", ln=True, align='L')
+        pdf.cell(0, 10, f"Contact: {distributor_contact_person} | {distributor_contact_number}", ln=True, align='L')
+        pdf.cell(0, 10, f"Territory: {distributor_territory}", ln=True, align='L')
+    
+    pdf.ln(5)
+
+    pdf.set_font('Arial', 'B', 12)
+    pdf.cell(0, 10, "Bill To:", ln=True)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(100, 6, f"Name: {customer_name}")
+    pdf.cell(90, 6, f"Date: {current_date}", ln=True, align='R')
+    pdf.cell(100, 6, f"GSTIN/UN: {gst_number}")
+    pdf.cell(90, 6, f"Contact: {contact_number}", ln=True, align='R')
+    pdf.cell(100, 6, "Address: ", ln=True)
+    pdf.multi_cell(0, 6, address)
+    pdf.ln(1)
+    
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(0, 10, f"Invoice Number: {invoice_number}", ln=True)
+    pdf.ln(5)
+    
+    pdf.set_fill_color(200, 220, 255)
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(10, 10, "S.No", border=1, align='C', fill=True)
+    pdf.cell(70, 10, "Product Name", border=1, align='C', fill=True)
+    pdf.cell(20, 10, "HSN/SAC", border=1, align='C', fill=True)
+    pdf.cell(20, 10, "Qty", border=1, align='C', fill=True)
+    pdf.cell(25, 10, "Rate (INR)", border=1, align='C', fill=True)
+    pdf.cell(25, 10, "Discount (%)", border=1, align='C', fill=True)
+    pdf.cell(25, 10, "Amount (INR)", border=1, align='C', fill=True)
+    pdf.ln()
+
+    pdf.set_font('Arial', '', 10)
+    sales_data = []
+    tax_rate = 0.18
+    
+    subtotal = 0
+    for idx, (product, quantity, prod_discount) in enumerate(zip(selected_products, quantities, product_discounts)):
+        product_data = Products[Products['Product Name'] == product].iloc[0]
+        
+        if discount_category in product_data:
+            unit_price = float(product_data[discount_category])
+        else:
+            unit_price = float(product_data['Price'])
+        
+        discounted_unit_price = unit_price * (1 - prod_discount/100)
+        item_total = discounted_unit_price * quantity
+        subtotal += item_total
+        
+        pdf.cell(10, 8, str(idx + 1), border=1)
+        pdf.cell(70, 8, product, border=1)
+        pdf.cell(20, 8, "3304", border=1, align='C')
+        pdf.cell(20, 8, str(quantity), border=1, align='C')
+        pdf.cell(25, 8, f"{unit_price:.2f}", border=1, align='R')
+        pdf.cell(25, 8, f"{prod_discount:.2f}%", border=1, align='R')
+        pdf.cell(25, 8, f"{item_total:.2f}", border=1, align='R')
+        pdf.ln()
+
+    tax_amount = subtotal * tax_rate
+    cgst_amount = tax_amount / 2
+    sgst_amount = tax_amount / 2
+    grand_total = subtotal + tax_amount
+
+    pdf.ln(10)
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(160, 10, "Subtotal", border=0, align='R')
+    pdf.cell(30, 10, f"{subtotal:.2f}", border=1, align='R')
+    pdf.ln()
+    
+    pdf.cell(160, 10, "Taxable Amount", border=0, align='R')
+    pdf.cell(30, 10, f"{subtotal:.2f}", border=1, align='R')
+    pdf.ln()
+    
+    pdf.cell(160, 10, "CGST (9%)", border=0, align='R')
+    pdf.cell(30, 10, f"{cgst_amount:.2f}", border=1, align='R')
+    pdf.ln()
+    
+    pdf.cell(160, 10, "SGST (9%)", border=0, align='R')
+    pdf.cell(30, 10, f"{sgst_amount:.2f}", border=1, align='R')
+    pdf.ln()
+    
+    pdf.cell(160, 10, "Grand Total", border=0, align='R')
+    pdf.cell(30, 10, f"{grand_total:.2f} INR", border=1, align='R', fill=True)
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, f"Payment Status: {payment_status.upper()}", ln=True)
+    if payment_status == "paid":
+        pdf.cell(0, 10, f"Amount Paid: {amount_paid} INR", ln=True)
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "Details:", ln=True)
+    pdf.set_font("Arial", '', 10)
+    pdf.multi_cell(0, 5, bank_details)
+
+    for idx, (product, quantity, prod_discount) in enumerate(zip(selected_products, quantities, product_discounts)):
+        product_data = Products[Products['Product Name'] == product].iloc[0]
+        
+        if discount_category in product_data:
+            unit_price = float(product_data[discount_category])
+        else:
+            unit_price = float(product_data['Price'])
+            
+        discounted_unit_price = unit_price * (1 - prod_discount/100)
+        item_total = discounted_unit_price * quantity
+        
+        sales_data.append({
+            "Invoice Number": invoice_number,
+            "Invoice Date": current_date,
+            "Employee Name": employee_name,
+            "Employee Code": Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0],
+            "Designation": Person[Person['Employee Name'] == employee_name]['Designation'].values[0],
+            "Discount Category": discount_category,
+            "Transaction Type": transaction_type,
+            "Outlet Name": customer_name,
+            "Outlet Contact": contact_number,
+            "Outlet Address": address,
+            "Outlet State": state,
+            "Outlet City": city,
+            "Distributor Firm Name": distributor_firm_name,
+            "Distributor ID": distributor_id,
+            "Distributor Contact Person": distributor_contact_person,
+            "Distributor Contact Number": distributor_contact_number,
+            "Distributor Email": distributor_email,
+            "Distributor Territory": distributor_territory,
+            "Product ID": product_data['Product ID'],
+            "Product Name": product,
+            "Product Category": product_data['Product Category'],
+            "Quantity": quantity,
+            "Unit Price": unit_price,
+            "Product Discount (%)": prod_discount,
+            "Discounted Unit Price": discounted_unit_price,
+            "Total Price": item_total,
+            "GST Rate": "18%",
+            "CGST Amount": (item_total * tax_rate) / 2,
+            "SGST Amount": (item_total * tax_rate) / 2,
+            "Grand Total": item_total + (item_total * tax_rate),
+            "Payment Status": payment_status,
+            "Amount Paid": amount_paid if payment_status == "paid" else 0,
+            "Payment Receipt Path": payment_receipt_path if payment_status == "paid" else "",
+            "Employee Selfie Path": employee_selfie_path,
+            "Invoice PDF Path": f"invoices/{invoice_number}.pdf",
+            "Remarks": remarks,
+            "Delivery Status": "pending"
+        })
+
+    pdf_path = f"invoices/{invoice_number}.pdf"
+    pdf.output(pdf_path)
+    
+    sales_df = pd.DataFrame(sales_data)
+    log_sales_to_gsheet(conn, sales_df)
+
+    return pdf, pdf_path
+
+def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, outlet_state, outlet_city, 
+                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time, remarks=""):
+    visit_id = generate_visit_id()
+    visit_date = get_ist_time().strftime("%d-%m-%Y")
+    
+    duration = (exit_time - entry_time).total_seconds() / 60
+    
+    visit_data = {
+        "Visit ID": visit_id,
+        "Employee Name": employee_name,
+        "Employee Code": Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0],
+        "Designation": Person[Person['Employee Name'] == employee_name]['Designation'].values[0],
+        "Outlet Name": outlet_name,
+        "Outlet Contact": outlet_contact,
+        "Outlet Address": outlet_address,
+        "Outlet State": outlet_state,
+        "Outlet City": outlet_city,
+        "Visit Date": visit_date,
+        "Entry Time": entry_time.strftime("%H:%M:%S"),
+        "Exit Time": exit_time.strftime("%H:%M:%S"),
+        "Visit Duration (minutes)": round(duration, 2),
+        "Visit Purpose": visit_purpose,
+        "Visit Notes": visit_notes,
+        "Visit Selfie Path": visit_selfie_path,
+        "Visit Status": "completed",
+        "Remarks": remarks
+    }
+    
+    visit_df = pd.DataFrame([visit_data])
+    log_visit_to_gsheet(conn, visit_df)
+    
+    return visit_id
+
+def record_attendance(employee_name, status, location_link="", leave_reason=""):
+    try:
+        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
+        designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
+        current_date = get_ist_time().strftime("%d-%m-%Y")
+        current_datetime = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
+        check_in_time = get_ist_time().strftime("%H:%M:%S")
+        
+        attendance_id = generate_attendance_id()
+        
+        attendance_data = {
+            "Attendance ID": attendance_id,
+            "Employee Name": employee_name,
+            "Employee Code": employee_code,
+            "Designation": designation,
+            "Date": current_date,
+            "Status": status,
+            "Location Link": location_link,
+            "Leave Reason": leave_reason,
+            "Check-in Time": check_in_time,
+            "Check-in Date Time": current_datetime
+        }
+        
+        attendance_df = pd.DataFrame([attendance_data])
+        
+        success, error = log_attendance_to_gsheet(conn, attendance_df)
+        
+        if success:
+            return attendance_id, None
+        else:
+            return None, error
+            
+    except Exception as e:
+        return None, f"Error creating attendance record: {str(e)}"
+
+def check_existing_attendance(employee_name):
+    try:
+        existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how='all')
+        
+        if existing_data.empty:
+            return False
+        
+        current_date = get_ist_time().strftime("%d-%m-%Y")
+        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
+        
+        existing_records = existing_data[
+            (existing_data['Employee Code'] == employee_code) & 
+            (existing_data['Date'] == current_date)
+        ]
+        
+        return not existing_records.empty
+        
+    except Exception as e:
+        st.error(f"Error checking existing attendance: {str(e)}")
+        return False
+
+def authenticate_employee(employee_name, passkey):
+    try:
+        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
+        return str(passkey) == str(employee_code)
+    except:
+        return False
+
+def resources_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
+    st.title("Company Resources")
+    st.markdown("Download important company documents and product catalogs.")
+    
+    resources = [
+        {
+            "name": "Product Catalogue",
+            "description": "Complete list of all available products with specifications",
+            "file_path": "Biolume Salon Prices Catalogue.pdf"
+        },
+        {
+            "name": "Employee Handbook",
+            "description": "Company policies, procedures, and guidelines for employees",
+            "file_path": "Biolume Employee Handbook.pdf"
+        },
+        {
+            "name": "Facial Treatment Catalogue",
+            "description": "Complete list of all Facial products with specifications",
+            "file_path": "Biolume's Facial Treatment Catalogue.pdf"
+        }
+    ]
+    
+    for resource in resources:
+        with st.container():
+            st.subheader(resource["name"])
+            st.markdown(resource["description"])
+            
+            if os.path.exists(resource["file_path"]):
+                with open(resource["file_path"], "rb") as file:
+                    btn = st.download_button(
+                        label=f"Download {resource['name']}",
+                        data=file,
+                        file_name=resource["file_path"],
+                        mime="application/pdf",
+                        key=f"download_{resource['name']}"
+                    )
+            else:
+                st.error(f"File not found: {resource['file_path']}")
+            
+            st.markdown("---")
+
+def add_back_button():
+    st.markdown("""
+    <style>
+    .back-button {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        z-index: 1000;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    if st.button("← logout", key="back_button"):
+        st.session_state.authenticated = False
+        st.session_state.selected_mode = None
+        st.rerun()
 
 def demo_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
@@ -448,7 +876,6 @@ def demo_page():
 
     tab1, tab2 = st.tabs(["New Demo", "Demo History"])
 
-    # --- New Demo Tab ---
     with tab1:
         st.subheader("Partner Employee")
         partner_employee = st.selectbox(
@@ -501,7 +928,6 @@ def demo_page():
         if st.button("Record Demo", key="record_demo_button"):
             if outlet_name and selected_products:
                 now = get_ist_time()
-                # fallback to now if times are None
                 if check_in_time  is None: check_in_time  = now.time()
                 if check_out_time is None: check_out_time = now.time()
                 ci = datetime.combine(demo_date, check_in_time)
@@ -533,29 +959,25 @@ def demo_page():
                     "Quantities": "|".join(quantities)
                 }
 
-                try:
-                    existing = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5).dropna(how="all")
-                    df_new   = pd.DataFrame([demo_data], columns=DEMO_SHEET_COLUMNS)
-                    conn.update(worksheet="Demos", data=pd.concat([existing, df_new], ignore_index=True))
+                success, error = log_demo_to_gsheet(conn, pd.DataFrame([demo_data], columns=DEMO_SHEET_COLUMNS))
+                if success:
                     st.success(f"Demo {demo_id} recorded successfully!")
                     st.balloons()
-                except Exception as e:
-                    st.error(f"Failed to record demo: {e}")
+                else:
+                    st.error(f"Failed to record demo: {error}")
             else:
                 st.error("Please fill all required fields (Outlet + ≥1 product).")
 
-    # --- Demo History Tab ---
     with tab2:
         st.subheader("Demo History")
 
         @st.cache_data(ttl=300)
         def load_demo_data():
             try:
-                df = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5)
-                df = df.dropna(how="all")
-                # parse dates & cast duration to float
-                df['Demo Date']         = pd.to_datetime(df['Demo Date'], dayfirst=True, errors='coerce')
-                df['Duration (minutes)']= pd.to_numeric(df['Duration (minutes)'], errors='coerce')
+                df = conn.read(worksheet=DEMO_HISTORY_SHEET, ttl=5)
+                df = df.dropna(how='all')
+                df['Demo Date'] = pd.to_datetime(df['Demo Date'], dayfirst=True, errors='coerce')
+                df['Duration (minutes)'] = pd.to_numeric(df['Duration (minutes)'], errors='coerce')
                 code = Person.loc[Person['Employee Name']==selected_employee,'Employee Code'].iat[0]
                 return df[df['Employee Code']==code].sort_values('Demo Date', ascending=False)
             except Exception as e:
@@ -567,7 +989,6 @@ def demo_page():
             st.warning("No demo records found for your account")
             return
 
-        # Filters
         with st.expander("🔍 Search Filters", expanded=True):
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -623,7 +1044,6 @@ def demo_page():
         qty_str  = str(details.get('Quantities',''))
         prods = prod_str.split("|") if prod_str else []
         qtys  = qty_str.split("|")  if qty_str  else []
-        # pad lists
         L = max(len(prods), len(qtys))
         prods += [""]*(L-len(prods))
         qtys  += [""]*(L-len(qtys))
@@ -635,7 +1055,6 @@ def demo_page():
 
         csv = filtered.to_csv(index=False).encode('utf-8')
         st.download_button("Download Demo History", csv, "demo_history.csv", "text/csv", key='download-demo-csv')
-
 
 def support_ticket_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
@@ -649,7 +1068,6 @@ def support_ticket_page():
     with tab1:
         st.subheader("Raise New Support Ticket")
         with st.form("ticket_form"):
-            # Employee contact info
             col1, col2 = st.columns(2)
             with col1:
                 employee_email = st.text_input(
@@ -664,7 +1082,6 @@ def support_ticket_page():
                     help="Please provide your contact number"
                 )
             
-            # Ticket details
             col1, col2 = st.columns(2)
             with col1:
                 category = st.selectbox(
@@ -676,7 +1093,7 @@ def support_ticket_page():
                 priority = st.selectbox(
                     "Priority*",
                     PRIORITY_LEVELS,
-                    index=1,  # Default to Medium
+                    index=1,
                     help="How urgent is this issue?"
                 )
             
@@ -747,7 +1164,7 @@ def support_ticket_page():
     with tab2:
         st.subheader("My Support Tickets")
         try:
-            tickets_data = conn.read(worksheet="Tickets", usecols=list(range(len(TICKET_SHEET_COLUMNS))), ttl=5)
+            tickets_data = conn.read(worksheet=TICKET_HISTORY_SHEET, usecols=list(range(len(TICKET_SHEET_COLUMNS))), ttl=5)
             tickets_data = tickets_data.dropna(how="all")
             
             if not tickets_data.empty:
@@ -857,7 +1274,6 @@ def travel_hotel_page():
     with tab1:
         st.subheader("New Travel Request")
         with st.form("travel_form"):
-            # Employee contact info
             col1, col2 = st.columns(2)
             with col1:
                 employee_email = st.text_input(
@@ -880,7 +1296,6 @@ def travel_hotel_page():
                 help="Required for travel bookings"
             )
             
-            # Travel details
             travel_mode = st.selectbox("Travel Mode*", TRAVEL_MODES)
             booking_date = st.date_input("Booking Date*", min_value=datetime.now().date())
             
@@ -952,7 +1367,6 @@ def travel_hotel_page():
     with tab2:
         st.subheader("Hotel Booking Request")
         with st.form("hotel_form"):
-            # Employee contact info
             col1, col2 = st.columns(2)
             with col1:
                 employee_email = st.text_input(
@@ -1044,7 +1458,7 @@ def travel_hotel_page():
     with tab3:
         st.subheader("My Travel & Hotel Requests")
         try:
-            requests_data = conn.read(worksheet="TravelHotelRequests", usecols=list(range(len(TRAVEL_HOTEL_COLUMNS))), ttl=5)
+            requests_data = conn.read(worksheet=TRAVEL_HISTORY_SHEET, usecols=list(range(len(TRAVEL_HOTEL_COLUMNS))), ttl=5)
             requests_data = requests_data.dropna(how="all")
             
             if not requests_data.empty:
@@ -1140,572 +1554,6 @@ def travel_hotel_page():
         except Exception as e:
             st.error(f"Error retrieving travel/hotel requests: {str(e)}")
 
-
-def log_ticket_to_gsheet(conn, ticket_data):
-    try:
-        existing_data = conn.read(worksheet="Tickets", usecols=list(range(len(TICKET_SHEET_COLUMNS))), ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        updated_data = pd.concat([existing_data, ticket_data], ignore_index=True)
-        conn.update(worksheet="Tickets", data=updated_data)
-        return True, None
-    except Exception as e:
-        return False, str(e)
-
-def log_travel_hotel_request(conn, request_data):
-    try:
-        existing_data = conn.read(worksheet="TravelHotelRequests", usecols=list(range(len(TRAVEL_HOTEL_COLUMNS))), ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        updated_data = pd.concat([existing_data, request_data], ignore_index=True)
-        conn.update(worksheet="TravelHotelRequests", data=updated_data)
-        return True, None
-    except Exception as e:
-        return False, str(e)
-
-def log_sales_to_gsheet(conn, sales_data):
-    try:
-        # Read all existing data first
-        existing_sales_data = conn.read(worksheet="Sales", ttl=5)
-        existing_sales_data = existing_sales_data.dropna(how="all")
-        
-        # Ensure columns match (in case sheet structure changes)
-        sales_data = sales_data.reindex(columns=SALES_SHEET_COLUMNS)
-        
-        # Concatenate and drop any potential duplicates
-        updated_sales_data = pd.concat([existing_sales_data, sales_data], ignore_index=True)
-        updated_sales_data = updated_sales_data.drop_duplicates(subset=["Invoice Number", "Product Name"], keep="last")
-        
-        # Write back all data
-        conn.update(worksheet="Sales", data=updated_sales_data)
-        st.success("Sales data successfully logged to Google Sheets!")
-    except Exception as e:
-        st.error(f"Error logging sales data: {e}")
-        st.stop()
-
-def update_delivery_status(conn, invoice_number, product_name, new_status):
-    try:
-        # Read all existing data
-        sales_data = conn.read(worksheet="Sales", ttl=5)
-        sales_data = sales_data.dropna(how="all")
-        
-        # Update the delivery status for the specific record
-        mask = (sales_data['Invoice Number'] == invoice_number) & (sales_data['Product Name'] == product_name)
-        sales_data.loc[mask, 'Delivery Status'] = new_status
-        
-        # Write back the updated data
-        conn.update(worksheet="Sales", data=sales_data)
-        return True
-    except Exception as e:
-        st.error(f"Error updating delivery status: {e}")
-        return False
-
-def log_visit_to_gsheet(conn, visit_data):
-    try:
-        existing_visit_data = conn.read(worksheet="Visits", ttl=5)
-        existing_visit_data = existing_visit_data.dropna(how="all")
-        
-        visit_data = visit_data.reindex(columns=VISIT_SHEET_COLUMNS)
-        
-        updated_visit_data = pd.concat([existing_visit_data, visit_data], ignore_index=True)
-        updated_visit_data = updated_visit_data.drop_duplicates(subset=["Visit ID"], keep="last")
-        
-        conn.update(worksheet="Visits", data=updated_visit_data)
-        st.success("Visit data successfully logged to Google Sheets!")
-    except Exception as e:
-        st.error(f"Error logging visit data: {e}")
-        st.stop()
-
-def log_attendance_to_gsheet(conn, attendance_data):
-    try:
-        existing_data = conn.read(worksheet="Attendance", ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        
-        attendance_data = attendance_data.reindex(columns=ATTENDANCE_SHEET_COLUMNS)
-        
-        updated_data = pd.concat([existing_data, attendance_data], ignore_index=True)
-        updated_data = updated_data.drop_duplicates(subset=["Attendance ID"], keep="last")
-        
-        conn.update(worksheet="Attendance", data=updated_data)
-        return True, None
-    except Exception as e:
-        return False, str(e)
-
-
-def generate_invoice(customer_name, gst_number, contact_number, address, state, city, selected_products, quantities, product_discounts,
-                    discount_category, employee_name, payment_status, amount_paid, employee_selfie_path, payment_receipt_path, invoice_number,
-                    transaction_type, distributor_firm_name="", distributor_id="", distributor_contact_person="",
-                    distributor_contact_number="", distributor_email="", distributor_territory="", remarks="", invoice_date=None):
-    pdf = PDF()
-    pdf.alias_nb_pages()
-    pdf.add_page()
-    current_date = invoice_date if invoice_date else get_ist_time().strftime("%d-%m-%Y")  # Use provided date or current date
-
-
-    # Transaction Type
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, f"Transaction Type: {transaction_type.upper()}", ln=True)
-    
-    # Sales Person
-    pdf.ln(0)
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(0, 10, f"Sales Person: {employee_name}", ln=True, align='L')
-    
-    # Distributor details if available
-    if distributor_firm_name:
-        pdf.cell(0, 10, f"Distributor: {distributor_firm_name} ({distributor_id})", ln=True, align='L')
-        pdf.cell(0, 10, f"Contact: {distributor_contact_person} | {distributor_contact_number}", ln=True, align='L')
-        pdf.cell(0, 10, f"Territory: {distributor_territory}", ln=True, align='L')
-    
-    pdf.ln(5)
-
-    # Customer details
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "Bill To:", ln=True)
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(100, 6, f"Name: {customer_name}")
-    pdf.cell(90, 6, f"Date: {current_date}", ln=True, align='R')
-    pdf.cell(100, 6, f"GSTIN/UN: {gst_number}")
-    pdf.cell(90, 6, f"Contact: {contact_number}", ln=True, align='R')
-    pdf.cell(100, 6, "Address: ", ln=True)
-    pdf.multi_cell(0, 6, address)
-    pdf.ln(1)
-    
-    # Invoice number
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(0, 10, f"Invoice Number: {invoice_number}", ln=True)
-    pdf.ln(5)
-    
-    # Table header
-    pdf.set_fill_color(200, 220, 255)
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(10, 10, "S.No", border=1, align='C', fill=True)
-    pdf.cell(70, 10, "Product Name", border=1, align='C', fill=True)
-    pdf.cell(20, 10, "HSN/SAC", border=1, align='C', fill=True)
-    pdf.cell(20, 10, "Qty", border=1, align='C', fill=True)
-    pdf.cell(25, 10, "Rate (INR)", border=1, align='C', fill=True)
-    pdf.cell(25, 10, "Discount (%)", border=1, align='C', fill=True)
-    pdf.cell(25, 10, "Amount (INR)", border=1, align='C', fill=True)
-    pdf.ln()
-
-    # Table rows
-    pdf.set_font('Arial', '', 10)
-    sales_data = []
-    tax_rate = 0.18  # 18% GST
-    
-    # Calculate subtotal with product discounts
-    subtotal = 0
-    for idx, (product, quantity, prod_discount) in enumerate(zip(selected_products, quantities, product_discounts)):
-        product_data = Products[Products['Product Name'] == product].iloc[0]
-        
-        if discount_category in product_data:
-            unit_price = float(product_data[discount_category])
-        else:
-            unit_price = float(product_data['Price'])
-        
-        # Apply product discount
-        discounted_unit_price = unit_price * (1 - prod_discount/100)
-        item_total = discounted_unit_price * quantity
-        subtotal += item_total
-        
-        pdf.cell(10, 8, str(idx + 1), border=1)
-        pdf.cell(70, 8, product, border=1)
-        pdf.cell(20, 8, "3304", border=1, align='C')
-        pdf.cell(20, 8, str(quantity), border=1, align='C')
-        pdf.cell(25, 8, f"{unit_price:.2f}", border=1, align='R')
-        pdf.cell(25, 8, f"{prod_discount:.2f}%", border=1, align='R')
-        pdf.cell(25, 8, f"{item_total:.2f}", border=1, align='R')
-        pdf.ln()
-
-    # Calculate taxes
-    tax_amount = subtotal * tax_rate
-    cgst_amount = tax_amount / 2
-    sgst_amount = tax_amount / 2
-    grand_total = subtotal + tax_amount
-
-    # Display totals
-    pdf.ln(10)
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(160, 10, "Subtotal", border=0, align='R')
-    pdf.cell(30, 10, f"{subtotal:.2f}", border=1, align='R')
-    pdf.ln()
-    
-    pdf.cell(160, 10, "Taxable Amount", border=0, align='R')
-    pdf.cell(30, 10, f"{subtotal:.2f}", border=1, align='R')
-    pdf.ln()
-    
-    pdf.cell(160, 10, "CGST (9%)", border=0, align='R')
-    pdf.cell(30, 10, f"{cgst_amount:.2f}", border=1, align='R')
-    pdf.ln()
-    
-    pdf.cell(160, 10, "SGST (9%)", border=0, align='R')
-    pdf.cell(30, 10, f"{sgst_amount:.2f}", border=1, align='R')
-    pdf.ln()
-    
-    pdf.cell(160, 10, "Grand Total", border=0, align='R')
-    pdf.cell(30, 10, f"{grand_total:.2f} INR", border=1, align='R', fill=True)
-    pdf.ln(10)
-    
-    # Payment Status
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, f"Payment Status: {payment_status.upper()}", ln=True)
-    if payment_status == "paid":
-        pdf.cell(0, 10, f"Amount Paid: {amount_paid} INR", ln=True)
-    pdf.ln(10)
-    
-    # Details
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "Details:", ln=True)
-    pdf.set_font("Arial", '', 10)
-    pdf.multi_cell(0, 5, bank_details)
-    
-    # Prepare sales data for logging
-    for idx, (product, quantity, prod_discount) in enumerate(zip(selected_products, quantities, product_discounts)):
-        product_data = Products[Products['Product Name'] == product].iloc[0]
-        
-        if discount_category in product_data:
-            unit_price = float(product_data[discount_category])
-        else:
-            unit_price = float(product_data['Price'])
-            
-        # Apply product discount
-        discounted_unit_price = unit_price * (1 - prod_discount/100)
-        item_total = discounted_unit_price * quantity
-        
-        sales_data.append({
-            "Invoice Number": invoice_number,
-            "Invoice Date": current_date,
-            "Employee Name": employee_name,
-            "Employee Code": Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0],
-            "Designation": Person[Person['Employee Name'] == employee_name]['Designation'].values[0],
-            "Discount Category": discount_category,
-            "Transaction Type": transaction_type,
-            "Outlet Name": customer_name,
-            "Outlet Contact": contact_number,
-            "Outlet Address": address,
-            "Outlet State": state,
-            "Outlet City": city,
-            "Distributor Firm Name": distributor_firm_name,
-            "Distributor ID": distributor_id,
-            "Distributor Contact Person": distributor_contact_person,
-            "Distributor Contact Number": distributor_contact_number,
-            "Distributor Email": distributor_email,
-            "Distributor Territory": distributor_territory,
-            "Product ID": product_data['Product ID'],
-            "Product Name": product,
-            "Product Category": product_data['Product Category'],
-            "Quantity": quantity,
-            "Unit Price": unit_price,
-            "Product Discount (%)": prod_discount,
-            "Discounted Unit Price": discounted_unit_price,
-            "Total Price": item_total,
-            "GST Rate": "18%",
-            "CGST Amount": (item_total * tax_rate) / 2,
-            "SGST Amount": (item_total * tax_rate) / 2,
-            "Grand Total": item_total + (item_total * tax_rate),
-            "Payment Status": payment_status,
-            "Amount Paid": amount_paid if payment_status == "paid" else 0,
-            "Payment Receipt Path": payment_receipt_path if payment_status == "paid" else "",
-            "Employee Selfie Path": employee_selfie_path,
-            "Invoice PDF Path": f"invoices/{invoice_number}.pdf",
-            "Remarks": remarks,
-            "Delivery Status": "pending"  # Default status is pending
-        })
-
-    # Save the PDF
-    pdf_path = f"invoices/{invoice_number}.pdf"
-    pdf.output(pdf_path)
-    
-    # Log sales data to Google Sheets
-    sales_df = pd.DataFrame(sales_data)
-    log_sales_to_gsheet(conn, sales_df)
-
-    return pdf, pdf_path
-
-def record_visit(employee_name, outlet_name, outlet_contact, outlet_address, outlet_state, outlet_city, 
-                 visit_purpose, visit_notes, visit_selfie_path, entry_time, exit_time, remarks=""):
-    visit_id = generate_visit_id()
-    visit_date = get_ist_time().strftime("%d-%m-%Y")
-    
-    duration = (exit_time - entry_time).total_seconds() / 60
-    
-    visit_data = {
-        "Visit ID": visit_id,
-        "Employee Name": employee_name,
-        "Employee Code": Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0],
-        "Designation": Person[Person['Employee Name'] == employee_name]['Designation'].values[0],
-        "Outlet Name": outlet_name,
-        "Outlet Contact": outlet_contact,
-        "Outlet Address": outlet_address,
-        "Outlet State": outlet_state,
-        "Outlet City": outlet_city,
-        "Visit Date": visit_date,
-        "Entry Time": entry_time.strftime("%H:%M:%S"),
-        "Exit Time": exit_time.strftime("%H:%M:%S"),
-        "Visit Duration (minutes)": round(duration, 2),
-        "Visit Purpose": visit_purpose,
-        "Visit Notes": visit_notes,
-        "Visit Selfie Path": visit_selfie_path,
-        "Visit Status": "completed",
-        "Remarks": remarks
-    }
-    
-    visit_df = pd.DataFrame([visit_data])
-    log_visit_to_gsheet(conn, visit_df)
-    
-    return visit_id
-
-def record_attendance(employee_name, status, location_link="", leave_reason=""):
-    try:
-        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
-        designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
-        current_date = get_ist_time().strftime("%d-%m-%Y")
-        current_datetime = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
-        check_in_time = get_ist_time().strftime("%H:%M:%S")
-        
-        attendance_id = generate_attendance_id()
-        
-        attendance_data = {
-            "Attendance ID": attendance_id,
-            "Employee Name": employee_name,
-            "Employee Code": employee_code,
-            "Designation": designation,
-            "Date": current_date,
-            "Status": status,
-            "Location Link": location_link,
-            "Leave Reason": leave_reason,  # This now includes station type
-            "Check-in Time": check_in_time,
-            "Check-in Date Time": current_datetime
-        }
-        
-        attendance_df = pd.DataFrame([attendance_data])
-        
-        success, error = log_attendance_to_gsheet(conn, attendance_df)
-        
-        if success:
-            return attendance_id, None
-        else:
-            return None, error
-            
-    except Exception as e:
-        return None, f"Error creating attendance record: {str(e)}"
-
-def check_existing_attendance(employee_name):
-    try:
-        existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
-        existing_data = existing_data.dropna(how="all")
-        
-        if existing_data.empty:
-            return False
-        
-        current_date = get_ist_time().strftime("%d-%m-%Y")
-        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
-        
-        existing_records = existing_data[
-            (existing_data['Employee Code'] == employee_code) & 
-            (existing_data['Date'] == current_date)
-        ]
-        
-        return not existing_records.empty
-        
-    except Exception as e:
-        st.error(f"Error checking existing attendance: {str(e)}")
-        return False
-
-def authenticate_employee(employee_name, passkey):
-    try:
-        employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
-        return str(passkey) == str(employee_code)
-    except:
-        return False
-
-def resources_page():
-    hourly_location_auto_log(conn, st.session_state.employee_name)
-    st.title("Company Resources")
-    st.markdown("Download important company documents and product catalogs.")
-    
-    # Define the resources
-    resources = [
-        {
-            "name": "Product Catalogue",
-            "description": "Complete list of all available products with specifications",
-            "file_path": "Biolume Salon Prices Catalogue.pdf"
-        },
-        {
-            "name": "Employee Handbook",
-            "description": "Company policies, procedures, and guidelines for employees",
-            "file_path": "Biolume Employee Handbook.pdf"
-        },
-        {
-            "name": "Facial Treatment Catalogue",
-            "description": "Complete list of all Facial products with specifications",
-            "file_path": "Biolume's Facial Treatment Catalogue.pdf"
-        }
-    ]
-    
-    # Display each resource in a card-like format
-    for resource in resources:
-        with st.container():
-            st.subheader(resource["name"])
-            st.markdown(resource["description"])
-            
-            # Check if file exists
-            if os.path.exists(resource["file_path"]):
-                with open(resource["file_path"], "rb") as file:
-                    btn = st.download_button(
-                        label=f"Download {resource['name']}",
-                        data=file,
-                        file_name=resource["file_path"],
-                        mime="application/pdf",
-                        key=f"download_{resource['name']}"
-                    )
-            else:
-                st.error(f"File not found: {resource['file_path']}")
-            
-            st.markdown("---")  # Divider between resources
-
-def add_back_button():
-    st.markdown("""
-    <style>
-    .back-button {
-        position: fixed;
-        bottom: 20px;
-        left: 20px;
-        z-index: 1000;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    if st.button("← logout", key="back_button"):
-        st.session_state.authenticated = False
-        st.session_state.selected_mode = None
-        st.rerun()
-
-def main():
-    if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
-    if 'selected_mode' not in st.session_state:
-        st.session_state.selected_mode = None
-    if 'employee_name' not in st.session_state:
-        st.session_state.employee_name = None
-
-    if not st.session_state.authenticated:
-        # Display the centered logo and heading
-        display_login_header()
-
-        employee_names = Person['Employee Name'].tolist()
-
-        # Create centered form
-        form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
-
-        with form_col2:
-            with st.container():
-                employee_name = st.selectbox(
-                    "Select Your Name", 
-                    employee_names, 
-                    key="employee_select"
-                )
-                passkey = st.text_input(
-                    "Enter Your Employee Code", 
-                    type="password", 
-                    key="passkey_input"
-                )
-
-                login_button = st.button(
-                    "Log in", 
-                    key="login_button",
-                    use_container_width=True
-                )
-
-                if login_button:
-                    if authenticate_employee(employee_name, passkey):
-                        # Immediately fetch and log location after login
-                        result = streamlit_js_eval(
-                            js_expressions="""
-                                new Promise((resolve) => {
-                                    if (navigator.geolocation) {
-                                        navigator.geolocation.getCurrentPosition(
-                                            pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                                            err => resolve({latitude: null, longitude: null})
-                                        );
-                                    } else {
-                                        resolve({latitude: null, longitude: null});
-                                    }
-                                });
-                            """,
-                            key=f"geo_login_{employee_name}_{int(time.time())}"
-                        ) or {}
-
-                        lat = result.get("latitude")
-                        lng = result.get("longitude")
-                        if lat and lng:
-                            log_location_history(conn, employee_name, lat, lng)
-                            gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
-                            st.success(f"Login location logged: [View on Google Maps]({gmaps_link})")
-                            # Brief pause for user to see the message
-                            time.sleep(1.5)
-                        st.session_state.authenticated = True
-                        st.session_state.employee_name = employee_name
-                        st.rerun()
-                    else:
-                        st.error("Invalid Password. Please try again.")
-    else:
-        # Show option boxes after login
-        st.title("Select Mode")
-        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-
-        with col1:
-            if st.button("Sales", use_container_width=True, key="sales_mode"):
-                st.session_state.selected_mode = "Sales"
-                st.rerun()
-
-        with col2:
-            if st.button("Visit", use_container_width=True, key="visit_mode"):
-                st.session_state.selected_mode = "Visit"
-                st.rerun()
-
-        with col3:
-            if st.button("Attendance", use_container_width=True, key="attendance_mode"):
-                st.session_state.selected_mode = "Attendance"
-                st.rerun()
-
-        with col4:
-            if st.button("Resources", use_container_width=True, key="resources_mode"):
-                st.session_state.selected_mode = "Resources"
-                st.rerun()
-
-        with col5:
-            if st.button("Support Ticket", use_container_width=True, key="ticket_mode"):
-                st.session_state.selected_mode = "Support Ticket"
-                st.rerun()
-
-        with col6:
-            if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
-                st.session_state.selected_mode = "Travel/Hotel"
-                st.rerun()
-
-        with col7:
-            if st.button("Demo", use_container_width=True, key="demo_mode"):
-                st.session_state.selected_mode = "Demo"
-                st.rerun()
-
-        if st.session_state.selected_mode:
-            add_back_button()
-
-            if st.session_state.selected_mode == "Sales":
-                sales_page()
-            elif st.session_state.selected_mode == "Visit":
-                visit_page()
-            elif st.session_state.selected_mode == "Attendance":
-                attendance_page()
-            elif st.session_state.selected_mode == "Resources":
-                resources_page()
-            elif st.session_state.selected_mode == "Support Ticket":
-                support_ticket_page()
-            elif st.session_state.selected_mode == "Travel/Hotel":
-                travel_hotel_page()
-            elif st.session_state.selected_mode == "Demo":
-                demo_page()
-
-
 def sales_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Sales Management")
@@ -1757,7 +1605,6 @@ def sales_page():
                 with cols[1]:
                     st.text(f"₹{unit_price:.2f}")
     
-                # Discount % placeholder
                 with cols[2]:
                     disc_str = st.text_input(
                         "Discount %",
@@ -1771,7 +1618,6 @@ def sales_page():
                         prod_discount = 0.0
                     product_discounts.append(prod_discount)
     
-                # Quantity placeholder
                 with cols[3]:
                     qty_str = st.text_input(
                         "Quantity",
@@ -1785,10 +1631,8 @@ def sales_page():
                         qty = 1
                     quantities.append(qty)
     
-                # accumulate subtotal
                 subtotal += unit_price * (1 - prod_discount / 100) * qty
     
-            # Final amount calculation
             st.markdown("---")
             st.markdown("### Final Amount Calculation")
             st.markdown(f"Subtotal: ₹{subtotal:.2f}")
@@ -1863,7 +1707,7 @@ def sales_page():
                     invoice_number, transaction_type,
                     distributor_firm_name, distributor_id, distributor_contact_person,
                     distributor_contact_number, distributor_email, distributor_territory,
-                    "",  # remarks
+                    "",
                 )
                 with open(pdf_path, "rb") as f:
                     st.download_button(
@@ -1885,32 +1729,26 @@ def sales_page():
         @st.cache_data(ttl=300)
         def load_sales_data():
             try:
-                sales_data = conn.read(worksheet="Sales", ttl=5)
+                sales_data = conn.read(worksheet=SALES_HISTORY_SHEET, ttl=5)
                 sales_data = sales_data.dropna(how='all')
                 
-                # Convert columns to proper types
                 sales_data = sales_data.copy()
                 sales_data['Outlet Name'] = sales_data['Outlet Name'].astype(str)
                 sales_data['Invoice Number'] = sales_data['Invoice Number'].astype(str)
                 
-                # Convert Invoice Date properly
                 try:
                     sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True, errors='coerce')
                 except:
-                    # Fallback if date parsing fails
                     sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], errors='coerce')
                 
-                # Convert numeric columns properly
                 numeric_cols = ['Grand Total', 'Unit Price', 'Total Price', 'Product Discount (%)', 'Quantity']
                 for col in numeric_cols:
                     if col in sales_data.columns:
                         sales_data[col] = pd.to_numeric(sales_data[col], errors='coerce')
                 
-                # Filter for current employee
                 employee_code = Person[Person['Employee Name'] == st.session_state.employee_name]['Employee Code'].values[0]
                 filtered_data = sales_data[sales_data['Employee Code'] == employee_code]
                 
-                # Ensure we have valid dates
                 filtered_data = filtered_data[filtered_data['Invoice Date'].notna()]
                 
                 return filtered_data
@@ -1938,7 +1776,6 @@ def sales_page():
         
         filtered_data = sales_data.copy()
         
-        # Apply filters
         if invoice_number_search:
             filtered_data = filtered_data[
                 filtered_data['Invoice Number'].str.contains(invoice_number_search, case=False, na=False)
@@ -1959,7 +1796,6 @@ def sales_page():
             st.warning("No matching records found")
             return
             
-        # Calculate correct grand total by invoice
         invoice_summary = filtered_data.groupby('Invoice Number').agg({
             'Invoice Date': 'first',
             'Outlet Name': 'first',
@@ -1968,12 +1804,10 @@ def sales_page():
             'Delivery Status': 'first'
         }).reset_index()
         
-        # Sort by date descending
         invoice_summary = invoice_summary.sort_values('Invoice Date', ascending=False)
         
         st.write(f"📄 Showing {len(invoice_summary)} of your invoices")
         
-        # Display the summary table
         st.dataframe(
             invoice_summary,
             column_config={
@@ -1996,16 +1830,12 @@ def sales_page():
             key="invoice_selection"
         )
         
-        # Delivery Status Section
         st.subheader("Delivery Status Management")
         
-        # Get all products for the selected invoice
         invoice_details = filtered_data[filtered_data['Invoice Number'] == selected_invoice]
         
         if not invoice_details.empty:
-            # Create a form for delivery status updates
             with st.form(key='delivery_status_form'):
-                # Get current status for the invoice
                 current_status = invoice_details.iloc[0].get('Delivery Status', 'Pending')
                 
                 status_options = ["Pending", "Order Done", "Delivery Done", "Cancelled"]
@@ -2016,22 +1846,17 @@ def sales_page():
                     key=f"status_{selected_invoice}"
                 )
 
-                
-                # Submit button for the form
                 submitted = st.form_submit_button("Update Status")
                 
                 if submitted:
                     with st.spinner("Updating delivery status..."):
                         try:
-                            # Get all sales data
                             all_sales_data = conn.read(worksheet="Sales", ttl=5)
                             all_sales_data = all_sales_data.dropna(how='all')
                             
-                            # Update the status for all rows with this invoice number
                             mask = all_sales_data['Invoice Number'] == selected_invoice
                             all_sales_data.loc[mask, 'Delivery Status'] = new_status
                             
-                            # Write back the updated data
                             conn.update(worksheet="Sales", data=all_sales_data)
                             
                             st.success(f"Delivery status updated to '{new_status}' for invoice {selected_invoice}!")
@@ -2039,7 +1864,6 @@ def sales_page():
                         except Exception as e:
                             st.error(f"Error updating delivery status: {e}")
         
-        # Display invoice details
         if not invoice_details.empty:
             invoice_data = invoice_details.iloc[0]
             original_invoice_date = invoice_data['Invoice Date'].strftime('%d-%m-%Y')
@@ -2051,7 +1875,6 @@ def sales_page():
                 st.metric("Outlet", str(invoice_data['Outlet Name']))
                 st.metric("Contact", str(invoice_data['Outlet Contact']))
             with col2:
-                # Calculate correct total for this invoice
                 invoice_total = invoice_details['Grand Total'].sum()
                 st.metric("Total Amount", f"₹{invoice_total:.2f}")
                 st.metric("Payment Status", str(invoice_data['Payment Status']).capitalize())
@@ -2067,7 +1890,6 @@ def sales_page():
                 'Grand Total'
             ]].copy()
             
-            # Format display
             product_display['Product Name'] = product_display['Product Name'].astype(str)
             product_display['Quantity'] = product_display['Quantity'].astype(int)
             
@@ -2132,7 +1954,6 @@ def visit_page():
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
 
-    # Empty remarks since we removed the location input
     visit_remarks = ""
 
     tab1, tab2 = st.tabs(["New Visit", "Visit History"])
@@ -2152,7 +1973,6 @@ def visit_page():
             outlet_state = outlet_details['State']
             outlet_city = outlet_details['City']
             
-            # Show outlet details like distributor details
             st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display")
             st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
             st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
@@ -2187,7 +2007,6 @@ def visit_page():
                 entry_datetime = datetime.combine(today, entry_time)
                 exit_datetime = datetime.combine(today, exit_time)
                 
-                # No visit selfie upload
                 visit_selfie_path = None
                 
                 visit_id = record_visit(
@@ -2213,7 +2032,7 @@ def visit_page():
             
         if st.button("Search Visits", key="search_visits_button"):
             try:
-                visit_data = conn.read(worksheet="Visits", ttl=5)
+                visit_data = conn.read(worksheet=VISIT_HISTORY_SHEET, ttl=5)
                 visit_data = visit_data.dropna(how="all")
                 
                 employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
@@ -2228,14 +2047,12 @@ def visit_page():
                     filtered_data = filtered_data[filtered_data['Outlet Name'].str.contains(outlet_name_search, case=False)]
                 
                 if not filtered_data.empty:
-                    # Display only the most relevant columns
                     display_columns = [
                         'Visit ID', 'Visit Date', 'Outlet Name', 'Visit Purpose', 'Visit Notes',
                         'Entry Time', 'Exit Time', 'Visit Duration (minutes)', 'Remarks'
                     ]
                     st.dataframe(filtered_data[display_columns])
                     
-                    # Add download option
                     csv = filtered_data.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         "Download as CSV",
@@ -2249,8 +2066,6 @@ def visit_page():
             except Exception as e:
                 st.error(f"Error retrieving visit data: {e}")
 
-from streamlit_js_eval import streamlit_js_eval
-
 def attendance_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Attendance Management")
@@ -2263,7 +2078,6 @@ def attendance_page():
     st.subheader("Attendance Status")
     status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
 
-    # Add the new station dropdown
     station_type = st.selectbox(
         "Station Type",
         ["HQ Location", "Out Station"],
@@ -2301,13 +2115,12 @@ def attendance_page():
 
         if lat and lng and st.button("Mark Attendance", key="mark_attendance_button"):
             with st.spinner("Recording attendance..."):
-                # Include station type in the remarks
                 remarks = f"{station_type}"
                 attendance_id, error = record_attendance(
                     selected_employee,
                     status,
                     location_link=gmaps_link,
-                    leave_reason=remarks  # Using leave_reason field to store station type
+                    leave_reason=remarks
                 )
                 if error:
                     st.error(f"Failed to record attendance: {error}")
@@ -2326,7 +2139,6 @@ def attendance_page():
             if not leave_reason:
                 st.error("Please provide a reason for your leave")
             else:
-                # Include station type in the leave reason
                 full_reason = f"{station_type} - {leave_type}: {leave_reason}"
                 with st.spinner("Submitting leave request..."):
                     attendance_id, error = record_attendance(
@@ -2339,6 +2151,126 @@ def attendance_page():
                     else:
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
 
+def main():
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    if 'selected_mode' not in st.session_state:
+        st.session_state.selected_mode = None
+    if 'employee_name' not in st.session_state:
+        st.session_state.employee_name = None
+
+    if not st.session_state.authenticated:
+        display_login_header()
+
+        employee_names = Person['Employee Name'].tolist()
+
+        form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
+
+        with form_col2:
+            with st.container():
+                employee_name = st.selectbox(
+                    "Select Your Name", 
+                    employee_names, 
+                    key="employee_select"
+                )
+                passkey = st.text_input(
+                    "Enter Your Employee Code", 
+                    type="password", 
+                    key="passkey_input"
+                )
+
+                login_button = st.button(
+                    "Log in", 
+                    key="login_button",
+                    use_container_width=True
+                )
+
+                if login_button:
+                    if authenticate_employee(employee_name, passkey):
+                        result = streamlit_js_eval(
+                            js_expressions="""
+                                new Promise((resolve) => {
+                                    if (navigator.geolocation) {
+                                        navigator.geolocation.getCurrentPosition(
+                                            pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
+                                            err => resolve({latitude: null, longitude: null})
+                                        );
+                                    } else {
+                                        resolve({latitude: null, longitude: null});
+                                    }
+                                });
+                            """,
+                            key=f"geo_login_{employee_name}_{int(time.time())}"
+                        ) or {}
+
+                        lat = result.get("latitude")
+                        lng = result.get("longitude")
+                        if lat and lng:
+                            log_location_history(conn, employee_name, lat, lng)
+                            gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
+                            st.success(f"Login location logged: [View on Google Maps]({gmaps_link})")
+                            time.sleep(1.5)
+                        st.session_state.authenticated = True
+                        st.session_state.employee_name = employee_name
+                        st.rerun()
+                    else:
+                        st.error("Invalid Password. Please try again.")
+    else:
+        st.title("Select Mode")
+        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+
+        with col1:
+            if st.button("Sales", use_container_width=True, key="sales_mode"):
+                st.session_state.selected_mode = "Sales"
+                st.rerun()
+
+        with col2:
+            if st.button("Visit", use_container_width=True, key="visit_mode"):
+                st.session_state.selected_mode = "Visit"
+                st.rerun()
+
+        with col3:
+            if st.button("Attendance", use_container_width=True, key="attendance_mode"):
+                st.session_state.selected_mode = "Attendance"
+                st.rerun()
+
+        with col4:
+            if st.button("Resources", use_container_width=True, key="resources_mode"):
+                st.session_state.selected_mode = "Resources"
+                st.rerun()
+
+        with col5:
+            if st.button("Support Ticket", use_container_width=True, key="ticket_mode"):
+                st.session_state.selected_mode = "Support Ticket"
+                st.rerun()
+
+        with col6:
+            if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
+                st.session_state.selected_mode = "Travel/Hotel"
+                st.rerun()
+
+        with col7:
+            if st.button("Demo", use_container_width=True, key="demo_mode"):
+                st.session_state.selected_mode = "Demo"
+                st.rerun()
+
+        if st.session_state.selected_mode:
+            add_back_button()
+
+            if st.session_state.selected_mode == "Sales":
+                sales_page()
+            elif st.session_state.selected_mode == "Visit":
+                visit_page()
+            elif st.session_state.selected_mode == "Attendance":
+                attendance_page()
+            elif st.session_state.selected_mode == "Resources":
+                resources_page()
+            elif st.session_state.selected_mode == "Support Ticket":
+                support_ticket_page()
+            elif st.session_state.selected_mode == "Travel/Hotel":
+                travel_hotel_page()
+            elif st.session_state.selected_mode == "Demo":
+                demo_page()
 
 if __name__ == "__main__":
     main()
