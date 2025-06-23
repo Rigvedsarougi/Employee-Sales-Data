@@ -419,21 +419,16 @@ def save_uploaded_file(uploaded_file, folder):
 
 def log_sales_to_gsheet(conn, sales_data):
     try:
+        # Only write to main Sales sheet
         existing_sales_data = conn.read(worksheet="Sales", ttl=5)
         existing_sales_data = existing_sales_data.dropna(how='all')
-        
-        existing_history = conn.read(worksheet=SALES_HISTORY_SHEET, ttl=5)
-        existing_history = existing_history.dropna(how='all')
         
         sales_data = sales_data.reindex(columns=SALES_SHEET_COLUMNS)
         
         updated_sales_data = pd.concat([existing_sales_data, sales_data], ignore_index=True)
         updated_sales_data = updated_sales_data.drop_duplicates(subset=["Invoice Number", "Product Name"], keep="last")
         
-        updated_history = pd.concat([existing_history, sales_data], ignore_index=True)
-        
         conn.update(worksheet="Sales", data=updated_sales_data)
-        conn.update(worksheet=SALES_HISTORY_SHEET, data=updated_history)
         st.success("Sales data successfully logged to Google Sheets!")
     except Exception as e:
         st.error(f"Error logging sales data: {e}")
@@ -455,21 +450,16 @@ def update_delivery_status(conn, invoice_number, product_name, new_status):
 
 def log_visit_to_gsheet(conn, visit_data):
     try:
+        # Only write to main Visits sheet
         existing_visit_data = conn.read(worksheet="Visits", ttl=5)
         existing_visit_data = existing_visit_data.dropna(how='all')
-        
-        existing_history = conn.read(worksheet=VISIT_HISTORY_SHEET, ttl=5)
-        existing_history = existing_history.dropna(how='all')
         
         visit_data = visit_data.reindex(columns=VISIT_SHEET_COLUMNS)
         
         updated_visit_data = pd.concat([existing_visit_data, visit_data], ignore_index=True)
         updated_visit_data = updated_visit_data.drop_duplicates(subset=["Visit ID"], keep="last")
         
-        updated_history = pd.concat([existing_history, visit_data], ignore_index=True)
-        
         conn.update(worksheet="Visits", data=updated_visit_data)
-        conn.update(worksheet=VISIT_HISTORY_SHEET, data=updated_history)
         st.success("Visit data successfully logged to Google Sheets!")
     except Exception as e:
         st.error(f"Error logging visit data: {e}")
@@ -492,51 +482,39 @@ def log_attendance_to_gsheet(conn, attendance_data):
 
 def log_ticket_to_gsheet(conn, ticket_data):
     try:
+        # Only write to main Tickets sheet
         existing_data = conn.read(worksheet="Tickets", usecols=list(range(len(TICKET_SHEET_COLUMNS))), ttl=5)
         existing_data = existing_data.dropna(how='all')
         
-        existing_history = conn.read(worksheet=TICKET_HISTORY_SHEET, ttl=5)
-        existing_history = existing_history.dropna(how='all')
-        
         updated_data = pd.concat([existing_data, ticket_data], ignore_index=True)
-        updated_history = pd.concat([existing_history, ticket_data], ignore_index=True)
         
         conn.update(worksheet="Tickets", data=updated_data)
-        conn.update(worksheet=TICKET_HISTORY_SHEET, data=updated_history)
         return True, None
     except Exception as e:
         return False, str(e)
 
 def log_travel_hotel_request(conn, request_data):
     try:
+        # Only write to main TravelHotelRequests sheet
         existing_data = conn.read(worksheet="TravelHotelRequests", usecols=list(range(len(TRAVEL_HOTEL_COLUMNS))), ttl=5)
         existing_data = existing_data.dropna(how='all')
         
-        existing_history = conn.read(worksheet=TRAVEL_HISTORY_SHEET, ttl=5)
-        existing_history = existing_history.dropna(how='all')
-        
         updated_data = pd.concat([existing_data, request_data], ignore_index=True)
-        updated_history = pd.concat([existing_history, request_data], ignore_index=True)
         
         conn.update(worksheet="TravelHotelRequests", data=updated_data)
-        conn.update(worksheet=TRAVEL_HISTORY_SHEET, data=updated_history)
         return True, None
     except Exception as e:
         return False, str(e)
 
 def log_demo_to_gsheet(conn, demo_data):
     try:
+        # Only write to main Demos sheet
         existing_data = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5)
         existing_data = existing_data.dropna(how='all')
         
-        existing_history = conn.read(worksheet=DEMO_HISTORY_SHEET, ttl=5)
-        existing_history = existing_history.dropna(how='all')
-        
         updated_data = pd.concat([existing_data, demo_data], ignore_index=True)
-        updated_history = pd.concat([existing_history, demo_data], ignore_index=True)
         
         conn.update(worksheet="Demos", data=updated_data)
-        conn.update(worksheet=DEMO_HISTORY_SHEET, data=updated_history)
         return True, None
     except Exception as e:
         return False, str(e)
