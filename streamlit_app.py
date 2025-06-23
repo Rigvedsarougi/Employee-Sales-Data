@@ -14,14 +14,16 @@ import time
 from streamlit_cookies_manager import EncryptedCookieManager
 import extra_streamlit_components as stx
 
+cookies = EncryptedCookieManager(
+    prefix="biolume_",
+    password=os.environ.get("COOKIE_PASSWORD", "default-cookie-password")
+)
+
 def logout():
+    """Handle logout by clearing session and cookies"""
     st.session_state.authenticated = False
     st.session_state.employee_name = None
     st.session_state.selected_mode = None
-    cookies = EncryptedCookieManager(
-        prefix="biolume_",
-        password=os.environ.get("COOKIE_PASSWORD", "default-cookie-password")
-    )
     cookies['authenticated'] = 'false'
     cookies['employee_name'] = ''
     cookies.save()
@@ -2138,125 +2140,93 @@ def attendance_page():
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
 
 def main():
-    cookies = EncryptedCookieManager(
-        prefix="biolume_",
-        password=os.environ.get("COOKIE_PASSWORD", "default-cookie-password")
-    )
-    
+    # Wait for cookies to initialize
     if not cookies.ready():
         st.stop()
-    
+
+    # Initialize session state from cookies if not already set
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = cookies.get('authenticated') == 'true'
         st.session_state.employee_name = cookies.get('employee_name')
         st.session_state.selected_mode = None
 
+    # Check authentication status
     if st.session_state.authenticated and st.session_state.employee_name:
+        # User is logged in - show main interface
         st.title("Select Mode")
-        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-
-        with col1:
-            if st.button("Sales", use_container_width=True, key="sales_mode"):
-                st.session_state.selected_mode = "Sales"
-                st.rerun()
-
-        with col2:
-            if st.button("Visit", use_container_width=True, key="visit_mode"):
-                st.session_state.selected_mode = "Visit"
-                st.rerun()
-
-        with col3:
-            if st.button("Attendance", use_container_width=True, key="attendance_mode"):
-                st.session_state.selected_mode = "Attendance"
-                st.rerun()
-
-        with col4:
-            if st.button("Resources", use_container_width=True, key="resources_mode"):
-                st.session_state.selected_mode = "Resources"
-                st.rerun()
-
-        with col5:
-            if st.button("Support Ticket", use_container_width=True, key="ticket_mode"):
-                st.session_state.selected_mode = "Support Ticket"
-                st.rerun()
-
-        with col6:
-            if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
-                st.session_state.selected_mode = "Travel/Hotel"
-                st.rerun()
-
-        with col7:
-            if st.button("Demo", use_container_width=True, key="demo_mode"):
-                st.session_state.selected_mode = "Demo"
-                st.rerun()
+        cols = st.columns(7)
+        
+        modes = [
+            ("Sales", "sales_mode"),
+            ("Visit", "visit_mode"),
+            ("Attendance", "attendance_mode"),
+            ("Resources", "resources_mode"),
+            ("Support Ticket", "ticket_mode"),
+            ("Travel/Hotel", "travel_mode"),
+            ("Demo", "demo_mode")
+        ]
+        
+        for (mode_name, mode_key), col in zip(modes, cols):
+            with col:
+                if st.button(mode_name, key=mode_key, use_container_width=True):
+                    st.session_state.selected_mode = mode_name
+                    st.rerun()
 
         if st.session_state.selected_mode:
             add_back_button()
-
-            if st.session_state.selected_mode == "Sales":
-                sales_page()
-            elif st.session_state.selected_mode == "Visit":
-                visit_page()
-            elif st.session_state.selected_mode == "Attendance":
-                attendance_page()
-            elif st.session_state.selected_mode == "Resources":
-                resources_page()
-            elif st.session_state.selected_mode == "Support Ticket":
-                support_ticket_page()
-            elif st.session_state.selected_mode == "Travel/Hotel":
-                travel_hotel_page()
-            elif st.session_state.selected_mode == "Demo":
-                demo_page()
+            
+            page_functions = {
+                "Sales": sales_page,
+                "Visit": visit_page,
+                "Attendance": attendance_page,
+                "Resources": resources_page,
+                "Support Ticket": support_ticket_page,
+                "Travel/Hotel": travel_hotel_page,
+                "Demo": demo_page
+            }
+            
+            if st.session_state.selected_mode in page_functions:
+                page_functions[st.session_state.selected_mode]()
+    
     else:
         display_login_header()
         
-        employee_names = Person['Employee Name'].tolist()
         form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
-
         with form_col2:
-            with st.container():
+            with st.form("login_form"):
                 employee_name = st.selectbox(
-                    "Select Your Name", 
-                    employee_names, 
+                    "Select Your Name",
+                    Person['Employee Name'].tolist(),
                     key="employee_select"
                 )
                 passkey = st.text_input(
-                    "Enter Your Employee Code", 
-                    type="password", 
+                    "Enter Your Employee Code",
+                    type="password",
                     key="passkey_input"
                 )
-
-                login_button = st.button(
-                    "Log in", 
-                    key="login_button",
-                    use_container_width=True
-                )
-
-                if login_button:
+                
+                if st.form_submit_button("Log in"):
                     if authenticate_employee(employee_name, passkey):
+                        # Log location
                         result = streamlit_js_eval(
                             js_expressions="""
                                 new Promise((resolve) => {
-                                    if (navigator.geolocation) {
-                                        navigator.geolocation.getCurrentPosition(
-                                            pos => resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude}),
-                                            err => resolve({latitude: null, longitude: null})
-                                        );
-                                    } else {
-                                        resolve({latitude: null, longitude: null});
-                                    }
+                                    navigator.geolocation.getCurrentPosition(
+                                        pos => resolve({
+                                            latitude: pos.coords.latitude, 
+                                            longitude: pos.coords.longitude
+                                        }),
+                                        err => resolve(null)
+                                    );
                                 });
                             """,
-                            key=f"geo_login_{employee_name}_{int(time.time())}"
+                            key=f"geo_{employee_name}_{int(time.time())}"
                         ) or {}
-
-                        lat = result.get("latitude")
-                        lng = result.get("longitude")
-                        if lat and lng:
-                            log_location_history(conn, employee_name, lat, lng)
-                            gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
-                            st.success(f"Login location logged: [View on Google Maps]({gmaps_link})")
-                            time.sleep(1.5)
+                        
+                        if result:
+                            log_location_history(conn, employee_name, 
+                                               result.get("latitude"), 
+                                               result.get("longitude"))
                         
                         st.session_state.authenticated = True
                         st.session_state.employee_name = employee_name
@@ -2265,7 +2235,7 @@ def main():
                         cookies.save()
                         st.rerun()
                     else:
-                        st.error("Invalid Password. Please try again.")
+                        st.error("Invalid credentials. Please try again.")
 
 if __name__ == "__main__":
     main()
