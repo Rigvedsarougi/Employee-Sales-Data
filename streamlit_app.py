@@ -29,6 +29,11 @@ def logout():
     cookies.save()
     st.rerun()
 
+@st.cache_data(ttl=3600)
+def load_employee_data():
+    """Load employee data with caching"""
+    return Person['Employee Name'].tolist()
+
 def log_location_history(conn, employee_name, lat, lng):
     employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
     designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
@@ -2172,10 +2177,10 @@ def attendance_page():
                     if error:
                         st.error(f"Failed to submit leave request: {error}")
                     else:
-                        st.session_state.attendance_recorded = True  # Update session state
+                        st.session_state.attendance_recorded = True
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
-                        time.sleep(2)  # Give time to see the success message
-                        st.rerun()  # Refresh to show the updated status
+                        time.sleep(2)
+                        st.rerun()
 
 def main():
     if not cookies.ready():
@@ -2230,7 +2235,7 @@ def main():
             with st.form("login_form"):
                 employee_name = st.selectbox(
                     "Select Your Name",
-                    Person['Employee Name'].tolist(),
+                    load_employee_data(), 
                     key="employee_select"
                 )
                 passkey = st.text_input(
@@ -2241,7 +2246,6 @@ def main():
                 
                 if st.form_submit_button("Log in"):
                     if authenticate_employee(employee_name, passkey):
-                        # Log location
                         result = streamlit_js_eval(
                             js_expressions="""
                                 new Promise((resolve) => {
@@ -2258,9 +2262,12 @@ def main():
                         ) or {}
                         
                         if result:
-                            log_location_history(conn, employee_name, 
-                                               result.get("latitude"), 
-                                               result.get("longitude"))
+                            try:
+                                log_location_history(conn, employee_name, 
+                                                  result.get("latitude"), 
+                                                  result.get("longitude"))
+                            except Exception as e:
+                                st.warning(f"Could not log location: {str(e)}")
                         
                         st.session_state.authenticated = True
                         st.session_state.employee_name = employee_name
@@ -2272,4 +2279,12 @@ def main():
                         st.error("Invalid credentials. Please try again.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except RuntimeError as e:
+        if "no running event loop" in str(e):
+            import asyncio
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            main()
+        else:
+            raise e
