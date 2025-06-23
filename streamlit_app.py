@@ -14,6 +14,19 @@ import time
 from streamlit_cookies_manager import EncryptedCookieManager
 import extra_streamlit_components as stx
 
+def logout():
+    st.session_state.authenticated = False
+    st.session_state.employee_name = None
+    st.session_state.selected_mode = None
+    cookies = EncryptedCookieManager(
+        prefix="biolume_",
+        password=os.environ.get("COOKIE_PASSWORD", "default-cookie-password")
+    )
+    cookies['authenticated'] = 'false'
+    cookies['employee_name'] = ''
+    cookies.save()
+    st.rerun()
+
 def log_location_history(conn, employee_name, lat, lng):
     employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
     designation = Person[Person['Employee Name'] == employee_name]['Designation'].values[0]
