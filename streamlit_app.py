@@ -13,19 +13,50 @@ from streamlit_js_eval import streamlit_js_eval
 import time
 from streamlit_cookies_manager import EncryptedCookieManager
 import extra_streamlit_components as stx
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Initialize cookies at module level (only once)
+cookies = None
+
+def init_cookies():
+    global cookies
+    if cookies is None:
+        cookies = EncryptedCookieManager(
+            prefix="biolume_",
+            password=os.environ.get("COOKIE_PASSWORD", "default-cookie-password"),
+            key="unique_cookie_manager_key"  # Add unique key
+        )
+    return cookies
 
 def logout():
     st.session_state.authenticated = False
     st.session_state.employee_name = None
     st.session_state.selected_mode = None
-    cookies = EncryptedCookieManager(
-        prefix="biolume_",
-        password=os.environ.get("COOKIE_PASSWORD", "default-cookie-password")
-    )
+    cookies = init_cookies()
     cookies['authenticated'] = 'false'
     cookies['employee_name'] = ''
     cookies.save()
     st.rerun()
+
+def add_back_button():
+    st.markdown("""
+    <style>
+    .back-button {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        z-index: 1000;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    if st.button("← Logout", key="unique_logout_button"):
+        logout()
+
 
 def log_location_history(conn, employee_name, lat, lng):
     employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
@@ -2144,10 +2175,7 @@ def attendance_page():
 
 def main():
     # Initialize cookies
-    cookies = EncryptedCookieManager(
-        prefix="biolume_",
-        password=os.environ.get("COOKIE_PASSWORD", "default-cookie-password")
-    )
+    cookies = init_cookies()
     
     if not cookies.ready():
         st.stop()  # Wait for cookies to be ready
@@ -2162,42 +2190,23 @@ def main():
     if st.session_state.authenticated and st.session_state.employee_name:
         # User is logged in - show the main interface
         st.title("Select Mode")
-        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
-
-        with col1:
-            if st.button("Sales", use_container_width=True, key="sales_mode"):
-                st.session_state.selected_mode = "Sales"
-                st.rerun()
-
-        with col2:
-            if st.button("Visit", use_container_width=True, key="visit_mode"):
-                st.session_state.selected_mode = "Visit"
-                st.rerun()
-
-        with col3:
-            if st.button("Attendance", use_container_width=True, key="attendance_mode"):
-                st.session_state.selected_mode = "Attendance"
-                st.rerun()
-
-        with col4:
-            if st.button("Resources", use_container_width=True, key="resources_mode"):
-                st.session_state.selected_mode = "Resources"
-                st.rerun()
-
-        with col5:
-            if st.button("Support Ticket", use_container_width=True, key="ticket_mode"):
-                st.session_state.selected_mode = "Support Ticket"
-                st.rerun()
-
-        with col6:
-            if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
-                st.session_state.selected_mode = "Travel/Hotel"
-                st.rerun()
-
-        with col7:
-            if st.button("Demo", use_container_width=True, key="demo_mode"):
-                st.session_state.selected_mode = "Demo"
-                st.rerun()
+        cols = st.columns(7)
+        
+        modes = [
+            ("Sales", "sales_mode"),
+            ("Visit", "visit_mode"),
+            ("Attendance", "attendance_mode"),
+            ("Resources", "resources_mode"),
+            ("Support Ticket", "ticket_mode"),
+            ("Travel/Hotel", "travel_mode"),
+            ("Demo", "demo_mode")
+        ]
+        
+        for (mode_name, mode_key), col in zip(modes, cols):
+            with col:
+                if st.button(mode_name, use_container_width=True, key=mode_key):
+                    st.session_state.selected_mode = mode_name
+                    st.rerun()
 
         if st.session_state.selected_mode:
             add_back_button()
