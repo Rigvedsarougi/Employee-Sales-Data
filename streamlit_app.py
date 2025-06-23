@@ -2066,7 +2066,6 @@ def attendance_page():
     st.subheader("Attendance Status")
     status = st.radio("Select Status", ["Present", "Half Day", "Leave"], index=0, key="attendance_status")
 
-    # Add the new station dropdown
     station_type = st.selectbox(
         "Station Type",
         ["HQ Location", "Out Station"],
@@ -2104,13 +2103,12 @@ def attendance_page():
 
         if lat and lng and st.button("Mark Attendance", key="mark_attendance_button"):
             with st.spinner("Recording attendance..."):
-                # Include station type in the remarks
                 remarks = f"{station_type}"
                 attendance_id, error = record_attendance(
                     selected_employee,
                     status,
                     location_link=gmaps_link,
-                    leave_reason=remarks  # Using leave_reason field to store station type
+                    leave_reason=remarks
                 )
                 if error:
                     st.error(f"Failed to record attendance: {error}")
@@ -2129,7 +2127,6 @@ def attendance_page():
             if not leave_reason:
                 st.error("Please provide a reason for your leave")
             else:
-                # Include station type in the leave reason
                 full_reason = f"{station_type} - {leave_type}: {leave_reason}"
                 with st.spinner("Submitting leave request..."):
                     attendance_id, error = record_attendance(
@@ -2143,19 +2140,15 @@ def attendance_page():
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
 
 def main():
-    # Wait for cookies to initialize
     if not cookies.ready():
         st.stop()
 
-    # Initialize session state from cookies if not already set
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = cookies.get('authenticated') == 'true'
         st.session_state.employee_name = cookies.get('employee_name')
         st.session_state.selected_mode = None
 
-    # Check authentication status
     if st.session_state.authenticated and st.session_state.employee_name:
-        # User is logged in - show main interface
         st.title("Select Mode")
         cols = st.columns(7)
         
