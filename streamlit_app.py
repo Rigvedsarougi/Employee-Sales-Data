@@ -11,52 +11,12 @@ import pytz
 import streamlit.components.v1 as components
 from streamlit_js_eval import streamlit_js_eval
 import time
-from streamlit_cookies_manager import EncryptedCookieManager
 import extra_streamlit_components as stx
-import os
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+def get_manager():
+    return stx.CookieManager()
 
-# Initialize cookies at module level (only once)
-cookies = None
-
-def init_cookies():
-    global cookies
-    if cookies is None:
-        cookies = EncryptedCookieManager(
-            prefix="biolume_",
-            password=os.environ.get("COOKIE_PASSWORD", "default-cookie-password"),
-            key="unique_cookie_manager_key"  # Add unique key
-        )
-    return cookies
-
-def logout():
-    st.session_state.authenticated = False
-    st.session_state.employee_name = None
-    st.session_state.selected_mode = None
-    cookies = init_cookies()
-    cookies['authenticated'] = 'false'
-    cookies['employee_name'] = ''
-    cookies.save()
-    st.rerun()
-
-def add_back_button():
-    st.markdown("""
-    <style>
-    .back-button {
-        position: fixed;
-        bottom: 20px;
-        left: 20px;
-        z-index: 1000;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    if st.button("← Logout", key="unique_logout_button"):
-        logout()
-
+cookie_manager = get_manager()
 
 def log_location_history(conn, employee_name, lat, lng):
     employee_code = Person[Person['Employee Name'] == employee_name]['Employee Code'].values[0]
@@ -465,7 +425,6 @@ def save_uploaded_file(uploaded_file, folder):
 
 def log_sales_to_gsheet(conn, sales_data):
     try:
-        # Only write to main Sales sheet
         existing_sales_data = conn.read(worksheet="Sales", ttl=5)
         existing_sales_data = existing_sales_data.dropna(how='all')
         
@@ -496,7 +455,6 @@ def update_delivery_status(conn, invoice_number, product_name, new_status):
 
 def log_visit_to_gsheet(conn, visit_data):
     try:
-        # Only write to main Visits sheet
         existing_visit_data = conn.read(worksheet="Visits", ttl=5)
         existing_visit_data = existing_visit_data.dropna(how='all')
         
@@ -528,7 +486,6 @@ def log_attendance_to_gsheet(conn, attendance_data):
 
 def log_ticket_to_gsheet(conn, ticket_data):
     try:
-        # Only write to main Tickets sheet
         existing_data = conn.read(worksheet="Tickets", usecols=list(range(len(TICKET_SHEET_COLUMNS))), ttl=5)
         existing_data = existing_data.dropna(how='all')
         
@@ -541,7 +498,6 @@ def log_ticket_to_gsheet(conn, ticket_data):
 
 def log_travel_hotel_request(conn, request_data):
     try:
-        # Only write to main TravelHotelRequests sheet
         existing_data = conn.read(worksheet="TravelHotelRequests", usecols=list(range(len(TRAVEL_HOTEL_COLUMNS))), ttl=5)
         existing_data = existing_data.dropna(how='all')
         
@@ -554,7 +510,6 @@ def log_travel_hotel_request(conn, request_data):
 
 def log_demo_to_gsheet(conn, demo_data):
     try:
-        # Only write to main Demos sheet
         existing_data = conn.read(worksheet="Demos", usecols=list(range(len(DEMO_SHEET_COLUMNS))), ttl=5)
         existing_data = existing_data.dropna(how='all')
         
@@ -686,7 +641,7 @@ def generate_invoice(customer_name, gst_number, contact_number, address, state, 
         else:
             unit_price = float(product_data['Price'])
             
-        discounted_unit_price = unit_price * (1 - prod_discount/100)
+        discounted_unit_price = unit_price * (1 - prod_discount / 100)
         item_total = discounted_unit_price * quantity
         
         sales_data.append({
@@ -875,21 +830,6 @@ def resources_page():
                 st.error(f"File not found: {resource['file_path']}")
             
             st.markdown("---")
-
-def add_back_button():
-    st.markdown("""
-    <style>
-    .back-button {
-        position: fixed;
-        bottom: 20px;
-        left: 20px;
-        z-index: 1000;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    if st.button("← Logout", key="logout_button"):
-        logout()
 
 def demo_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
@@ -2174,62 +2114,25 @@ def attendance_page():
                         st.success(f"Leave request submitted successfully! ID: {attendance_id}")
 
 def main():
-    # Initialize cookies
-    cookies = init_cookies()
-    
-    if not cookies.ready():
-        st.stop()  # Wait for cookies to be ready
-    
-    # Initialize session state from cookies if not already set
     if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = cookies.get('authenticated') == 'true'
-        st.session_state.employee_name = cookies.get('employee_name')
+        st.session_state.authenticated = False
+    if 'selected_mode' not in st.session_state:
         st.session_state.selected_mode = None
+    if 'employee_name' not in st.session_state:
+        st.session_state.employee_name = None
 
-    # Check if user is authenticated via cookies
-    if st.session_state.authenticated and st.session_state.employee_name:
-        # User is logged in - show the main interface
-        st.title("Select Mode")
-        cols = st.columns(7)
-        
-        modes = [
-            ("Sales", "sales_mode"),
-            ("Visit", "visit_mode"),
-            ("Attendance", "attendance_mode"),
-            ("Resources", "resources_mode"),
-            ("Support Ticket", "ticket_mode"),
-            ("Travel/Hotel", "travel_mode"),
-            ("Demo", "demo_mode")
-        ]
-        
-        for (mode_name, mode_key), col in zip(modes, cols):
-            with col:
-                if st.button(mode_name, use_container_width=True, key=mode_key):
-                    st.session_state.selected_mode = mode_name
-                    st.rerun()
+    cookies = cookie_manager.get_all()
+    if 'employee_auth' in cookies and not st.session_state.authenticated:
+        employee_name = cookies['employee_auth']
+        st.session_state.authenticated = True
+        st.session_state.employee_name = employee_name
+        st.rerun()
 
-        if st.session_state.selected_mode:
-            add_back_button()
-
-            if st.session_state.selected_mode == "Sales":
-                sales_page()
-            elif st.session_state.selected_mode == "Visit":
-                visit_page()
-            elif st.session_state.selected_mode == "Attendance":
-                attendance_page()
-            elif st.session_state.selected_mode == "Resources":
-                resources_page()
-            elif st.session_state.selected_mode == "Support Ticket":
-                support_ticket_page()
-            elif st.session_state.selected_mode == "Travel/Hotel":
-                travel_hotel_page()
-            elif st.session_state.selected_mode == "Demo":
-                demo_page()
-    else:
-        # User is not logged in - show login form
+    if not st.session_state.authenticated:
         display_login_header()
-        
+
         employee_names = Person['Employee Name'].tolist()
+
         form_col1, form_col2, form_col3 = st.columns([1, 2, 1])
 
         with form_col2:
@@ -2276,16 +2179,76 @@ def main():
                             gmaps_link = f"https://maps.google.com/?q={lat},{lng}"
                             st.success(f"Login location logged: [View on Google Maps]({gmaps_link})")
                             time.sleep(1.5)
-                        
-                        # Set session and cookies
                         st.session_state.authenticated = True
                         st.session_state.employee_name = employee_name
-                        cookies['authenticated'] = 'true'
-                        cookies['employee_name'] = employee_name
-                        cookies.save()
+                        cookie_manager.set('employee_auth', employee_name, expires_at=datetime.now() + timedelta(days=30))
                         st.rerun()
                     else:
                         st.error("Invalid Password. Please try again.")
+    else:
+        st.title("Select Mode")
+        
+        with st.sidebar:
+            st.write(f"Logged in as: **{st.session_state.employee_name}**")
+            if st.button("Logout", type="primary"):
+                st.session_state.authenticated = False
+                st.session_state.selected_mode = None
+                st.session_state.employee_name = None
+                cookie_manager.delete('employee_auth')
+                st.rerun()
+
+        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+
+        with col1:
+            if st.button("Sales", use_container_width=True, key="sales_mode"):
+                st.session_state.selected_mode = "Sales"
+                st.rerun()
+
+        with col2:
+            if st.button("Visit", use_container_width=True, key="visit_mode"):
+                st.session_state.selected_mode = "Visit"
+                st.rerun()
+
+        with col3:
+            if st.button("Attendance", use_container_width=True, key="attendance_mode"):
+                st.session_state.selected_mode = "Attendance"
+                st.rerun()
+
+        with col4:
+            if st.button("Resources", use_container_width=True, key="resources_mode"):
+                st.session_state.selected_mode = "Resources"
+                st.rerun()
+
+        with col5:
+            if st.button("Support Ticket", use_container_width=True, key="ticket_mode"):
+                st.session_state.selected_mode = "Support Ticket"
+                st.rerun()
+
+        with col6:
+            if st.button("Travel/Hotel", use_container_width=True, key="travel_mode"):
+                st.session_state.selected_mode = "Travel/Hotel"
+                st.rerun()
+
+        with col7:
+            if st.button("Demo", use_container_width=True, key="demo_mode"):
+                st.session_state.selected_mode = "Demo"
+                st.rerun()
+
+        if st.session_state.selected_mode:
+            if st.session_state.selected_mode == "Sales":
+                sales_page()
+            elif st.session_state.selected_mode == "Visit":
+                visit_page()
+            elif st.session_state.selected_mode == "Attendance":
+                attendance_page()
+            elif st.session_state.selected_mode == "Resources":
+                resources_page()
+            elif st.session_state.selected_mode == "Support Ticket":
+                support_ticket_page()
+            elif st.session_state.selected_mode == "Travel/Hotel":
+                travel_hotel_page()
+            elif st.session_state.selected_mode == "Demo":
+                demo_page()
 
 if __name__ == "__main__":
     main()
