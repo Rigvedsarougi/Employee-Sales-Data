@@ -1760,7 +1760,7 @@ def sales_page():
             with col1:
                 invoice_number_search = st.text_input("Invoice Number", key="invoice_search")
             with col2:
-                invoice_date_search = st.date_input("Invoice Date", key="date_search")
+                invoice_date_search = st.date_input("Invoice Date", value=None, key="date_search")
             with col3:
                 outlet_name_search = st.text_input("Outlet Name", key="outlet_search")
             
