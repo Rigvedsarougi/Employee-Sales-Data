@@ -897,7 +897,7 @@ def demo_page():
             outlet_city    = st.text_input("Outlet City", "", key="demo_outlet_city")
 
         st.subheader("Demo Details")
-        demo_date     = st.date_input("Demo Date", key="demo_date")
+        demo_date     = st.date_input("Demo Date", value=None, key="demo_date")
         outlet_review = st.selectbox("Outlet Review", ["Excellent", "Good", "Average", "Poor"], key="outlet_review")
         remarks       = st.text_area("Remarks", key="demo_remarks")
 
@@ -2019,7 +2019,7 @@ def visit_page():
         with col1:
             visit_id_search = st.text_input("Visit ID", key="visit_id_search")
         with col2:
-            visit_date_search = st.date_input("Visit Date", key="visit_date_search")
+            visit_date_search = st.date_input("Visit Date", value=None, key="visit_date_search")
         with col3:
             outlet_name_search = st.text_input("Outlet Name", key="visit_outlet_search")
             
