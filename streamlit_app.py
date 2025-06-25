@@ -1000,12 +1000,10 @@ def demo_page():
             return
 
         with st.expander("🔍 Search Filters", expanded=True):
-            c1, c2, c3 = st.columns(3)
+            c1, c2= st.columns(2)
             with c1:
-                fid = st.text_input("Demo ID", key="demo_id_search")
-            with c2:
                 fdate = st.date_input("Demo Date", key="demo_date_search")
-            with c3:
+            with c2:
                 fout = st.text_input("Outlet Name", key="demo_outlet_search")
             if st.button("Apply Filters", key="search_demo_button"):
                 st.rerun()
@@ -1776,12 +1774,10 @@ def sales_page():
             return
             
         with st.expander("🔍 Search Filters", expanded=True):
-            col1, col2, col3 = st.columns(3)
+            col1, col2= st.columns(2)
             with col1:
-                invoice_number_search = st.text_input("Invoice Number", key="invoice_search")
-            with col2:
                 invoice_date_search = st.date_input("Invoice Date", key="date_search")
-            with col3:
+            with col2:
                 outlet_name_search = st.text_input("Outlet Name", key="outlet_search")
             
             if st.button("Apply Filters", key="search_sales_button"):
@@ -2041,12 +2037,10 @@ def visit_page():
     
     with tab2:
         st.subheader("Previous Visits")
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
-            visit_id_search = st.text_input("Visit ID", key="visit_id_search")
-        with col2:
             visit_date_search = st.date_input("Visit Date", key="visit_date_search")
-        with col3:
+        with col2:
             outlet_name_search = st.text_input("Outlet Name", key="visit_outlet_search")
             
         if st.button("Search Visits", key="search_visits_button"):
