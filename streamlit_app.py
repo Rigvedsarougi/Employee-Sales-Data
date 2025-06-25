@@ -94,6 +94,19 @@ def hourly_location_auto_log(conn, selected_employee):
 
 st.set_page_config(page_title="Location Logger", layout="centered")
 
+citystate = pd.read_csv('India City - State.csv')
+
+def get_all_states():
+    """Return sorted list of all unique states"""
+    return sorted(citystate['State'].unique())
+
+def get_cities_for_state(state):
+    """Return sorted list of cities for a given state"""
+    if not state:
+        return []
+    cities = citystate[citystate['State'] == state]['City'].unique()
+    return sorted(cities)
+
 def get_ist_time():
     utc_now = datetime.now(pytz.utc)
     ist = pytz.timezone('Asia/Kolkata')
@@ -893,8 +906,12 @@ def demo_page():
             outlet_name    = st.text_input("Outlet Name", key="demo_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="demo_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="demo_outlet_address")
-            outlet_state   = st.text_input("Outlet State", "", key="demo_outlet_state")
-            outlet_city    = st.text_input("Outlet City", "", key="demo_outlet_city")
+            
+            # State and city dropdowns
+            all_states = get_all_states()
+            selected_state = st.selectbox("State", all_states, key="demo_outlet_state")
+            cities = get_cities_for_state(selected_state)
+            selected_city = st.selectbox("City", cities, key="demo_outlet_city")
 
         st.subheader("Demo Details")
         demo_date     = st.date_input("Demo Date", key="demo_date")
@@ -938,8 +955,8 @@ def demo_page():
                     "Outlet Name": outlet_name,
                     "Outlet Contact": outlet_contact,
                     "Outlet Address": outlet_address,
-                    "Outlet State": outlet_state,
-                    "Outlet City": outlet_city,
+                    "Outlet State": selected_state if outlet_option == "Enter manually" else outlet_state,
+                    "Outlet City": selected_city if outlet_option == "Enter manually" else outlet_city,
                     "Demo Date": demo_date.strftime("%d-%m-%Y"),
                     "Check-in Time": ci.strftime("%H:%M:%S"),
                     "Check-out Time": co.strftime("%H:%M:%S"),
@@ -1687,14 +1704,18 @@ def sales_page():
             gst_number    = st.text_input("GST Number", key="manual_gst_number")
             contact_number = st.text_input("Contact Number", key="manual_contact_number")
             address        = st.text_area("Address", key="manual_address")
-            state          = st.text_input("State", "", key="manual_state")
-            city           = st.text_input("City", "", key="manual_city")
+            
+            # State and city dropdowns
+            all_states = get_all_states()
+            selected_state = st.selectbox("State", all_states, key="manual_state")
+            cities = get_cities_for_state(selected_state)
+            selected_city = st.selectbox("City", cities, key="manual_city")
     
         if st.button("Generate Invoice", key="generate_invoice_button"):
             if selected_products and customer_name:
                 invoice_number = generate_invoice_number()
                 pdf, pdf_path = generate_invoice(
-                    customer_name, gst_number, contact_number, address, state, city,
+                    customer_name, gst_number, contact_number, address, selected_state, selected_city,
                     selected_products, quantities, product_discounts, discount_category,
                     selected_employee, payment_status, amount_paid, None, None,
                     invoice_number, transaction_type,
@@ -1714,7 +1735,6 @@ def sales_page():
                 
             else:
                 st.error("Please fill all required fields and select products.")
-
     
     with tab2:
         st.subheader("Your Sales History")
@@ -1974,8 +1994,12 @@ def visit_page():
             outlet_name = st.text_input("Outlet Name", key="visit_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="visit_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="visit_outlet_address")
-            outlet_state = st.text_input("Outlet State", "", key="visit_outlet_state")
-            outlet_city = st.text_input("Outlet City", "", key="visit_outlet_city")
+            
+            # State and city dropdowns
+            all_states = get_all_states()
+            selected_state = st.selectbox("State", all_states, key="visit_outlet_state")
+            cities = get_cities_for_state(selected_state)
+            selected_city = st.selectbox("City", cities, key="visit_outlet_city")
 
         st.subheader("Visit Details")
         visit_purpose = st.selectbox("Visit Purpose", ["Sales", "Demo", "Product Demonstration", "Relationship Building", "Issue Resolution", "Other"], key="visit_purpose")
@@ -2004,7 +2028,9 @@ def visit_page():
                 
                 visit_id = record_visit(
                     selected_employee, outlet_name, outlet_contact, outlet_address,
-                    outlet_state, outlet_city, visit_purpose, visit_notes, 
+                    selected_state if outlet_option == "Enter manually" else outlet_state, 
+                    selected_city if outlet_option == "Enter manually" else outlet_city, 
+                    visit_purpose, visit_notes, 
                     visit_selfie_path, entry_datetime, exit_datetime,
                     visit_remarks
                 )
