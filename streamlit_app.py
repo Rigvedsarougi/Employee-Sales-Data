@@ -907,7 +907,6 @@ def demo_page():
             outlet_contact = st.text_input("Outlet Contact", key="demo_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="demo_outlet_address")
             
-            # State and city dropdowns
             all_states = get_all_states()
             selected_state = st.selectbox("State", all_states, key="demo_outlet_state")
             cities = get_cities_for_state(selected_state)
@@ -1693,8 +1692,8 @@ def sales_page():
             customer_name, gst_number = chosen_outlet, od['GST']
             contact_number, address = od['Contact'], od['Address']
             state, city = od['State'], od['City']
-            selected_state = state  # Make sure to set selected_state
-            selected_city = city    # And selected_city
+            selected_state = state  
+            selected_city = city   
         
             st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
             st.text_input("Contact Number", value=contact_number, disabled=True, key="outlet_contact_display")
@@ -1707,7 +1706,6 @@ def sales_page():
             contact_number = st.text_input("Contact Number", key="manual_contact_number")
             address = st.text_area("Address", key="manual_address")
             
-            # State and city dropdowns
             all_states = get_all_states()
             selected_state = st.selectbox("State", all_states, key="manual_state")
             cities = get_cities_for_state(selected_state)
@@ -1998,7 +1996,6 @@ def visit_page():
             outlet_contact = st.text_input("Outlet Contact", key="visit_outlet_contact")
             outlet_address = st.text_area("Outlet Address", key="visit_outlet_address")
             
-            # State and city dropdowns
             all_states = get_all_states()
             selected_state = st.selectbox("State", all_states, key="visit_outlet_state")
             cities = get_cities_for_state(selected_state)
@@ -2093,11 +2090,9 @@ def attendance_page():
     st.title("Attendance Management")
     selected_employee = st.session_state.employee_name
 
-    # Check if attendance already recorded today
     if check_existing_attendance(selected_employee):
         st.warning("You have already marked your attendance for today.")
         
-        # Show existing attendance record
         try:
             existing_data = conn.read(worksheet="Attendance", usecols=list(range(len(ATTENDANCE_SHEET_COLUMNS))), ttl=5)
             existing_data = existing_data.dropna(how='all')
@@ -2123,7 +2118,7 @@ def attendance_page():
             if today_record.get('Location Link'):
                 st.markdown(f"[View Check-in Location]({today_record['Location Link']})")
             
-            return  # Exit the function to prevent further actions
+            return 
         
         except Exception as e:
             st.error(f"Error retrieving attendance record: {str(e)}")
@@ -2179,11 +2174,11 @@ def attendance_page():
                 if error:
                     st.error(f"Failed to record attendance: {error}")
                 else:
-                    st.session_state.attendance_recorded = True  # Update session state
+                    st.session_state.attendance_recorded = True 
                     st.success(f"Attendance recorded successfully! ID: {attendance_id}")
                     
-                    time.sleep(2)  # Give time to see the success message
-                    st.rerun()  # Refresh to show the updated status
+                    time.sleep(2) 
+                    st.rerun()  
 
     else:
         st.subheader("Leave Details")
