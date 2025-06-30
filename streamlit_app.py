@@ -1683,7 +1683,7 @@ def sales_page():
             st.text_input("Contact Number", value=distributor_contact_number, disabled=True, key="distributor_contact_number_display")
             st.text_input("Email", value=distributor_email, disabled=True, key="distributor_email_display")
             st.text_input("Territory", value=distributor_territory, disabled=True, key="distributor_territory_display")
-    
+
         st.subheader("Outlet Details")
         outlet_option = st.radio("Outlet Selection", ["Enter manually", "Select from list"], key="outlet_option")
         if outlet_option == "Select from list":
@@ -1693,7 +1693,9 @@ def sales_page():
             customer_name, gst_number = chosen_outlet, od['GST']
             contact_number, address = od['Contact'], od['Address']
             state, city = od['State'], od['City']
-    
+            selected_state = state  # Make sure to set selected_state
+            selected_city = city    # And selected_city
+        
             st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
             st.text_input("Contact Number", value=contact_number, disabled=True, key="outlet_contact_display")
             st.text_input("Address", value=address, disabled=True, key="outlet_address_display")
@@ -1701,15 +1703,16 @@ def sales_page():
             st.text_input("City", value=city, disabled=True, key="outlet_city_display")
         else:
             customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
-            gst_number    = st.text_input("GST Number", key="manual_gst_number")
+            gst_number = st.text_input("GST Number", key="manual_gst_number")
             contact_number = st.text_input("Contact Number", key="manual_contact_number")
-            address        = st.text_area("Address", key="manual_address")
+            address = st.text_area("Address", key="manual_address")
             
             # State and city dropdowns
             all_states = get_all_states()
             selected_state = st.selectbox("State", all_states, key="manual_state")
             cities = get_cities_for_state(selected_state)
             selected_city = st.selectbox("City", cities, key="manual_city")
+        
     
         if st.button("Generate Invoice", key="generate_invoice_button"):
             if selected_products and customer_name:
