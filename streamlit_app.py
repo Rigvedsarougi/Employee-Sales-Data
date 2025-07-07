@@ -379,6 +379,67 @@ TICKET_CATEGORIES = [
     "Others"
 ]
 
+# Add to your existing column definitions (near the top of the file)
+EXPENSE_SHEET_COLUMNS = [
+    "Expense ID",
+    "Employee Name",
+    "Employee Code",
+    "Designation",
+    "Expense Type",
+    "Amount",
+    "Date",
+    "Description",
+    "Document Path",
+    "Document Text",
+    "Status",
+    "Approval Notes",
+    "Date Submitted"
+]
+
+EXPENSE_HISTORY_SHEET = "ExpenseHistory"
+EXPENSE_TYPES = [
+    "Travel",
+    "Hotel",
+    "Food",
+    "Transportation",
+    "Office Supplies",
+    "Client Entertainment",
+    "Other"
+]
+
+def extract_text_from_file(file_path):
+    try:
+        if file_path.lower().endswith(('.png', '.jpg', '.jpeg')):
+            import pytesseract
+            from PIL import Image
+            img = Image.open(file_path)
+            text = pytesseract.image_to_string(img)
+            return text.strip()
+        elif file_path.lower().endswith('.pdf'):
+            import PyPDF2
+            with open(file_path, 'rb') as f:
+                reader = PyPDF2.PdfReader(f)
+                text = ""
+                for page in reader.pages:
+                    text += page.extract_text()
+            return text.strip()
+        else:
+            return "Unsupported file type for text extraction"
+    except Exception as e:
+        return f"Error extracting text: {str(e)}"
+
+def log_expense_to_gsheet(conn, expense_data):
+    try:
+        existing_data = conn.read(worksheet=EXPENSE_HISTORY_SHEET, usecols=list(range(len(EXPENSE_SHEET_COLUMNS))), ttl=5)
+        existing_data = existing_data.dropna(how='all')
+        
+        updated_data = pd.concat([existing_data, expense_data], ignore_index=True)
+        
+        conn.update(worksheet=EXPENSE_HISTORY_SHEET, data=updated_data)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
 PRIORITY_LEVELS = ["Low", "Medium", "High", "Critical"]
 TRAVEL_MODES = ["Bus", "Train", "Flight", "Taxi", "Other"]
 REQUEST_TYPES = ["Hotel", "Travel", "Travel & Hotel"]
@@ -1279,6 +1340,15 @@ def travel_hotel_page():
     designation = Person[Person['Employee Name'] == selected_employee]['Designation'].values[0]
     
     tab1, tab2, tab3 = st.tabs(["Travel Request", "Hotel Booking Request", "My Booking Requests"])
+
+def travel_hotel_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
+    st.title("Travel & Hotel Booking")
+    selected_employee = st.session_state.employee_name
+    employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+    designation = Person[Person['Employee Name'] == selected_employee]['Designation'].values[0]
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["Travel Request", "Hotel Booking Request", "My Booking Requests", "Expense Management"])
     
     with tab1:
         st.subheader("New Travel Request")
@@ -1562,6 +1632,238 @@ def travel_hotel_page():
                 
         except Exception as e:
             st.error(f"Error retrieving travel/hotel requests: {str(e)}")
+    
+    with tab4:
+        st.subheader("Expense Submission")
+        with st.form("expense_form"):
+            col1, col2 = st.columns(2)
+            with col1:
+                expense_type = st.selectbox(
+                    "Expense Type*",
+                    EXPENSE_TYPES,
+                    help="Select the category for this expense"
+                )
+            with col2:
+                expense_date = st.date_input(
+                    "Expense Date*",
+                    value=datetime.now().date(),
+                    help="When was this expense incurred?"
+                )
+            
+            amount = st.number_input(
+                "Amount (INR)*",
+                min_value=0.0,
+                value=0.0,
+                step=1.0,
+                format="%.2f",
+                help="Enter the total amount of the expense"
+            )
+            
+            description = st.text_area(
+                "Description*",
+                height=100,
+                placeholder="Provide details about this expense...",
+                help="Explain what this expense was for"
+            )
+            
+            uploaded_file = st.file_uploader(
+                "Upload Receipt/Invoice (JPEG, PNG, PDF)",
+                type=['jpg', 'jpeg', 'png', 'pdf'],
+                help="Upload clear image or PDF of your receipt"
+            )
+            
+            st.markdown("<small>*Required fields</small>", unsafe_allow_html=True)
+            
+            submitted = st.form_submit_button("Submit Expense")
+            
+            if submitted:
+                if not expense_type or not amount or not description:
+                    st.error("Please fill in all required fields (marked with *)")
+                elif amount <= 0:
+                    st.error("Amount must be greater than 0")
+                else:
+                    with st.spinner("Processing your expense..."):
+                        expense_id = f"EXP-{get_ist_time().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
+                        current_date = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
+                        
+                        # Save uploaded file if provided
+                        doc_path = ""
+                        doc_text = ""
+                        if uploaded_file is not None:
+                            file_ext = os.path.splitext(uploaded_file.name)[1]
+                            doc_path = os.path.join("expense_documents", f"{expense_id}{file_ext}")
+                            os.makedirs("expense_documents", exist_ok=True)
+                            with open(doc_path, "wb") as f:
+                                f.write(uploaded_file.getbuffer())
+                            
+                            # Extract text from document
+                            doc_text = extract_text_from_file(doc_path)
+                        
+                        expense_data = {
+                            "Expense ID": expense_id,
+                            "Employee Name": selected_employee,
+                            "Employee Code": employee_code,
+                            "Designation": designation,
+                            "Expense Type": expense_type,
+                            "Amount": amount,
+                            "Date": expense_date.strftime("%d-%m-%Y"),
+                            "Description": description,
+                            "Document Path": doc_path,
+                            "Document Text": doc_text,
+                            "Status": "Submitted",
+                            "Approval Notes": "",
+                            "Date Submitted": current_date
+                        }
+                        
+                        expense_df = pd.DataFrame([expense_data])
+                        success, error = log_expense_to_gsheet(conn, expense_df)
+                        
+                        if success:
+                            st.success(f"""
+                            Expense submitted successfully! 
+                            **Expense ID:** {expense_id}
+                            """)
+                        else:
+                            st.error(f"Failed to submit expense: {error}")
+        
+        st.subheader("My Expense History")
+        try:
+            expenses_data = conn.read(worksheet=EXPENSE_HISTORY_SHEET, usecols=list(range(len(EXPENSE_SHEET_COLUMNS))), ttl=5)
+            expenses_data = expenses_data.dropna(how="all")
+            
+            if not expenses_data.empty:
+                my_expenses = expenses_data[
+                    expenses_data['Employee Name'] == selected_employee
+                ].sort_values(by="Date Submitted", ascending=False)
+                
+                if not my_expenses.empty:
+                    # Summary metrics
+                    total_expenses = my_expenses['Amount'].sum()
+                    pending_count = len(my_expenses[my_expenses['Status'] == "Submitted"])
+                    approved_count = len(my_expenses[my_expenses['Status'] == "Approved"])
+                    rejected_count = len(my_expenses[my_expenses['Status'] == "Rejected"])
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric("Total Expenses", f"₹{total_expenses:,.2f}")
+                    col2.metric("Pending", pending_count)
+                    col3.metric("Approved", approved_count)
+                    col4.metric("Rejected", rejected_count)
+                    
+                    # Filters
+                    st.subheader("Filter Expenses")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        status_filter = st.selectbox(
+                            "Status",
+                            ["All", "Submitted", "Approved", "Rejected"],
+                            key="expense_status_filter"
+                        )
+                    with col2:
+                        type_filter = st.selectbox(
+                            "Expense Type",
+                            ["All"] + EXPENSE_TYPES,
+                            key="expense_type_filter"
+                        )
+                    with col3:
+                        date_filter = st.date_input(
+                            "Expense Date",
+                            key="expense_date_filter"
+                        )
+                    
+                    # Apply filters
+                    filtered_expenses = my_expenses.copy()
+                    if status_filter != "All":
+                        filtered_expenses = filtered_expenses[filtered_expenses['Status'] == status_filter]
+                    if type_filter != "All":
+                        filtered_expenses = filtered_expenses[filtered_expenses['Expense Type'] == type_filter]
+                    if date_filter:
+                        date_str = date_filter.strftime("%d-%m-%Y")
+                        filtered_expenses = filtered_expenses[filtered_expenses['Date'] == date_str]
+                    
+                    # Display filtered results
+                    if not filtered_expenses.empty:
+                        display_cols = [
+                            'Expense ID', 'Expense Type', 'Amount', 'Date', 
+                            'Status', 'Date Submitted'
+                        ]
+                        
+                        st.dataframe(
+                            filtered_expenses[display_cols],
+                            column_config={
+                                "Amount": st.column_config.NumberColumn(
+                                    format="₹%.2f",
+                                    help="Expense amount in INR"
+                                ),
+                                "Date": st.column_config.DateColumn(
+                                    format="DD/MM/YYYY",
+                                    help="Date when expense was incurred"
+                                )
+                            },
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        
+                        # Allow viewing details of each expense
+                        selected_expense = st.selectbox(
+                            "Select expense to view details",
+                            filtered_expenses['Expense ID'],
+                            key="expense_selection"
+                        )
+                        
+                        expense_details = filtered_expenses[
+                            filtered_expenses['Expense ID'] == selected_expense
+                        ].iloc[0]
+                        
+                        st.subheader(f"Expense {selected_expense} Details")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Type", expense_details['Expense Type'])
+                            st.metric("Amount", f"₹{expense_details['Amount']:,.2f}")
+                            st.metric("Date", expense_details['Date'])
+                        with col2:
+                            status_color = "orange" if expense_details['Status'] == "Submitted" else "green" if expense_details['Status'] == "Approved" else "red"
+                            st.markdown(f"<span style='color:{status_color}; font-weight:bold; font-size:1.5rem'>Status: {expense_details['Status']}</span>", unsafe_allow_html=True)
+                            st.metric("Submitted On", expense_details['Date Submitted'])
+                        
+                        st.subheader("Description")
+                        st.write(expense_details['Description'])
+                        
+                        if expense_details['Document Path']:
+                            st.subheader("Receipt/Invoice")
+                            if expense_details['Document Path'].lower().endswith(('.png', '.jpg', '.jpeg')):
+                                st.image(expense_details['Document Path'], use_column_width=True)
+                            elif expense_details['Document Path'].lower().endswith('.pdf'):
+                                st.warning("PDF preview not available - download to view")
+                            
+                            with open(expense_details['Document Path'], "rb") as f:
+                                st.download_button(
+                                    "Download Document",
+                                    f,
+                                    file_name=os.path.basename(expense_details['Document Path']),
+                                    mime="application/octet-stream"
+                                )
+                        
+                        if expense_details['Approval Notes']:
+                            st.subheader("Approval Notes")
+                            st.write(expense_details['Approval Notes'])
+                        
+                        # Download option
+                        csv = filtered_expenses.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            "Download Expense History",
+                            csv,
+                            "my_expenses.csv",
+                            "text/csv",
+                            key='download-expenses-csv'
+                        )
+                    else:
+                        st.warning("No matching expenses found")
+                else:
+                    st.info("You haven't submitted any expenses yet.")
+            else:
+                st.info("No expense records found in the system.")
+        except Exception as e:
+            st.error(f"Error retrieving expense data: {str(e)}")
 
 def sales_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
