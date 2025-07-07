@@ -24,3 +24,6 @@ streamlit_autorefresh
 streamlit-cookies-manager
 extra-streamlit-components
 python-dotenv
+pytesseract
+pillow
+PyPDF2
