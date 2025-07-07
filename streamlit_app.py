@@ -16,6 +16,8 @@ import extra_streamlit_components as stx
 import pytesseract
 from PIL import Image
 import PyPDF2
+import base64
+
 
 cookies = EncryptedCookieManager(
     prefix="biolume_",
@@ -64,6 +66,16 @@ def log_location_history(conn, employee_name, lat, lng):
         return True, None
     except Exception as e:
         return False, str(e)
+
+def file_to_base64(file_path):
+    """Convert file to Base64 encoded string"""
+    with open(file_path, "rb") as file:
+        return base64.b64encode(file.read()).decode('utf-8')
+
+def base64_to_file(base64_str, output_path):
+    """Convert Base64 string back to file"""
+    with open(output_path, "wb") as file:
+        file.write(base64.b64decode(base64_str))
 
 def hourly_location_auto_log(conn, selected_employee):
     if not selected_employee:
@@ -382,7 +394,6 @@ TICKET_CATEGORIES = [
     "Others"
 ]
 
-# Add to your existing column definitions (near the top of the file)
 EXPENSE_SHEET_COLUMNS = [
     "Expense ID",
     "Employee Name",
@@ -392,8 +403,9 @@ EXPENSE_SHEET_COLUMNS = [
     "Amount",
     "Date",
     "Description",
-    "Document Path",
-    "Document Text",
+    "File Name",
+    "File Type",
+    "File Data",
     "Status",
     "Approval Notes",
     "Date Submitted"
@@ -1635,6 +1647,18 @@ def travel_hotel_page():
                 
         except Exception as e:
             st.error(f"Error retrieving travel/hotel requests: {str(e)}")
+
+
+def travel_hotel_page():
+    hourly_location_auto_log(conn, st.session_state.employee_name)
+    st.title("Travel & Hotel Booking")
+    selected_employee = st.session_state.employee_name
+    employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+    designation = Person[Person['Employee Name'] == selected_employee]['Designation'].values[0]
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["Travel Request", "Hotel Booking Request", "My Booking Requests", "Expense Management"])
+    
+    # ... (keep your existing tab1, tab2, tab3 code unchanged) ...
     
     with tab4:
         st.subheader("Expense Submission")
@@ -1689,18 +1713,33 @@ def travel_hotel_page():
                         expense_id = f"EXP-{get_ist_time().strftime('%Y%m%d')}-{str(uuid.uuid4())[:8].upper()}"
                         current_date = get_ist_time().strftime("%d-%m-%Y %H:%M:%S")
                         
-                        # Save uploaded file if provided
-                        doc_path = ""
-                        doc_text = ""
+                        # Initialize file-related variables
+                        file_name = ""
+                        file_type = ""
+                        file_data = ""
+                        
                         if uploaded_file is not None:
-                            file_ext = os.path.splitext(uploaded_file.name)[1]
-                            doc_path = os.path.join("expense_documents", f"{expense_id}{file_ext}")
-                            os.makedirs("expense_documents", exist_ok=True)
-                            with open(doc_path, "wb") as f:
-                                f.write(uploaded_file.getbuffer())
-                            
-                            # Extract text from document
-                            doc_text = extract_text_from_file(doc_path)
+                            try:
+                                # Create temp directory if it doesn't exist
+                                os.makedirs("temp_expense_files", exist_ok=True)
+                                
+                                # Save file temporarily
+                                temp_path = f"temp_expense_files/{expense_id}_{uploaded_file.name}"
+                                with open(temp_path, "wb") as f:
+                                    f.write(uploaded_file.getbuffer())
+                                
+                                # Convert to Base64
+                                with open(temp_path, "rb") as file:
+                                    file_data = base64.b64encode(file.read()).decode('utf-8')
+                                
+                                file_name = uploaded_file.name
+                                file_type = uploaded_file.type
+                                
+                                # Clean up temp file
+                                os.remove(temp_path)
+                            except Exception as e:
+                                st.error(f"Error processing file: {str(e)}")
+                                file_data = f"Error processing file: {str(e)}"
                         
                         expense_data = {
                             "Expense ID": expense_id,
@@ -1711,8 +1750,9 @@ def travel_hotel_page():
                             "Amount": amount,
                             "Date": expense_date.strftime("%d-%m-%Y"),
                             "Description": description,
-                            "Document Path": doc_path,
-                            "Document Text": doc_text,
+                            "File Name": file_name,
+                            "File Type": file_type,
+                            "File Data": file_data,
                             "Status": "Submitted",
                             "Approval Notes": "",
                             "Date Submitted": current_date
@@ -1726,6 +1766,8 @@ def travel_hotel_page():
                             Expense submitted successfully! 
                             **Expense ID:** {expense_id}
                             """)
+                            time.sleep(2)
+                            st.rerun()
                         else:
                             st.error(f"Failed to submit expense: {error}")
         
@@ -1831,29 +1873,46 @@ def travel_hotel_page():
                         st.subheader("Description")
                         st.write(expense_details['Description'])
                         
-                        if expense_details['Document Path']:
+                        if expense_details['File Data'] and pd.notna(expense_details['File Data']):
                             st.subheader("Receipt/Invoice")
-                            if expense_details['Document Path'].lower().endswith(('.png', '.jpg', '.jpeg')):
-                                st.image(expense_details['Document Path'], use_column_width=True)
-                            elif expense_details['Document Path'].lower().endswith('.pdf'):
-                                st.warning("PDF preview not available - download to view")
                             
-                            with open(expense_details['Document Path'], "rb") as f:
+                            # Determine file extension
+                            file_ext = expense_details['File Name'].split('.')[-1].lower() if pd.notna(expense_details['File Name']) else 'bin'
+                            
+                            # Create download button
+                            mime_types = {
+                                'jpg': 'image/jpeg',
+                                'jpeg': 'image/jpeg',
+                                'png': 'image/png',
+                                'pdf': 'application/pdf'
+                            }
+                            
+                            try:
+                                # For images, show a preview
+                                if file_ext in ['jpg', 'jpeg', 'png']:
+                                    st.image(base64.b64decode(expense_details['File Data']), 
+                                            use_column_width=True,
+                                            caption=f"Receipt: {expense_details['File Name']}")
+                                
+                                # Download button
                                 st.download_button(
-                                    "Download Document",
-                                    f,
-                                    file_name=os.path.basename(expense_details['Document Path']),
-                                    mime="application/octet-stream"
+                                    label=f"Download {expense_details['File Name'] if pd.notna(expense_details['File Name']) else 'Receipt'}",
+                                    data=base64.b64decode(expense_details['File Data']),
+                                    file_name=expense_details['File Name'] if pd.notna(expense_details['File Name']) else f"receipt_{selected_expense}.{file_ext}",
+                                    mime=mime_types.get(file_ext, 'application/octet-stream'),
+                                    key=f"download_{selected_expense}"
                                 )
+                            except Exception as e:
+                                st.error(f"Error displaying file: {str(e)}")
                         
-                        if expense_details['Approval Notes']:
+                        if expense_details['Approval Notes'] and pd.notna(expense_details['Approval Notes']):
                             st.subheader("Approval Notes")
                             st.write(expense_details['Approval Notes'])
                         
-                        # Download option
+                        # Download option for all filtered expenses
                         csv = filtered_expenses.to_csv(index=False).encode('utf-8')
                         st.download_button(
-                            "Download Expense History",
+                            "Download Expense History (CSV)",
                             csv,
                             "my_expenses.csv",
                             "text/csv",
