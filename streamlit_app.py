@@ -13,6 +13,9 @@ from streamlit_js_eval import streamlit_js_eval
 import time
 from streamlit_cookies_manager import EncryptedCookieManager
 import extra_streamlit_components as stx
+import pytesseract
+from PIL import Image
+import PyPDF2
 
 cookies = EncryptedCookieManager(
     prefix="biolume_",
