@@ -13,6 +13,8 @@ import time
 # Set page config
 st.set_page_config(page_title="Document Management System", layout="centered")
 
+Person = pd.read_csv('Invoice - Person.csv')
+
 # Constants
 EXPENSE_SHEET_COLUMNS = [
     "Expense ID",
