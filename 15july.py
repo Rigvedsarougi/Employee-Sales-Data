@@ -1,613 +1,634 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
+from streamlit_gsheets import GSheetsConnection
 import pytz
+
+# Initialize Google Sheets connection
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Set page config
 st.set_page_config(page_title="Admin Dashboard", layout="wide")
 
-# Hide Streamlit style
-hide_streamlit_style = """
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+# Authentication
+def authenticate_admin(username, password):
+    # Replace with your actual admin credentials
+    ADMIN_CREDENTIALS = {
+        "admin": "admin123",
+        "manager": "manager123"
+    }
+    return username in ADMIN_CREDENTIALS and ADMIN_CREDENTIALS[username] == password
 
-# Constants
-SHEET_NAMES = ["Sales", "Visits", "Attendance", "Demos", "Tickets", "TravelHotelRequests"]
+# Login page
+def show_login():
+    st.title("Admin Login")
+    
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
+        
+        if submitted:
+            if authenticate_admin(username, password):
+                st.session_state.authenticated = True
+                st.session_state.admin_username = username
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
 
-# Establish Google Sheets connection
-conn = st.connection("gsheets", type=GSheetsConnection)
-
+# Helper functions
 def get_ist_time():
     """Get current time in Indian Standard Time (IST)"""
     utc_now = datetime.now(pytz.utc)
     ist = pytz.timezone('Asia/Kolkata')
     return utc_now.astimezone(ist)
 
-@st.cache_data(ttl=300)
-def load_data(sheet_name):
+def load_data(worksheet_name, date_column=None):
     """Load data from Google Sheets with caching"""
     try:
-        df = conn.read(worksheet=sheet_name, ttl=5)
+        df = conn.read(worksheet=worksheet_name, ttl=5)
         df = df.dropna(how='all')
         
-        # Convert date columns to datetime
-        if sheet_name == "Sales":
-            df['Invoice Date'] = pd.to_datetime(df['Invoice Date'], dayfirst=True, errors='coerce')
-        elif sheet_name == "Visits":
-            df['Visit Date'] = pd.to_datetime(df['Visit Date'], dayfirst=True, errors='coerce')
-        elif sheet_name == "Attendance":
-            df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
-            df['Check-in Date Time'] = pd.to_datetime(df['Check-in Date Time'], dayfirst=True, errors='coerce')
-        elif sheet_name == "Demos":
-            df['Demo Date'] = pd.to_datetime(df['Demo Date'], dayfirst=True, errors='coerce')
-            df['Check-in Date Time'] = pd.to_datetime(df['Check-in Date Time'], dayfirst=True, errors='coerce')
-        elif sheet_name == "Tickets":
-            df['Date Raised'] = pd.to_datetime(df['Date Raised'], dayfirst=True, errors='coerce')
-            df['Date Resolved'] = pd.to_datetime(df['Date Resolved'], dayfirst=True, errors='coerce')
-        elif sheet_name == "TravelHotelRequests":
-            df['Date Requested'] = pd.to_datetime(df['Date Requested'], dayfirst=True, errors='coerce')
-            df['Check In Date'] = pd.to_datetime(df['Check In Date'], dayfirst=True, errors='coerce')
-            df['Check Out Date'] = pd.to_datetime(df['Check Out Date'], dayfirst=True, errors='coerce')
-            df['Booking Date'] = pd.to_datetime(df['Booking Date'], dayfirst=True, errors='coerce')
-            
+        if date_column and date_column in df.columns:
+            try:
+                df[date_column] = pd.to_datetime(df[date_column], dayfirst=True, errors='coerce')
+            except:
+                df[date_column] = pd.to_datetime(df[date_column], errors='coerce')
+        
         return df
     except Exception as e:
-        st.error(f"Error loading {sheet_name} data: {str(e)}")
+        st.error(f"Error loading {worksheet_name} data: {str(e)}")
         return pd.DataFrame()
 
-def apply_filters(df, sheet_name, start_date, end_date, state_filter, city_filter, employee_filter):
-    """Apply filters to the dataframe based on sheet type"""
-    filtered_df = df.copy()
+def filter_data(df, filters):
+    """Apply filters to dataframe"""
+    filtered = df.copy()
     
-    # Date filter
-    if sheet_name == "Sales":
-        date_col = 'Invoice Date'
-    elif sheet_name == "Visits":
-        date_col = 'Visit Date'
-    elif sheet_name == "Attendance":
-        date_col = 'Date'
-    elif sheet_name == "Demos":
-        date_col = 'Demo Date'
-    elif sheet_name == "Tickets":
-        date_col = 'Date Raised'
-    elif sheet_name == "TravelHotelRequests":
-        date_col = 'Date Requested'
+    for column, value in filters.items():
+        if value and column in filtered.columns:
+            if isinstance(value, list):
+                filtered = filtered[filtered[column].isin(value)]
+            else:
+                filtered = filtered[filtered[column].astype(str).str.contains(str(value), case=False)]
     
-    if date_col in filtered_df.columns:
-        filtered_df = filtered_df[(filtered_df[date_col] >= pd.to_datetime(start_date)) & 
-                                 (filtered_df[date_col] <= pd.to_datetime(end_date) + timedelta(days=1))]
-    
-    # State filter
-    if state_filter and state_filter != "All":
-        if sheet_name == "Sales":
-            filtered_df = filtered_df[filtered_df['Outlet State'] == state_filter]
-        elif sheet_name in ["Visits", "Demos"]:
-            filtered_df = filtered_df[filtered_df['Outlet State'] == state_filter]
-    
-    # City filter
-    if city_filter and city_filter != "All":
-        if sheet_name == "Sales":
-            filtered_df = filtered_df[filtered_df['Outlet City'] == city_filter]
-        elif sheet_name in ["Visits", "Demos"]:
-            filtered_df = filtered_df[filtered_df['Outlet City'] == city_filter]
-    
-    # Employee filter
-    if employee_filter and employee_filter != "All":
-        filtered_df = filtered_df[filtered_df['Employee Name'] == employee_filter]
-    
-    return filtered_df
+    return filtered
 
-def display_sales_dashboard(filtered_sales):
-    """Display sales dashboard with metrics and visualizations"""
-    st.subheader("Sales Overview")
+# Dashboard pages
+def dashboard_page():
+    st.title("📊 Admin Dashboard")
+    st.markdown("---")
     
-    if filtered_sales.empty:
-        st.warning("No sales data found for the selected filters")
-        return
+    # Date range selector
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Start Date", 
+                                 value=get_ist_time().date() - timedelta(days=30),
+                                 key="dashboard_start_date")
+    with col2:
+        end_date = st.date_input("End Date", 
+                               value=get_ist_time().date(),
+                               key="dashboard_end_date")
     
-    # Calculate metrics
-    total_sales = filtered_sales['Grand Total'].sum()
-    total_invoices = filtered_sales['Invoice Number'].nunique()
-    avg_sale_per_invoice = total_sales / total_invoices if total_invoices > 0 else 0
-    total_products_sold = filtered_sales['Quantity'].sum()
-    
-    # Display metrics
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Sales", f"₹{total_sales:,.2f}")
-    col2.metric("Total Invoices", total_invoices)
-    col3.metric("Avg. Sale per Invoice", f"₹{avg_sale_per_invoice:,.2f}")
-    col4.metric("Total Products Sold", total_products_sold)
-    
-    # Sales by date
-    st.subheader("Sales Trend")
-    sales_by_date = filtered_sales.groupby(filtered_sales['Invoice Date'].dt.date)['Grand Total'].sum().reset_index()
-    fig = px.line(sales_by_date, x='Invoice Date', y='Grand Total', 
-                  title="Daily Sales Trend", labels={'Grand Total': 'Total Sales (₹)'})
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Sales by employee
-    st.subheader("Sales by Employee")
-    sales_by_employee = filtered_sales.groupby('Employee Name')['Grand Total'].sum().reset_index().sort_values('Grand Total', ascending=False)
-    fig = px.bar(sales_by_employee, x='Employee Name', y='Grand Total', 
-                 title="Sales by Employee", labels={'Grand Total': 'Total Sales (₹)'})
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Sales by product
-    st.subheader("Top Selling Products")
-    sales_by_product = filtered_sales.groupby('Product Name')['Quantity'].sum().reset_index().sort_values('Quantity', ascending=False).head(10)
-    fig = px.bar(sales_by_product, x='Product Name', y='Quantity', 
-                 title="Top Selling Products", labels={'Quantity': 'Units Sold'})
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Sales by outlet
-    st.subheader("Top Outlets")
-    sales_by_outlet = filtered_sales.groupby('Outlet Name')['Grand Total'].sum().reset_index().sort_values('Grand Total', ascending=False).head(10)
-    fig = px.bar(sales_by_outlet, x='Outlet Name', y='Grand Total', 
-                 title="Top Outlets by Sales", labels={'Grand Total': 'Total Sales (₹)'})
-    st.plotly_chart(fig, use_container_width=True)
-
-def display_visits_dashboard(filtered_visits):
-    """Display visits dashboard with metrics and visualizations"""
-    st.subheader("Visits Overview")
-    
-    if filtered_visits.empty:
-        st.warning("No visit data found for the selected filters")
-        return
-    
-    # Calculate metrics
-    total_visits = len(filtered_visits)
-    unique_outlets = filtered_visits['Outlet Name'].nunique()
-    avg_visit_duration = filtered_visits['Visit Duration (minutes)'].mean()
-    
-    # Display metrics
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Visits", total_visits)
-    col2.metric("Unique Outlets Visited", unique_outlets)
-    col3.metric("Avg. Visit Duration (min)", f"{avg_visit_duration:.1f}")
-    
-    # Visits by date
-    st.subheader("Visits Trend")
-    visits_by_date = filtered_visits.groupby(filtered_visits['Visit Date'].dt.date).size().reset_index(name='Count')
-    fig = px.line(visits_by_date, x='Visit Date', y='Count', 
-                  title="Daily Visits Trend", labels={'Count': 'Number of Visits'})
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Visits by employee
-    st.subheader("Visits by Employee")
-    visits_by_employee = filtered_visits.groupby('Employee Name').size().reset_index(name='Count').sort_values('Count', ascending=False)
-    fig = px.bar(visits_by_employee, x='Employee Name', y='Count', 
-                 title="Visits by Employee", labels={'Count': 'Number of Visits'})
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Visits by purpose
-    st.subheader("Visits by Purpose")
-    visits_by_purpose = filtered_visits.groupby('Visit Purpose').size().reset_index(name='Count').sort_values('Count', ascending=False)
-    fig = px.pie(visits_by_purpose, names='Visit Purpose', values='Count', 
-                 title="Visit Purpose Distribution")
-    st.plotly_chart(fig, use_container_width=True)
-
-def display_attendance_dashboard(filtered_attendance):
-    """Display attendance dashboard with metrics and visualizations"""
-    st.subheader("Attendance Overview")
-    
-    if filtered_attendance.empty:
-        st.warning("No attendance data found for the selected filters")
-        return
-    
-    # Calculate metrics
-    total_records = len(filtered_attendance)
-    present_count = len(filtered_attendance[filtered_attendance['Status'].str.lower() == 'present'])
-    half_day_count = len(filtered_attendance[filtered_attendance['Status'].str.lower() == 'half day'])
-    leave_count = len(filtered_attendance[filtered_attendance['Status'].str.lower() == 'leave'])
-    
-    # Display metrics
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Records", total_records)
-    col2.metric("Present", present_count)
-    col3.metric("Half Day", half_day_count)
-    col4.metric("Leave", leave_count)
-    
-    # Attendance by date
-    st.subheader("Daily Attendance")
-    attendance_by_date = filtered_attendance.groupby(['Date', 'Status']).size().reset_index(name='Count')
-    fig = px.bar(attendance_by_date, x='Date', y='Count', color='Status',
-                 title="Daily Attendance by Status", barmode='group')
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Attendance by employee
-    st.subheader("Attendance Summary by Employee")
-    attendance_by_employee = filtered_attendance.groupby(['Employee Name', 'Status']).size().reset_index(name='Count')
-    fig = px.bar(attendance_by_employee, x='Employee Name', y='Count', color='Status',
-                 title="Employee Attendance Summary", barmode='stack')
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Check-in time distribution
-    st.subheader("Check-in Time Distribution")
-    filtered_attendance['Check-in Time'] = pd.to_datetime(filtered_attendance['Check-in Time'], errors='coerce').dt.time
-    filtered_attendance['Hour'] = filtered_attendance['Check-in Time'].apply(lambda x: x.hour if x else None)
-    checkin_by_hour = filtered_attendance.groupby('Hour').size().reset_index(name='Count')
-    fig = px.bar(checkin_by_hour, x='Hour', y='Count', 
-                 title="Check-in Time Distribution by Hour")
-    st.plotly_chart(fig, use_container_width=True)
-
-def display_demos_dashboard(filtered_demos):
-    """Display demos dashboard with metrics and visualizations"""
-    st.subheader("Demos Overview")
-    
-    if filtered_demos.empty:
-        st.warning("No demo data found for the selected filters")
-        return
-    
-    # Calculate metrics
-    total_demos = len(filtered_demos)
-    unique_outlets = filtered_demos['Outlet Name'].nunique()
-    avg_demo_duration = filtered_demos['Duration (minutes)'].mean()
-    
-    # Display metrics
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Demos", total_demos)
-    col2.metric("Unique Outlets", unique_outlets)
-    col3.metric("Avg. Duration (min)", f"{avg_demo_duration:.1f}")
-    
-    # Demos by date
-    st.subheader("Demos Trend")
-    demos_by_date = filtered_demos.groupby(filtered_demos['Demo Date'].dt.date).size().reset_index(name='Count')
-    fig = px.line(demos_by_date, x='Demo Date', y='Count', 
-                  title="Daily Demos Trend", labels={'Count': 'Number of Demos'})
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Demos by employee
-    st.subheader("Demos by Employee")
-    demos_by_employee = filtered_demos.groupby('Employee Name').size().reset_index(name='Count').sort_values('Count', ascending=False)
-    fig = px.bar(demos_by_employee, x='Employee Name', y='Count', 
-                 title="Demos Conducted by Employee", labels={'Count': 'Number of Demos'})
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Outlet reviews
-    st.subheader("Outlet Reviews")
-    outlet_reviews = filtered_demos.groupby('Outlet Review').size().reset_index(name='Count')
-    fig = px.pie(outlet_reviews, names='Outlet Review', values='Count', 
-                 title="Outlet Review Distribution")
-    st.plotly_chart(fig, use_container_width=True)
-
-def display_tickets_dashboard(filtered_tickets):
-    """Display support tickets dashboard with metrics and visualizations"""
-    st.subheader("Support Tickets Overview")
-    
-    if filtered_tickets.empty:
-        st.warning("No ticket data found for the selected filters")
-        return
-    
-    # Calculate metrics
-    total_tickets = len(filtered_tickets)
-    open_tickets = len(filtered_tickets[filtered_tickets['Status'].str.lower() == 'open'])
-    resolved_tickets = len(filtered_tickets[filtered_tickets['Status'].str.lower() == 'resolved'])
-    avg_resolution_time = None
-    
-    # Calculate average resolution time if there are resolved tickets
-    if resolved_tickets > 0:
-        resolved_df = filtered_tickets[filtered_tickets['Status'].str.lower() == 'resolved']
-        resolved_df = resolved_df.dropna(subset=['Date Raised', 'Date Resolved'])
-        resolved_df['Resolution Time'] = (resolved_df['Date Resolved'] - resolved_df['Date Raised']).dt.days
-        avg_resolution_time = resolved_df['Resolution Time'].mean()
-    
-    # Display metrics
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Tickets", total_tickets)
-    col2.metric("Open Tickets", open_tickets)
-    col3.metric("Resolved Tickets", resolved_tickets)
-    if avg_resolution_time is not None:
-        col4.metric("Avg. Resolution (days)", f"{avg_resolution_time:.1f}")
-    else:
-        col4.metric("Avg. Resolution (days)", "N/A")
-    
-    # Tickets by date
-    st.subheader("Tickets Trend")
-    tickets_by_date = filtered_tickets.groupby(filtered_tickets['Date Raised'].dt.date).size().reset_index(name='Count')
-    fig = px.line(tickets_by_date, x='Date Raised', y='Count', 
-                  title="Daily Tickets Trend", labels={'Count': 'Number of Tickets'})
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Tickets by category
-    st.subheader("Tickets by Category")
-    tickets_by_category = filtered_tickets.groupby('Category').size().reset_index(name='Count').sort_values('Count', ascending=False)
-    fig = px.bar(tickets_by_category, x='Category', y='Count', 
-                 title="Tickets by Category", labels={'Count': 'Number of Tickets'})
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Tickets by priority
-    st.subheader("Tickets by Priority")
-    tickets_by_priority = filtered_tickets.groupby('Priority').size().reset_index(name='Count')
-    fig = px.pie(tickets_by_priority, names='Priority', values='Count', 
-                 title="Ticket Priority Distribution")
-    st.plotly_chart(fig, use_container_width=True)
-
-def display_travel_hotel_dashboard(filtered_requests):
-    """Display travel/hotel requests dashboard with metrics and visualizations"""
-    st.subheader("Travel & Hotel Requests Overview")
-    
-    if filtered_requests.empty:
-        st.warning("No travel/hotel request data found for the selected filters")
-        return
-    
-    # Calculate metrics
-    total_requests = len(filtered_requests)
-    pending_requests = len(filtered_requests[filtered_requests['Status'].str.lower() == 'pending'])
-    approved_requests = len(filtered_requests[filtered_requests['Status'].str.lower() == 'approved'])
-    rejected_requests = len(filtered_requests[filtered_requests['Status'].str.lower() == 'rejected'])
-    
-    # Display metrics
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Requests", total_requests)
-    col2.metric("Pending", pending_requests)
-    col3.metric("Approved", approved_requests)
-    col4.metric("Rejected", rejected_requests)
-    
-    # Requests by date
-    st.subheader("Requests Trend")
-    requests_by_date = filtered_requests.groupby(filtered_requests['Date Requested'].dt.date).size().reset_index(name='Count')
-    fig = px.line(requests_by_date, x='Date Requested', y='Count', 
-                  title="Daily Requests Trend", labels={'Count': 'Number of Requests'})
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Requests by type
-    st.subheader("Requests by Type")
-    requests_by_type = filtered_requests.groupby('Request Type').size().reset_index(name='Count')
-    fig = px.pie(requests_by_type, names='Request Type', values='Count', 
-                 title="Request Type Distribution")
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Requests by status
-    st.subheader("Requests by Status")
-    requests_by_status = filtered_requests.groupby('Status').size().reset_index(name='Count')
-    fig = px.bar(requests_by_status, x='Status', y='Count', 
-                 title="Request Status Distribution")
-    st.plotly_chart(fig, use_container_width=True)
-
-def display_employee_dashboard(employee_name, sales_data, visits_data, attendance_data, demos_data, tickets_data, travel_data):
-    """Display detailed dashboard for a specific employee"""
-    st.title(f"Employee Dashboard: {employee_name}")
-    
-    # Filter data for the selected employee
-    emp_sales = sales_data[sales_data['Employee Name'] == employee_name]
-    emp_visits = visits_data[visits_data['Employee Name'] == employee_name]
-    emp_attendance = attendance_data[attendance_data['Employee Name'] == employee_name]
-    emp_demos = demos_data[demos_data['Employee Name'] == employee_name]
-    emp_tickets = tickets_data[tickets_data['Raised By (Employee Name)'] == employee_name]
-    emp_travel = travel_data[travel_data['Employee Name'] == employee_name]
-    
-    # Display summary metrics
-    st.subheader("Performance Summary")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Sales", f"₹{emp_sales['Grand Total'].sum():,.2f}" if not emp_sales.empty else "₹0")
-    col2.metric("Total Visits", len(emp_visits))
-    col3.metric("Present Days", len(emp_attendance[emp_attendance['Status'].str.lower() == 'present']))
-    col4.metric("Demos Conducted", len(emp_demos))
-    
-    # Sales performance
-    st.subheader("Sales Performance")
-    if not emp_sales.empty:
-        # Sales trend
-        sales_trend = emp_sales.groupby(emp_sales['Invoice Date'].dt.date)['Grand Total'].sum().reset_index()
-        fig = px.line(sales_trend, x='Invoice Date', y='Grand Total', 
-                      title="Sales Trend", labels={'Grand Total': 'Total Sales (₹)'})
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Top products sold
-        top_products = emp_sales.groupby('Product Name')['Quantity'].sum().reset_index().sort_values('Quantity', ascending=False).head(5)
-        fig = px.bar(top_products, x='Product Name', y='Quantity', 
-                     title="Top Products Sold", labels={'Quantity': 'Units Sold'})
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("No sales data found for this employee")
-    
-    # Visit performance
-    st.subheader("Visit Performance")
-    if not emp_visits.empty:
-        # Visit trend
-        visit_trend = emp_visits.groupby(emp_visits['Visit Date'].dt.date).size().reset_index(name='Count')
-        fig = px.line(visit_trend, x='Visit Date', y='Count', 
-                      title="Visit Trend", labels={'Count': 'Number of Visits'})
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Visit purpose distribution
-        visit_purpose = emp_visits.groupby('Visit Purpose').size().reset_index(name='Count')
-        fig = px.pie(visit_purpose, names='Visit Purpose', values='Count', 
-                     title="Visit Purpose Distribution")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("No visit data found for this employee")
-    
-    # Attendance record
-    st.subheader("Attendance Record")
-    if not emp_attendance.empty:
-        # Attendance status
-        attendance_status = emp_attendance.groupby('Status').size().reset_index(name='Count')
-        fig = px.pie(attendance_status, names='Status', values='Count', 
-                     title="Attendance Status Distribution")
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Check-in time distribution
-        emp_attendance['Check-in Time'] = pd.to_datetime(emp_attendance['Check-in Time'], errors='coerce').dt.time
-        emp_attendance['Hour'] = emp_attendance['Check-in Time'].apply(lambda x: x.hour if x else None)
-        checkin_by_hour = emp_attendance.groupby('Hour').size().reset_index(name='Count')
-        fig = px.bar(checkin_by_hour, x='Hour', y='Count', 
-                     title="Check-in Time Distribution")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("No attendance data found for this employee")
-    
-    # Demo performance
-    st.subheader("Demo Performance")
-    if not emp_demos.empty:
-        # Demo trend
-        demo_trend = emp_demos.groupby(emp_demos['Demo Date'].dt.date).size().reset_index(name='Count')
-        fig = px.line(demo_trend, x='Demo Date', y='Count', 
-                      title="Demo Trend", labels={'Count': 'Number of Demos'})
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Outlet reviews
-        outlet_reviews = emp_demos.groupby('Outlet Review').size().reset_index(name='Count')
-        fig = px.pie(outlet_reviews, names='Outlet Review', values='Count', 
-                     title="Outlet Review Distribution")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("No demo data found for this employee")
-
-def main():
-    st.title("Admin Dashboard")
+    # Convert to string for filtering
+    start_date_str = start_date.strftime("%d-%m-%Y")
+    end_date_str = end_date.strftime("%d-%m-%Y")
     
     # Load all data
-    sales_data = load_data("Sales")
-    visits_data = load_data("Visits")
-    attendance_data = load_data("Attendance")
-    demos_data = load_data("Demos")
-    tickets_data = load_data("Tickets")
-    travel_data = load_data("TravelHotelRequests")
+    sales_data = load_data("Sales", "Invoice Date")
+    visits_data = load_data("Visits", "Visit Date")
+    attendance_data = load_data("Attendance", "Date")
+    demo_data = load_data("Demos", "Demo Date")
     
-    # Get unique values for filters
-    all_employees = sorted(list(set(
-        list(sales_data['Employee Name'].unique()) + 
-        list(visits_data['Employee Name'].unique()) + 
-        list(attendance_data['Employee Name'].unique()) + 
-        list(demos_data['Employee Name'].unique()) + 
-        list(tickets_data['Raised By (Employee Name)'].unique()) + 
-        list(travel_data['Employee Name'].unique())
-    )))
+    # Filter data by date range
+    if not sales_data.empty:
+        sales_data = sales_data[(sales_data['Invoice Date'].dt.date >= start_date) & 
+                              (sales_data['Invoice Date'].dt.date <= end_date)]
     
-    all_states = sorted(list(set(
-        list(sales_data['Outlet State'].unique()) + 
-        list(visits_data['Outlet State'].unique()) + 
-        list(demos_data['Outlet State'].unique())
-    )))
+    if not visits_data.empty:
+        visits_data = visits_data[(visits_data['Visit Date'].dt.date >= start_date) & 
+                                (visits_data['Visit Date'].dt.date <= end_date)]
     
-    all_cities = sorted(list(set(
-        list(sales_data['Outlet City'].unique()) + 
-        list(visits_data['Outlet City'].unique()) + 
-        list(demos_data['Outlet City'].unique())
-    )))
+    if not attendance_data.empty:
+        attendance_data = attendance_data[(attendance_data['Date'].dt.date >= start_date) & 
+                                        (attendance_data['Date'].dt.date <= end_date)]
     
-    # Sidebar filters
-    st.sidebar.header("Filters")
+    if not demo_data.empty:
+        demo_data = demo_data[(demo_data['Demo Date'].dt.date >= start_date) & 
+                            (demo_data['Demo Date'].dt.date <= end_date)]
     
-    # Date range filter
-    min_date = min(
-        sales_data['Invoice Date'].min() if not sales_data.empty else get_ist_time().date(),
-        visits_data['Visit Date'].min() if not visits_data.empty else get_ist_time().date(),
-        attendance_data['Date'].min() if not attendance_data.empty else get_ist_time().date(),
-        demos_data['Demo Date'].min() if not demos_data.empty else get_ist_time().date(),
-        tickets_data['Date Raised'].min() if not tickets_data.empty else get_ist_time().date(),
-        travel_data['Date Requested'].min() if not travel_data.empty else get_ist_time().date()
-    )
+    # Overall Metrics
+    st.subheader("📈 Overall Metrics")
     
-    max_date = max(
-        sales_data['Invoice Date'].max() if not sales_data.empty else get_ist_time().date(),
-        visits_data['Visit Date'].max() if not visits_data.empty else get_ist_time().date(),
-        attendance_data['Date'].max() if not attendance_data.empty else get_ist_time().date(),
-        demos_data['Demo Date'].max() if not demos_data.empty else get_ist_time().date(),
-        tickets_data['Date Raised'].max() if not tickets_data.empty else get_ist_time().date(),
-        travel_data['Date Requested'].max() if not travel_data.empty else get_ist_time().date()
-    )
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        total_sales = sales_data['Grand Total'].sum() if not sales_data.empty else 0
+        st.metric("Total Sales", f"₹{total_sales:,.2f}")
+    with col2:
+        total_visits = len(visits_data) if not visits_data.empty else 0
+        st.metric("Total Visits", total_visits)
+    with col3:
+        total_demos = len(demo_data) if not demo_data.empty else 0
+        st.metric("Total Demos", total_demos)
+    with col4:
+        attendance_present = len(attendance_data[attendance_data['Status'] == 'Present']) if not attendance_data.empty else 0
+        st.metric("Present Employees", attendance_present)
     
-    start_date = st.sidebar.date_input("Start Date", min_date)
-    end_date = st.sidebar.date_input("End Date", max_date)
-    
-    # State filter
-    state_filter = st.sidebar.selectbox("State", ["All"] + all_states)
-    
-    # City filter (dynamic based on state selection)
-    if state_filter != "All":
-        cities_in_state = sorted(list(set(
-            list(sales_data[sales_data['Outlet State'] == state_filter]['Outlet City'].unique()) + 
-            list(visits_data[visits_data['Outlet State'] == state_filter]['Outlet City'].unique()) + 
-            list(demos_data[demos_data['Outlet State'] == state_filter]['Outlet City'].unique())
-        ))
+    # Sales Trends
+    st.subheader("💰 Sales Trends")
+    if not sales_data.empty:
+        sales_by_date = sales_data.groupby(sales_data['Invoice Date'].dt.date)['Grand Total'].sum().reset_index()
+        fig = px.line(sales_by_date, x="Invoice Date", y="Grand Total", 
+                     title="Daily Sales Trend", labels={"Grand Total": "Amount (₹)"})
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        cities_in_state = all_cities
+        st.warning("No sales data available for the selected period")
     
-    city_filter = st.sidebar.selectbox("City", ["All"] + cities_in_state)
+    # Employee Activity
+    st.subheader("👥 Employee Activity")
     
-    # Employee filter
-    employee_filter = st.sidebar.selectbox("Employee", ["All"] + all_employees)
-    
-    # Dashboard selection
-    dashboard_type = st.sidebar.radio("Dashboard Type", ["Overall", "Employee"])
-    
-    if dashboard_type == "Overall":
-        # Overall dashboard tabs
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Sales", "Visits", "Attendance", "Demos", "Support Tickets", "Travel/Hotel"])
+    if not sales_data.empty and not visits_data.empty:
+        col1, col2 = st.columns(2)
+        with col1:
+            sales_by_employee = sales_data.groupby('Employee Name')['Grand Total'].sum().nlargest(10).reset_index()
+            fig = px.bar(sales_by_employee, x='Employee Name', y='Grand Total',
+                         title="Top 10 Employees by Sales", labels={"Grand Total": "Amount (₹)"})
+            st.plotly_chart(fig, use_container_width=True)
         
-        with tab1:
-            filtered_sales = apply_filters(sales_data, "Sales", start_date, end_date, state_filter, city_filter, employee_filter)
-            display_sales_dashboard(filtered_sales)
-            
-            # Raw data
-            with st.expander("View Raw Sales Data"):
-                st.dataframe(filtered_sales)
-        
-        with tab2:
-            filtered_visits = apply_filters(visits_data, "Visits", start_date, end_date, state_filter, city_filter, employee_filter)
-            display_visits_dashboard(filtered_visits)
-            
-            # Raw data
-            with st.expander("View Raw Visits Data"):
-                st.dataframe(filtered_visits)
-        
-        with tab3:
-            filtered_attendance = apply_filters(attendance_data, "Attendance", start_date, end_date, state_filter, city_filter, employee_filter)
-            display_attendance_dashboard(filtered_attendance)
-            
-            # Raw data
-            with st.expander("View Raw Attendance Data"):
-                st.dataframe(filtered_attendance)
-        
-        with tab4:
-            filtered_demos = apply_filters(demos_data, "Demos", start_date, end_date, state_filter, city_filter, employee_filter)
-            display_demos_dashboard(filtered_demos)
-            
-            # Raw data
-            with st.expander("View Raw Demo Data"):
-                st.dataframe(filtered_demos)
-        
-        with tab5:
-            filtered_tickets = apply_filters(tickets_data, "Tickets", start_date, end_date, state_filter, city_filter, employee_filter)
-            display_tickets_dashboard(filtered_tickets)
-            
-            # Raw data
-            with st.expander("View Raw Ticket Data"):
-                st.dataframe(filtered_tickets)
-        
-        with tab6:
-            filtered_travel = apply_filters(travel_data, "TravelHotelRequests", start_date, end_date, state_filter, city_filter, employee_filter)
-            display_travel_hotel_dashboard(filtered_travel)
-            
-            # Raw data
-            with st.expander("View Raw Travel/Hotel Data"):
-                st.dataframe(filtered_travel)
-    
+        with col2:
+            visits_by_employee = visits_data['Employee Name'].value_counts().nlargest(10).reset_index()
+            fig = px.bar(visits_by_employee, x='Employee Name', y='count',
+                         title="Top 10 Employees by Visits", labels={"count": "Number of Visits"})
+            st.plotly_chart(fig, use_container_width=True)
     else:
-        # Employee dashboard
-        if employee_filter == "All":
-            st.warning("Please select an employee from the filters")
+        st.warning("Insufficient data to display employee activity metrics")
+
+def sales_analytics_page():
+    st.title("💰 Sales Analytics")
+    st.markdown("---")
+    
+    # Filters
+    with st.expander("🔍 Filters", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Start Date", 
+                                     value=get_ist_time().date() - timedelta(days=30),
+                                     key="sales_start_date")
+            states = st.multiselect("Filter by State", 
+                                  options=sorted(conn.read(worksheet="Sales")['Outlet State'].unique()) 
+        with col2:
+            end_date = st.date_input("End Date", 
+                                   value=get_ist_time().date(),
+                                   key="sales_end_date")
+            cities = st.multiselect("Filter by City", 
+                                  options=sorted(conn.read(worksheet="Sales")['Outlet City'].unique())
+    
+    # Load and filter data
+    sales_data = load_data("Sales", "Invoice Date")
+    if not sales_data.empty:
+        sales_data = sales_data[(sales_data['Invoice Date'].dt.date >= start_date) & 
+                               (sales_data['Invoice Date'].dt.date <= end_date)]
+        
+        if states:
+            sales_data = sales_data[sales_data['Outlet State'].isin(states)]
+        if cities:
+            sales_data = sales_data[sales_data['Outlet City'].isin(cities)]
+    
+    # Display metrics
+    if not sales_data.empty:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            total_sales = sales_data['Grand Total'].sum()
+            st.metric("Total Sales", f"₹{total_sales:,.2f}")
+        with col2:
+            avg_sale = sales_data['Grand Total'].mean()
+            st.metric("Average Sale", f"₹{avg_sale:,.2f}")
+        with col3:
+            unique_outlets = sales_data['Outlet Name'].nunique()
+            st.metric("Unique Outlets", unique_outlets)
+        
+        # Sales by State
+        st.subheader("Sales by State")
+        sales_by_state = sales_data.groupby('Outlet State')['Grand Total'].sum().reset_index()
+        fig = px.bar(sales_by_state, x='Outlet State', y='Grand Total',
+                    title="Sales by State", labels={"Grand Total": "Amount (₹)"})
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Top Products
+        st.subheader("Top Selling Products")
+        top_products = sales_data.groupby('Product Name')['Quantity'].sum().nlargest(10).reset_index()
+        fig = px.bar(top_products, x='Product Name', y='Quantity',
+                    title="Top 10 Products by Quantity Sold")
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Raw data
+        st.subheader("Sales Data")
+        st.dataframe(sales_data, use_container_width=True)
+    else:
+        st.warning("No sales data available for the selected filters")
+
+def visit_analytics_page():
+    st.title("📍 Visit Analytics")
+    st.markdown("---")
+    
+    # Filters
+    with st.expander("🔍 Filters", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Start Date", 
+                                     value=get_ist_time().date() - timedelta(days=30),
+                                     key="visit_start_date")
+            employee_filter = st.multiselect("Filter by Employee", 
+                                           options=sorted(conn.read(worksheet="Visits")['Employee Name'].unique())
+        with col2:
+            end_date = st.date_input("End Date", 
+                                   value=get_ist_time().date(),
+                                   key="visit_end_date")
+            purpose_filter = st.multiselect("Filter by Purpose", 
+                                          options=sorted(conn.read(worksheet="Visits")['Visit Purpose'].unique())
+    
+    # Load and filter data
+    visits_data = load_data("Visits", "Visit Date")
+    if not visits_data.empty:
+        visits_data = visits_data[(visits_data['Visit Date'].dt.date >= start_date) & 
+                                (visits_data['Visit Date'].dt.date <= end_date)]
+        
+        if employee_filter:
+            visits_data = visits_data[visits_data['Employee Name'].isin(employee_filter)]
+        if purpose_filter:
+            visits_data = visits_data[visits_data['Visit Purpose'].isin(purpose_filter)]
+    
+    # Display metrics
+    if not visits_data.empty:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            total_visits = len(visits_data)
+            st.metric("Total Visits", total_visits)
+        with col2:
+            avg_duration = visits_data['Visit Duration (minutes)'].mean()
+            st.metric("Average Duration", f"{avg_duration:.1f} minutes")
+        with col3:
+            unique_outlets = visits_data['Outlet Name'].nunique()
+            st.metric("Unique Outlets", unique_outlets)
+        
+        # Visits by Employee
+        st.subheader("Visits by Employee")
+        visits_by_employee = visits_data['Employee Name'].value_counts().reset_index()
+        fig = px.bar(visits_by_employee, x='Employee Name', y='count',
+                    title="Visits by Employee", labels={"count": "Number of Visits"})
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Visit Purpose Distribution
+        st.subheader("Visit Purpose Distribution")
+        purpose_dist = visits_data['Visit Purpose'].value_counts().reset_index()
+        fig = px.pie(purpose_dist, values='count', names='Visit Purpose',
+                    title="Visit Purpose Distribution")
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Raw data
+        st.subheader("Visit Data")
+        st.dataframe(visits_data, use_container_width=True)
+    else:
+        st.warning("No visit data available for the selected filters")
+
+def demo_analytics_page():
+    st.title("🎤 Demo Analytics")
+    st.markdown("---")
+    
+    # Filters
+    with st.expander("🔍 Filters", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Start Date", 
+                                     value=get_ist_time().date() - timedelta(days=30),
+                                     key="demo_start_date")
+            employee_filter = st.multiselect("Filter by Employee", 
+                                           options=sorted(conn.read(worksheet="Demos")['Employee Name'].unique())
+        with col2:
+            end_date = st.date_input("End Date", 
+                                   value=get_ist_time().date(),
+                                   key="demo_end_date")
+            outlet_filter = st.multiselect("Filter by Outlet", 
+                                         options=sorted(conn.read(worksheet="Demos")['Outlet Name'].unique())
+    
+    # Load and filter data
+    demo_data = load_data("Demos", "Demo Date")
+    if not demo_data.empty:
+        demo_data = demo_data[(demo_data['Demo Date'].dt.date >= start_date) & 
+                            (demo_data['Demo Date'].dt.date <= end_date)]
+        
+        if employee_filter:
+            demo_data = demo_data[demo_data['Employee Name'].isin(employee_filter)]
+        if outlet_filter:
+            demo_data = demo_data[demo_data['Outlet Name'].isin(outlet_filter)]
+    
+    # Display metrics
+    if not demo_data.empty:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            total_demos = len(demo_data)
+            st.metric("Total Demos", total_demos)
+        with col2:
+            avg_duration = demo_data['Duration (minutes)'].mean()
+            st.metric("Average Duration", f"{avg_duration:.1f} minutes")
+        with col3:
+            unique_outlets = demo_data['Outlet Name'].nunique()
+            st.metric("Unique Outlets", unique_outlets)
+        
+        # Demos by Employee
+        st.subheader("Demos by Employee")
+        demos_by_employee = demo_data['Employee Name'].value_counts().reset_index()
+        fig = px.bar(demos_by_employee, x='Employee Name', y='count',
+                    title="Demos by Employee", labels={"count": "Number of Demos"})
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Outlet Review Distribution
+        st.subheader("Outlet Review Distribution")
+        review_dist = demo_data['Outlet Review'].value_counts().reset_index()
+        fig = px.pie(review_dist, values='count', names='Outlet Review',
+                    title="Outlet Review Distribution")
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Raw data
+        st.subheader("Demo Data")
+        st.dataframe(demo_data, use_container_width=True)
+    else:
+        st.warning("No demo data available for the selected filters")
+
+def attendance_analytics_page():
+    st.title("⏱ Attendance Analytics")
+    st.markdown("---")
+    
+    # Filters
+    with st.expander("🔍 Filters", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Start Date", 
+                                     value=get_ist_time().date() - timedelta(days=30),
+                                     key="attendance_start_date")
+            employee_filter = st.multiselect("Filter by Employee", 
+                                           options=sorted(conn.read(worksheet="Attendance")['Employee Name'].unique())
+        with col2:
+            end_date = st.date_input("End Date", 
+                                   value=get_ist_time().date(),
+                                   key="attendance_end_date")
+            status_filter = st.multiselect("Filter by Status", 
+                                          options=sorted(conn.read(worksheet="Attendance")['Status'].unique())
+    
+    # Load and filter data
+    attendance_data = load_data("Attendance", "Date")
+    if not attendance_data.empty:
+        attendance_data = attendance_data[(attendance_data['Date'].dt.date >= start_date) & 
+                                        (attendance_data['Date'].dt.date <= end_date)]
+        
+        if employee_filter:
+            attendance_data = attendance_data[attendance_data['Employee Name'].isin(employee_filter)]
+        if status_filter:
+            attendance_data = attendance_data[attendance_data['Status'].isin(status_filter)]
+    
+    # Display metrics
+    if not attendance_data.empty:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            total_records = len(attendance_data)
+            st.metric("Total Records", total_records)
+        with col2:
+            present_count = len(attendance_data[attendance_data['Status'] == 'Present'])
+            st.metric("Present Count", present_count)
+        with col3:
+            leave_count = len(attendance_data[attendance_data['Status'] == 'Leave'])
+            st.metric("Leave Count", leave_count)
+        
+        # Attendance by Day
+        st.subheader("Daily Attendance")
+        daily_attendance = attendance_data.groupby('Date')['Status'].value_counts().unstack().fillna(0)
+        fig = px.bar(daily_attendance, barmode='group',
+                    title="Daily Attendance Breakdown")
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Status Distribution
+        st.subheader("Attendance Status Distribution")
+        status_dist = attendance_data['Status'].value_counts().reset_index()
+        fig = px.pie(status_dist, values='count', names='Status',
+                    title="Attendance Status Distribution")
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Raw data
+        st.subheader("Attendance Data")
+        st.dataframe(attendance_data, use_container_width=True)
+    else:
+        st.warning("No attendance data available for the selected filters")
+
+def employee_dashboard_page():
+    st.title("👤 Employee Dashboard")
+    st.markdown("---")
+    
+    # Employee selection
+    employee_list = sorted(conn.read(worksheet="Attendance")['Employee Name'].unique())
+    selected_employee = st.selectbox("Select Employee", employee_list)
+    
+    if not selected_employee:
+        st.warning("Please select an employee")
+        return
+    
+    # Date range selector
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Start Date", 
+                                 value=get_ist_time().date() - timedelta(days=30),
+                                 key="emp_start_date")
+    with col2:
+        end_date = st.date_input("End Date", 
+                               value=get_ist_time().date(),
+                               key="emp_end_date")
+    
+    # Load all data for selected employee
+    sales_data = load_data("Sales", "Invoice Date")
+    visits_data = load_data("Visits", "Visit Date")
+    attendance_data = load_data("Attendance", "Date")
+    demo_data = load_data("Demos", "Demo Date")
+    
+    # Filter data by employee and date range
+    employee_code = conn.read(worksheet="Attendance")[
+        conn.read(worksheet="Attendance")['Employee Name'] == selected_employee
+    ]['Employee Code'].values[0]
+    
+    if not sales_data.empty:
+        emp_sales = sales_data[
+            (sales_data['Employee Code'] == employee_code) & 
+            (sales_data['Invoice Date'].dt.date >= start_date) & 
+            (sales_data['Invoice Date'].dt.date <= end_date)
+        ]
+    else:
+        emp_sales = pd.DataFrame()
+    
+    if not visits_data.empty:
+        emp_visits = visits_data[
+            (visits_data['Employee Name'] == selected_employee) & 
+            (visits_data['Visit Date'].dt.date >= start_date) & 
+            (visits_data['Visit Date'].dt.date <= end_date)
+        ]
+    else:
+        emp_visits = pd.DataFrame()
+    
+    if not attendance_data.empty:
+        emp_attendance = attendance_data[
+            (attendance_data['Employee Name'] == selected_employee) & 
+            (attendance_data['Date'].dt.date >= start_date) & 
+            (attendance_data['Date'].dt.date <= end_date)
+        ]
+    else:
+        emp_attendance = pd.DataFrame()
+    
+    if not demo_data.empty:
+        emp_demos = demo_data[
+            (demo_data['Employee Name'] == selected_employee) & 
+            (demo_data['Demo Date'].dt.date >= start_date) & 
+            (demo_data['Demo Date'].dt.date <= end_date)
+        ]
+    else:
+        emp_demos = pd.DataFrame()
+    
+    # Employee Summary
+    st.subheader(f"📊 {selected_employee} Summary")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        total_sales = emp_sales['Grand Total'].sum() if not emp_sales.empty else 0
+        st.metric("Total Sales", f"₹{total_sales:,.2f}")
+    with col2:
+        total_visits = len(emp_visits) if not emp_visits.empty else 0
+        st.metric("Total Visits", total_visits)
+    with col3:
+        total_demos = len(emp_demos) if not emp_demos.empty else 0
+        st.metric("Total Demos", total_demos)
+    with col4:
+        present_days = len(emp_attendance[emp_attendance['Status'] == 'Present']) if not emp_attendance.empty else 0
+        st.metric("Present Days", present_days)
+    
+    # Tabs for different data types
+    tab1, tab2, tab3, tab4 = st.tabs(["Sales", "Visits", "Demos", "Attendance"])
+    
+    with tab1:
+        if not emp_sales.empty:
+            # Sales Trend
+            st.subheader("Sales Trend")
+            sales_by_date = emp_sales.groupby(emp_sales['Invoice Date'].dt.date)['Grand Total'].sum().reset_index()
+            fig = px.line(sales_by_date, x="Invoice Date", y="Grand Total", 
+                         title="Daily Sales Trend", labels={"Grand Total": "Amount (₹)"})
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Top Products
+            st.subheader("Top Products")
+            top_products = emp_sales.groupby('Product Name')['Quantity'].sum().nlargest(5).reset_index()
+            fig = px.bar(top_products, x='Product Name', y='Quantity',
+                        title="Top 5 Products Sold")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Raw data
+            st.subheader("Sales Data")
+            st.dataframe(emp_sales, use_container_width=True)
         else:
-            display_employee_dashboard(
-                employee_filter,
-                apply_filters(sales_data, "Sales", start_date, end_date, state_filter, city_filter, employee_filter),
-                apply_filters(visits_data, "Visits", start_date, end_date, state_filter, city_filter, employee_filter),
-                apply_filters(attendance_data, "Attendance", start_date, end_date, state_filter, city_filter, employee_filter),
-                apply_filters(demos_data, "Demos", start_date, end_date, state_filter, city_filter, employee_filter),
-                apply_filters(tickets_data, "Tickets", start_date, end_date, state_filter, city_filter, employee_filter),
-                apply_filters(travel_data, "TravelHotelRequests", start_date, end_date, state_filter, city_filter, employee_filter)
-            )
+            st.warning("No sales data available for this employee")
+    
+    with tab2:
+        if not emp_visits.empty:
+            # Visits by Purpose
+            st.subheader("Visits by Purpose")
+            visits_by_purpose = emp_visits['Visit Purpose'].value_counts().reset_index()
+            fig = px.pie(visits_by_purpose, values='count', names='Visit Purpose',
+                        title="Visit Purpose Distribution")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Visit Duration
+            st.subheader("Visit Duration")
+            fig = px.histogram(emp_visits, x='Visit Duration (minutes)',
+                             title="Visit Duration Distribution")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Raw data
+            st.subheader("Visit Data")
+            st.dataframe(emp_visits, use_container_width=True)
+        else:
+            st.warning("No visit data available for this employee")
+    
+    with tab3:
+        if not emp_demos.empty:
+            # Demos by Outlet
+            st.subheader("Demos by Outlet")
+            demos_by_outlet = emp_demos['Outlet Name'].value_counts().nlargest(5).reset_index()
+            fig = px.bar(demos_by_outlet, x='Outlet Name', y='count',
+                        title="Top 5 Outlets for Demos")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Outlet Reviews
+            st.subheader("Outlet Reviews")
+            review_dist = emp_demos['Outlet Review'].value_counts().reset_index()
+            fig = px.pie(review_dist, values='count', names='Outlet Review',
+                        title="Outlet Review Distribution")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Raw data
+            st.subheader("Demo Data")
+            st.dataframe(emp_demos, use_container_width=True)
+        else:
+            st.warning("No demo data available for this employee")
+    
+    with tab4:
+        if not emp_attendance.empty:
+            # Attendance Status
+            st.subheader("Attendance Status")
+            status_dist = emp_attendance['Status'].value_counts().reset_index()
+            fig = px.pie(status_dist, values='count', names='Status',
+                        title="Attendance Status Distribution")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Check-in Times
+            st.subheader("Check-in Times")
+            emp_attendance['Check-in Hour'] = pd.to_datetime(emp_attendance['Check-in Time']).dt.hour
+            checkin_dist = emp_attendance['Check-in Hour'].value_counts().sort_index().reset_index()
+            fig = px.bar(checkin_dist, x='Check-in Hour', y='count',
+                        title="Check-in Time Distribution")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Raw data
+            st.subheader("Attendance Data")
+            st.dataframe(emp_attendance, use_container_width=True)
+        else:
+            st.warning("No attendance data available for this employee")
+
+# Main app
+def main():
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    
+    if not st.session_state.authenticated:
+        show_login()
+    else:
+        st.sidebar.title("Navigation")
+        app_mode = st.sidebar.radio("Go to", 
+                                   ["Dashboard", "Sales Analytics", "Visit Analytics", 
+                                    "Demo Analytics", "Attendance Analytics", "Employee Dashboard"])
+        
+        st.sidebar.markdown("---")
+        st.sidebar.write(f"Logged in as: **{st.session_state.admin_username}**")
+        if st.sidebar.button("Logout"):
+            st.session_state.authenticated = False
+            st.session_state.admin_username = None
+            st.rerun()
+        
+        if app_mode == "Dashboard":
+            dashboard_page()
+        elif app_mode == "Sales Analytics":
+            sales_analytics_page()
+        elif app_mode == "Visit Analytics":
+            visit_analytics_page()
+        elif app_mode == "Demo Analytics":
+            demo_analytics_page()
+        elif app_mode == "Attendance Analytics":
+            attendance_analytics_page()
+        elif app_mode == "Employee Dashboard":
+            employee_dashboard_page()
 
 if __name__ == "__main__":
     main()
