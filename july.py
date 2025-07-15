@@ -77,12 +77,10 @@ def format_currency(amount):
 def format_percentage(value):
     return f"{value:.1f}%"
 
-def get_date_range():
+def get_default_dates():
     today = datetime.now().date()
-    last_week = today - timedelta(days=7)
     last_month = today - timedelta(days=30)
-    last_quarter = today - timedelta(days=90)
-    return today, last_week, last_month, last_quarter
+    return last_month, today
 
 def generate_pdf_report(content, title):
     pdf = FPDF()
@@ -142,34 +140,35 @@ def main():
         attendance_data['Date'] = pd.to_datetime(attendance_data['Date'], dayfirst=True, errors='coerce')
     
     # Date filters
-    today, last_week, last_month, last_quarter = get_date_range()
+    default_start, default_end = get_default_dates()
     
     st.sidebar.header("Filters")
-    time_period = st.sidebar.selectbox(
-        "Time Period",
-        ["Today", "Last 7 Days", "Last 30 Days", "Last 90 Days", "All Time"],
-        index=2
-    )
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        start_date = st.date_input("Start Date", value=default_start)
+    with col2:
+        end_date = st.date_input("End Date", value=default_end)
     
-    if time_period == "Today":
-        start_date = today
-    elif time_period == "Last 7 Days":
-        start_date = last_week
-    elif time_period == "Last 30 Days":
-        start_date = last_month
-    elif time_period == "Last 90 Days":
-        start_date = last_quarter
-    else:
-        start_date = None
+    # Validate date range
+    if start_date > end_date:
+        st.sidebar.error("End date must be after start date")
     
     # Filter data based on date range
-    if start_date:
-        if not sales_data.empty:
-            sales_data = sales_data[sales_data['Invoice Date'].dt.date >= start_date]
-        if not visits_data.empty:
-            visits_data = visits_data[visits_data['Visit Date'].dt.date >= start_date]
-        if not attendance_data.empty:
-            attendance_data = attendance_data[attendance_data['Date'].dt.date >= start_date]
+    if not sales_data.empty:
+        sales_data = sales_data[
+            (sales_data['Invoice Date'].dt.date >= start_date) & 
+            (sales_data['Invoice Date'].dt.date <= end_date)
+        ]
+    if not visits_data.empty:
+        visits_data = visits_data[
+            (visits_data['Visit Date'].dt.date >= start_date) & 
+            (visits_data['Visit Date'].dt.date <= end_date)
+        ]
+    if not attendance_data.empty:
+        attendance_data = attendance_data[
+            (attendance_data['Date'].dt.date >= start_date) & 
+            (attendance_data['Date'].dt.date <= end_date)
+        ]
     
     # Employee filter
     all_employees = Person['Employee Name'].unique().tolist()
@@ -212,10 +211,15 @@ def main():
             avg_visit_duration = 0
         
         if not attendance_data.empty:
-            # Get only today's attendance
-            today_attendance = attendance_data[attendance_data['Date'].dt.date == datetime.now().date()]
-            present_count = len(today_attendance[today_attendance['Status'] == 'Present'])
-            leave_count = len(today_attendance[today_attendance['Status'] == 'Leave'])
+            # Get only today's attendance if today is within the selected date range
+            today = datetime.now().date()
+            if start_date <= today <= end_date:
+                today_attendance = attendance_data[attendance_data['Date'].dt.date == today]
+                present_count = len(today_attendance[today_attendance['Status'] == 'Present'])
+                leave_count = len(today_attendance[today_attendance['Status'] == 'Leave'])
+            else:
+                present_count = 0
+                leave_count = 0
         else:
             present_count = 0
             leave_count = 0
@@ -288,6 +292,7 @@ def main():
             Business Overview Report
             ------------------------
             Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            Date Range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}
             
             Key Metrics:
             - Total Sales: {format_currency(total_sales)}
@@ -312,6 +317,7 @@ def main():
             st.warning("Please select an employee from the sidebar to view detailed performance")
         else:
             st.subheader(f"Performance Report: {selected_employee}")
+            st.caption(f"Date Range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
             
             # Employee details
             employee_details = Person[Person['Employee Name'] == selected_employee].iloc[0]
@@ -375,7 +381,7 @@ def main():
                 Employee: {selected_employee}
                 Employee Code: {employee_details['Employee Code']}
                 Designation: {employee_details['Designation']}
-                Report Period: {time_period}
+                Report Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}
                 Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 
                 Sales Performance:
@@ -447,6 +453,7 @@ def main():
     
     with tab3:
         st.header("Detailed Records")
+        st.caption(f"Date Range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
         
         # Sales records
         st.subheader("Sales Records")
