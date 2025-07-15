@@ -1,524 +1,533 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from streamlit_gsheets import GSheetsConnection
-import pytz
+import numpy as np
+from fpdf import FPDF
+import os
+import uuid
+from PIL import Image
 
-# Set page config
-st.set_page_config(
-    page_title="Business Operations Dashboard",
-    layout="wide",
-    page_icon="📊"
-)
+# Configuration
+st.set_page_config(page_title="Admin Dashboard", layout="wide", page_icon="📊")
 
-# Initialize connection
+# Hide Streamlit style
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stActionButton > button[title="Open source on GitHub"] {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# Constants
+SALES_SHEET_COLUMNS = [
+    "Invoice Number", "Invoice Date", "Employee Name", "Employee Code", "Designation",
+    "Discount Category", "Transaction Type", "Outlet Name", "Outlet Contact", "Outlet Address",
+    "Outlet State", "Outlet City", "Distributor Firm Name", "Distributor ID", "Distributor Contact Person",
+    "Distributor Contact Number", "Distributor Email", "Distributor Territory", "Product ID",
+    "Product Name", "Product Category", "Quantity", "Unit Price", "Product Discount (%)",
+    "Discounted Unit Price", "Total Price", "GST Rate", "CGST Amount", "SGST Amount",
+    "Grand Total", "Overall Discount (%)", "Amount Discount (INR)", "Payment Status",
+    "Amount Paid", "Payment Receipt Path", "Employee Selfie Path", "Invoice PDF Path",
+    "Remarks", "Delivery Status"
+]
+
+VISIT_SHEET_COLUMNS = [
+    "Visit ID", "Employee Name", "Employee Code", "Designation", "Outlet Name",
+    "Outlet Contact", "Outlet Address", "Outlet State", "Outlet City", "Visit Date",
+    "Entry Time", "Exit Time", "Visit Duration (minutes)", "Visit Purpose", "Visit Notes",
+    "Visit Selfie Path", "Visit Status", "Remarks"
+]
+
+ATTENDANCE_SHEET_COLUMNS = [
+    "Attendance ID", "Employee Name", "Employee Code", "Designation", "Date",
+    "Status", "Location Link", "Leave Reason", "Check-in Time", "Check-in Date Time"
+]
+
+# Establish connections
 conn = st.connection("gsheets", type=GSheetsConnection)
+Person = pd.read_csv('Invoice - Person.csv')
 
 # Helper functions
-def get_ist_time():
-    utc_now = datetime.now(pytz.utc)
-    ist = pytz.timezone('Asia/Kolkata')
-    return utc_now.astimezone(ist)
-
-def load_data(worksheet_name):
+def load_data(worksheet_name, columns):
     try:
-        data = conn.read(worksheet=worksheet_name, ttl=300)
+        data = conn.read(worksheet=worksheet_name, usecols=list(range(len(columns))), ttl=5)
         data = data.dropna(how='all')
+        
+        # Fix data types for Arrow compatibility
+        for col in data.columns:
+            if data[col].dtype == 'object':
+                data[col] = data[col].astype(str)
+            elif pd.api.types.is_numeric_dtype(data[col]):
+                data[col] = pd.to_numeric(data[col], errors='coerce')
+        
         return data
     except Exception as e:
-        st.error(f"Error loading {worksheet_name} data: {str(e)}")
-        return pd.DataFrame()
+        st.error(f"Error loading {worksheet_name} data: {e}")
+        return pd.DataFrame(columns=columns)
 
-def convert_to_date(df, column_name):
-    try:
-        df[column_name] = pd.to_datetime(df[column_name], dayfirst=True, errors='coerce')
-    except:
-        pass
-    return df
+def format_currency(amount):
+    return f"₹{amount:,.2f}"
 
-# Load all data
-@st.cache_data(ttl=3600)
-def load_all_data():
-    sales_data = load_data("Sales")
-    sales_data = convert_to_date(sales_data, "Invoice Date")
-    
-    visit_data = load_data("Visits")
-    visit_data = convert_to_date(visit_data, "Visit Date")
-    
-    attendance_data = load_data("Attendance")
-    attendance_data = convert_to_date(attendance_data, "Date")
-    
-    demo_data = load_data("Demos")
-    demo_data = convert_to_date(demo_data, "Demo Date")
-    
-    employee_data = load_data("Person")
-    
-    return {
-        "sales": sales_data,
-        "visits": visit_data,
-        "attendance": attendance_data,
-        "demos": demo_data,
-        "employees": employee_data
-    }
+def format_percentage(value):
+    return f"{value:.1f}%"
 
-# Date range filter
-def date_range_filter(default_days=30):
-    today = get_ist_time().date()
-    default_start = today - timedelta(days=default_days)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        start_date = st.date_input(
-            "Start Date",
-            value=default_start,
-            max_value=today
-        )
-    with col2:
-        end_date = st.date_input(
-            "End Date",
-            value=today,
-            min_value=start_date,
-            max_value=today
-        )
-    
-    return start_date, end_date
+def get_date_range():
+    today = datetime.now().date()
+    last_week = today - timedelta(days=7)
+    last_month = today - timedelta(days=30)
+    last_quarter = today - timedelta(days=90)
+    return today, last_week, last_month, last_quarter
 
-# Main dashboard function
-def dashboard():
-    st.title("Business Operations Dashboard")
+def generate_pdf_report(content, title):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
     
-    # Load all data
-    data = load_all_data()
-    sales_data = data["sales"]
-    visit_data = data["visits"]
-    attendance_data = data["attendance"]
-    demo_data = data["demos"]
-    employee_data = data["employees"]
+    # Add title
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt=title, ln=True, align='C')
+    pdf.ln(10)
     
-    # Check if data is loaded
-    if sales_data.empty or visit_data.empty or attendance_data.empty or demo_data.empty:
-        st.warning("Some data could not be loaded. Please check the connection.")
+    # Add content
+    pdf.set_font("Arial", size=10)
+    for line in content.split('\n'):
+        pdf.multi_cell(0, 5, txt=line)
+        pdf.ln(5)
+    
+    # Save to temporary file
+    filename = f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    pdf.output(filename)
+    return filename
+
+# Dashboard layout
+def main():
+    st.title("📊 Employee Portal Admin Dashboard")
+    
+    # Authentication
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    
+    if not st.session_state.authenticated:
+        with st.form("admin_auth"):
+            st.subheader("Admin Login")
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            
+            if st.form_submit_button("Login"):
+                if username == "admin" and password == "admin123":  # Replace with secure auth
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials")
         return
     
-    # Sidebar filters
+    # Load all data
+    with st.spinner("Loading data..."):
+        sales_data = load_data("Sales", SALES_SHEET_COLUMNS)
+        visits_data = load_data("Visits", VISIT_SHEET_COLUMNS)
+        attendance_data = load_data("Attendance", ATTENDANCE_SHEET_COLUMNS)
+    
+    # Convert date columns
+    if not sales_data.empty:
+        sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True, errors='coerce')
+    if not visits_data.empty:
+        visits_data['Visit Date'] = pd.to_datetime(visits_data['Visit Date'], dayfirst=True, errors='coerce')
+    if not attendance_data.empty:
+        attendance_data['Date'] = pd.to_datetime(attendance_data['Date'], dayfirst=True, errors='coerce')
+    
+    # Date filters
+    today, last_week, last_month, last_quarter = get_date_range()
+    
     st.sidebar.header("Filters")
+    time_period = st.sidebar.selectbox(
+        "Time Period",
+        ["Today", "Last 7 Days", "Last 30 Days", "Last 90 Days", "All Time"],
+        index=2
+    )
     
-    # Date range filter
-    st.sidebar.subheader("Date Range")
-    start_date, end_date = date_range_filter()
+    if time_period == "Today":
+        start_date = today
+    elif time_period == "Last 7 Days":
+        start_date = last_week
+    elif time_period == "Last 30 Days":
+        start_date = last_month
+    elif time_period == "Last 90 Days":
+        start_date = last_quarter
+    else:
+        start_date = None
     
-    # Convert dates to string for comparison
-    start_str = start_date.strftime("%d-%m-%Y")
-    end_str = end_date.strftime("%d-%m-%Y")
+    # Filter data based on date range
+    if start_date:
+        if not sales_data.empty:
+            sales_data = sales_data[sales_data['Invoice Date'].dt.date >= start_date]
+        if not visits_data.empty:
+            visits_data = visits_data[visits_data['Visit Date'].dt.date >= start_date]
+        if not attendance_data.empty:
+            attendance_data = attendance_data[attendance_data['Date'].dt.date >= start_date]
     
     # Employee filter
-    all_employees = sorted(employee_data['Employee Name'].unique())
-    selected_employees = st.sidebar.multiselect(
-        "Filter by Employee(s)",
-        all_employees,
-        default=all_employees
+    all_employees = Person['Employee Name'].unique().tolist()
+    selected_employee = st.sidebar.selectbox(
+        "Employee (All)",
+        ["All Employees"] + all_employees
     )
     
-    # State filter
-    all_states = sorted(sales_data['Outlet State'].dropna().unique())
-    selected_states = st.sidebar.multiselect(
-        "Filter by State(s)",
-        all_states,
-        default=all_states
-    )
+    if selected_employee != "All Employees":
+        if not sales_data.empty:
+            sales_data = sales_data[sales_data['Employee Name'] == selected_employee]
+        if not visits_data.empty:
+            visits_data = visits_data[visits_data['Employee Name'] == selected_employee]
+        if not attendance_data.empty:
+            attendance_data = attendance_data[attendance_data['Employee Name'] == selected_employee]
     
-    # City filter
-    all_cities = sorted(sales_data['Outlet City'].dropna().unique())
-    selected_cities = st.sidebar.multiselect(
-        "Filter by City(s)",
-        all_cities,
-        default=all_cities
-    )
-    
-    # Apply filters to all datasets
-    def filter_data(df, date_col, employee_col="Employee Name"):
-        filtered = df.copy()
-        
-        # Convert date column to string for comparison if it's datetime
-        if pd.api.types.is_datetime64_any_dtype(filtered[date_col]):
-            filtered['date_str'] = filtered[date_col].dt.strftime('%d-%m-%Y')
-        else:
-            filtered['date_str'] = filtered[date_col]
-        
-        # Apply filters
-        filtered = filtered[
-            (filtered['date_str'] >= start_str) & 
-            (filtered['date_str'] <= end_str)
-        ]
-        
-        if selected_employees:
-            filtered = filtered[filtered[employee_col].isin(selected_employees)]
-        
-        if 'Outlet State' in filtered.columns and selected_states:
-            filtered = filtered[filtered['Outlet State'].isin(selected_states)]
-        
-        if 'Outlet City' in filtered.columns and selected_cities:
-            filtered = filtered[filtered['Outlet City'].isin(selected_cities)]
-        
-        return filtered
-    
-    filtered_sales = filter_data(sales_data, "Invoice Date")
-    filtered_visits = filter_data(visit_data, "Visit Date")
-    filtered_attendance = filter_data(attendance_data, "Date")
-    filtered_demos = filter_data(demo_data, "Demo Date")
-    
-    # Dashboard tabs
-    tab1, tab2 = st.tabs(["Overall Dashboard", "Employee Dashboard"])
+    # Main dashboard
+    tab1, tab2, tab3 = st.tabs(["📈 Overview", "👥 Employee Performance", "📋 Detailed Records"])
     
     with tab1:
-        st.header("Overall Business Performance")
+        st.header("Business Overview")
         
-        # KPI Metrics
-        st.subheader("Key Metrics")
+        # KPI Cards
+        if not sales_data.empty:
+            total_sales = sales_data['Grand Total'].sum()
+            total_invoices = sales_data['Invoice Number'].nunique()
+            avg_sale_per_invoice = total_sales / total_invoices if total_invoices > 0 else 0
+            payment_completion = (sales_data[sales_data['Payment Status'] == 'paid']['Grand Total'].sum() / total_sales * 100) if total_sales > 0 else 0
+        else:
+            total_sales = 0
+            total_invoices = 0
+            avg_sale_per_invoice = 0
+            payment_completion = 0
+        
+        if not visits_data.empty:
+            total_visits = len(visits_data)
+            avg_visit_duration = visits_data['Visit Duration (minutes)'].mean()
+        else:
+            total_visits = 0
+            avg_visit_duration = 0
+        
+        if not attendance_data.empty:
+            # Get only today's attendance
+            today_attendance = attendance_data[attendance_data['Date'].dt.date == datetime.now().date()]
+            present_count = len(today_attendance[today_attendance['Status'] == 'Present'])
+            leave_count = len(today_attendance[today_attendance['Status'] == 'Leave'])
+        else:
+            present_count = 0
+            leave_count = 0
         
         col1, col2, col3, col4 = st.columns(4)
-        
         with col1:
-            total_sales = filtered_sales['Grand Total'].sum()
-            st.metric("Total Sales (INR)", f"₹{total_sales:,.2f}")
-        
+            st.metric("Total Sales", format_currency(total_sales))
         with col2:
-            total_visits = len(filtered_visits)
-            st.metric("Total Visits", f"{total_visits}")
-        
+            st.metric("Total Invoices", total_invoices)
         with col3:
-            total_demos = len(filtered_demos)
-            st.metric("Total Demos", f"{total_demos}")
-        
+            st.metric("Avg. Sale/Invoice", format_currency(avg_sale_per_invoice))
         with col4:
-            avg_attendance = filtered_attendance['Status'].value_counts().to_dict()
-            present_count = avg_attendance.get('Present', 0) + avg_attendance.get('Half Day', 0)
-            st.metric("Present Employees", f"{present_count}")
+            st.metric("Payment Completion", format_percentage(payment_completion))
         
-        # Sales Trends
-        st.subheader("Sales Trends")
+        col5, col6, col7 = st.columns(3)
+        with col5:
+            st.metric("Total Visits", total_visits)
+        with col6:
+            st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins")
+        with col7:
+            st.metric("Present Today", present_count)
         
-        if not filtered_sales.empty:
-            # Daily sales
-            daily_sales = filtered_sales.groupby(
-                filtered_sales['Invoice Date'].dt.date
-            )['Grand Total'].sum().reset_index()
-            
+        # Sales Trend Chart
+        st.subheader("Sales Trend")
+        if not sales_data.empty:
+            sales_trend = sales_data.groupby(sales_data['Invoice Date'].dt.date)['Grand Total'].sum().reset_index()
             fig = px.line(
-                daily_sales,
-                x="Invoice Date",
-                y="Grand Total",
+                sales_trend,
+                x='Invoice Date',
+                y='Grand Total',
                 title="Daily Sales Trend",
-                labels={"Invoice Date": "Date", "Grand Total": "Sales (INR)"}
+                labels={'Invoice Date': 'Date', 'Grand Total': 'Total Sales (₹)'}
             )
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Sales by employee
-            sales_by_emp = filtered_sales.groupby('Employee Name')['Grand Total'].sum().reset_index()
-            sales_by_emp = sales_by_emp.sort_values('Grand Total', ascending=False)
-            
-            fig = px.bar(
-                sales_by_emp,
-                x="Employee Name",
-                y="Grand Total",
-                title="Sales by Employee",
-                labels={"Employee Name": "Employee", "Grand Total": "Sales (INR)"}
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Sales by product
-            sales_by_product = filtered_sales.groupby('Product Name')['Quantity'].sum().reset_index()
-            sales_by_product = sales_by_product.sort_values('Quantity', ascending=False).head(10)
-            
-            fig = px.bar(
-                sales_by_product,
-                x="Product Name",
-                y="Quantity",
-                title="Top 10 Products by Quantity Sold",
-                labels={"Product Name": "Product", "Quantity": "Units Sold"}
-            )
+            fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No sales data available for the selected filters")
+            st.warning("No sales data available for the selected period")
         
-        # Visit Analysis
-        st.subheader("Visit Analysis")
-        
-        if not filtered_visits.empty:
-            # Visits by employee
-            visits_by_emp = filtered_visits['Employee Name'].value_counts().reset_index()
-            visits_by_emp.columns = ['Employee Name', 'Visit Count']
+        # Employee Performance Grid
+        st.subheader("Employee Performance Summary")
+        if not sales_data.empty:
+            employee_performance = sales_data.groupby(['Employee Name', 'Employee Code', 'Designation']).agg({
+                'Grand Total': 'sum',
+                'Invoice Number': 'nunique',
+                'Product Name': 'count'
+            }).reset_index()
+            employee_performance.columns = ['Employee Name', 'Employee Code', 'Designation', 'Total Sales', 'Invoices', 'Products Sold']
             
-            fig = px.bar(
-                visits_by_emp,
-                x="Employee Name",
-                y="Visit Count",
-                title="Visits by Employee",
-                labels={"Employee Name": "Employee", "Visit Count": "Number of Visits"}
+            # Add visit data if available
+            if not visits_data.empty:
+                visits_summary = visits_data.groupby('Employee Name').agg({
+                    'Visit ID': 'count',
+                    'Visit Duration (minutes)': 'mean'
+                }).reset_index()
+                visits_summary.columns = ['Employee Name', 'Total Visits', 'Avg. Visit Duration']
+                employee_performance = pd.merge(employee_performance, visits_summary, on='Employee Name', how='left')
+            
+            st.dataframe(
+                employee_performance.sort_values('Total Sales', ascending=False),
+                column_config={
+                    "Total Sales": st.column_config.NumberColumn(format="₹%.2f"),
+                    "Avg. Visit Duration": st.column_config.NumberColumn(format="%.1f mins")
+                },
+                use_container_width=True,
+                hide_index=True
             )
-            st.plotly_chart(fig, use_container_width=True)
             
-            # Visit purpose breakdown
-            visit_purpose = filtered_visits['Visit Purpose'].value_counts().reset_index()
-            visit_purpose.columns = ['Purpose', 'Count']
+            # PDF Export for Overview
+            overview_content = f"""
+            Business Overview Report
+            ------------------------
+            Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             
-            fig = px.pie(
-                visit_purpose,
-                names="Purpose",
-                values="Count",
-                title="Visit Purpose Breakdown"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            Key Metrics:
+            - Total Sales: {format_currency(total_sales)}
+            - Total Invoices: {total_invoices}
+            - Average Sale per Invoice: {format_currency(avg_sale_per_invoice)}
+            - Payment Completion: {format_percentage(payment_completion)}
+            - Total Visits: {total_visits}
+            - Average Visit Duration: {avg_visit_duration:.1f} mins
+            - Present Employees Today: {present_count}
+            
+            Top Performing Employees:
+            {employee_performance[['Employee Name', 'Total Sales', 'Invoices']].head(5).to_string(index=False)}
+            """
+            
+            if st.button("📥 Download Overview Report (PDF)"):
+                pdf_file = generate_pdf_report(overview_content, "Business Overview Report")
+                with open(pdf_file, "rb") as f:
+                    st.download_button(
+                        "⬇️ Download Now",
+                        f,
+                        file_name="business_overview_report.pdf",
+                        mime="application/pdf"
+                    )
+                os.remove(pdf_file)
         else:
-            st.warning("No visit data available for the selected filters")
-        
-        # Demo Analysis
-        st.subheader("Demo Analysis")
-        
-        if not filtered_demos.empty:
-            # Demos by employee
-            demos_by_emp = filtered_demos['Employee Name'].value_counts().reset_index()
-            demos_by_emp.columns = ['Employee Name', 'Demo Count']
-            
-            fig = px.bar(
-                demos_by_emp,
-                x="Employee Name",
-                y="Demo Count",
-                title="Demos by Employee",
-                labels={"Employee Name": "Employee", "Demo Count": "Number of Demos"}
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Demo review ratings
-            demo_reviews = filtered_demos['Outlet Review'].value_counts().reset_index()
-            demo_reviews.columns = ['Review', 'Count']
-            
-            fig = px.pie(
-                demo_reviews,
-                names="Review",
-                values="Count",
-                title="Demo Review Ratings"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No demo data available for the selected filters")
-        
-        # Attendance Analysis
-        st.subheader("Attendance Analysis")
-        
-        if not filtered_attendance.empty:
-            # Attendance status
-            attendance_status = filtered_attendance['Status'].value_counts().reset_index()
-            attendance_status.columns = ['Status', 'Count']
-            
-            fig = px.pie(
-                attendance_status,
-                names="Status",
-                values="Count",
-                title="Attendance Status Distribution"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Daily attendance trend
-            daily_attendance = filtered_attendance.groupby(
-                filtered_attendance['Date'].dt.date
-            )['Employee Name'].nunique().reset_index()
-            daily_attendance.columns = ['Date', 'Employee Count']
-            
-            fig = px.line(
-                daily_attendance,
-                x="Date",
-                y="Employee Count",
-                title="Daily Employee Attendance Trend",
-                labels={"Date": "Date", "Employee Count": "Number of Employees"}
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No attendance data available for the selected filters")
+            st.warning("No performance data available for the selected period")
     
     with tab2:
         st.header("Employee Performance Analysis")
         
-        if not selected_employees:
-            st.warning("Please select at least one employee to view individual performance")
+        if selected_employee == "All Employees":
+            st.warning("Please select an employee from the sidebar to view detailed performance")
         else:
-            # Select employee for detailed view
-            selected_emp = st.selectbox(
-                "Select Employee for Detailed View",
-                selected_employees
-            )
+            st.subheader(f"Performance Report: {selected_employee}")
             
-            # Employee summary
-            st.subheader(f"Performance Summary: {selected_emp}")
-            
-            # Get employee data
-            emp_data = employee_data[employee_data['Employee Name'] == selected_emp].iloc[0]
-            emp_sales = filtered_sales[filtered_sales['Employee Name'] == selected_emp]
-            emp_visits = filtered_visits[filtered_visits['Employee Name'] == selected_emp]
-            emp_attendance = filtered_attendance[filtered_attendance['Employee Name'] == selected_emp]
-            emp_demos = filtered_demos[filtered_demos['Employee Name'] == selected_emp]
-            
-            # Employee KPIs
-            col1, col2, col3, col4 = st.columns(4)
-            
+            # Employee details
+            employee_details = Person[Person['Employee Name'] == selected_employee].iloc[0]
+            col1, col2, col3 = st.columns(3)
             with col1:
-                emp_sales_total = emp_sales['Grand Total'].sum()
-                st.metric("Total Sales", f"₹{emp_sales_total:,.2f}")
-            
+                st.metric("Employee Code", employee_details['Employee Code'])
             with col2:
-                avg_sale = emp_sales_total / len(emp_visits) if len(emp_visits) > 0 else 0
-                st.metric("Avg. Sale per Visit", f"₹{avg_sale:,.2f}")
-            
+                st.metric("Designation", employee_details['Designation'])
             with col3:
-                visit_count = len(emp_visits)
-                st.metric("Total Visits", f"{visit_count}")
-            
-            with col4:
-                demo_count = len(emp_demos)
-                st.metric("Total Demos", f"{demo_count}")
+                st.metric("Discount Category", employee_details['Discount Category'])
             
             # Sales performance
             st.subheader("Sales Performance")
-            
-            if not emp_sales.empty:
-                # Daily sales trend
-                daily_sales = emp_sales.groupby(
-                    emp_sales['Invoice Date'].dt.date
-                )['Grand Total'].sum().reset_index()
+            if not sales_data.empty:
+                # Sales metrics
+                employee_sales = sales_data[sales_data['Employee Name'] == selected_employee]
+                total_sales = employee_sales['Grand Total'].sum()
+                total_invoices = employee_sales['Invoice Number'].nunique()
+                avg_sale_per_invoice = total_sales / total_invoices if total_invoices > 0 else 0
+                payment_completion = (employee_sales[employee_sales['Payment Status'] == 'paid']['Grand Total'].sum() / total_sales * 100) if total_sales > 0 else 0
                 
-                fig = px.line(
-                    daily_sales,
-                    x="Invoice Date",
-                    y="Grand Total",
-                    title=f"Daily Sales Trend - {selected_emp}",
-                    labels={"Invoice Date": "Date", "Grand Total": "Sales (INR)"}
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Sales", format_currency(total_sales))
+                with col2:
+                    st.metric("Total Invoices", total_invoices)
+                with col3:
+                    st.metric("Avg. Sale/Invoice", format_currency(avg_sale_per_invoice))
+                with col4:
+                    st.metric("Payment Completion", format_percentage(payment_completion))
+                
+                # Sales by product category
+                st.subheader("Sales by Product Category")
+                sales_by_category = employee_sales.groupby('Product Category')['Grand Total'].sum().reset_index()
+                fig = px.pie(
+                    sales_by_category,
+                    values='Grand Total',
+                    names='Product Category',
+                    title="Sales Distribution by Product Category"
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Top products sold
-                top_products = emp_sales.groupby('Product Name')['Quantity'].sum().reset_index()
-                top_products = top_products.sort_values('Quantity', ascending=False).head(10)
-                
-                fig = px.bar(
+                # Top products
+                st.subheader("Top Selling Products")
+                top_products = employee_sales.groupby('Product Name').agg({
+                    'Grand Total': 'sum',
+                    'Quantity': 'sum'
+                }).sort_values('Grand Total', ascending=False).head(10)
+                st.dataframe(
                     top_products,
-                    x="Product Name",
-                    y="Quantity",
-                    title=f"Top Products Sold - {selected_emp}",
-                    labels={"Product Name": "Product", "Quantity": "Units Sold"}
+                    column_config={
+                        "Grand Total": st.column_config.NumberColumn(format="₹%.2f")
+                    },
+                    use_container_width=True
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                
+                # Generate PDF report for employee performance
+                performance_content = f"""
+                Employee Performance Report
+                ---------------------------
+                Employee: {selected_employee}
+                Employee Code: {employee_details['Employee Code']}
+                Designation: {employee_details['Designation']}
+                Report Period: {time_period}
+                Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                
+                Sales Performance:
+                - Total Sales: {format_currency(total_sales)}
+                - Total Invoices: {total_invoices}
+                - Average Sale per Invoice: {format_currency(avg_sale_per_invoice)}
+                - Payment Completion: {format_percentage(payment_completion)}
+                
+                Top Selling Products:
+                {top_products.head(5).to_string()}
+                
+                Sales by Category:
+                {sales_by_category.to_string(index=False)}
+                """
+                
+                if st.button("📥 Download Performance Report (PDF)"):
+                    pdf_file = generate_pdf_report(performance_content, f"Employee Performance Report - {selected_employee}")
+                    with open(pdf_file, "rb") as f:
+                        st.download_button(
+                            "⬇️ Download Now",
+                            f,
+                            file_name=f"employee_performance_{selected_employee}.pdf",
+                            mime="application/pdf"
+                        )
+                    os.remove(pdf_file)
             else:
-                st.warning(f"No sales data available for {selected_emp}")
+                st.warning("No sales data available for this employee")
             
             # Visit performance
             st.subheader("Visit Performance")
-            
-            if not emp_visits.empty:
-                # Visit purpose breakdown
-                visit_purpose = emp_visits['Visit Purpose'].value_counts().reset_index()
-                visit_purpose.columns = ['Purpose', 'Count']
+            if not visits_data.empty:
+                employee_visits = visits_data[visits_data['Employee Name'] == selected_employee]
+                total_visits = len(employee_visits)
+                avg_visit_duration = employee_visits['Visit Duration (minutes)'].mean()
+                visits_by_purpose = employee_visits['Visit Purpose'].value_counts().reset_index()
+                visits_by_purpose.columns = ['Purpose', 'Count']
                 
-                fig = px.pie(
-                    visit_purpose,
-                    names="Purpose",
-                    values="Count",
-                    title=f"Visit Purpose Breakdown - {selected_emp}"
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Total Visits", total_visits)
+                with col2:
+                    st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins")
                 
-                # Visit duration analysis
-                emp_visits['Visit Duration (minutes)'] = pd.to_numeric(emp_visits['Visit Duration (minutes)'], errors='coerce')
-                avg_duration = emp_visits['Visit Duration (minutes)'].mean()
-                
-                fig = px.histogram(
-                    emp_visits,
-                    x="Visit Duration (minutes)",
-                    title=f"Visit Duration Distribution - {selected_emp}",
-                    labels={"Visit Duration (minutes)": "Duration (minutes)"}
+                # Visits by purpose
+                fig = px.bar(
+                    visits_by_purpose,
+                    x='Purpose',
+                    y='Count',
+                    title="Visits by Purpose"
                 )
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                st.warning(f"No visit data available for {selected_emp}")
+                st.warning("No visit data available for this employee")
             
-            # Demo performance
-            st.subheader("Demo Performance")
-            
-            if not emp_demos.empty:
-                # Demo review ratings
-                demo_reviews = emp_demos['Outlet Review'].value_counts().reset_index()
-                demo_reviews.columns = ['Review', 'Count']
-                
-                fig = px.pie(
-                    demo_reviews,
-                    names="Review",
-                    values="Count",
-                    title=f"Demo Review Ratings - {selected_emp}"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Demo duration analysis
-                emp_demos['Duration (minutes)'] = pd.to_numeric(emp_demos['Duration (minutes)'], errors='coerce')
-                avg_demo_duration = emp_demos['Duration (minutes)'].mean()
-                
-                fig = px.histogram(
-                    emp_demos,
-                    x="Duration (minutes)",
-                    title=f"Demo Duration Distribution - {selected_emp}",
-                    labels={"Duration (minutes)": "Duration (minutes)"}
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning(f"No demo data available for {selected_emp}")
-            
-            # Attendance record
+            # Attendance performance
             st.subheader("Attendance Record")
-            
-            if not emp_attendance.empty:
-                # Attendance status
-                attendance_status = emp_attendance['Status'].value_counts().reset_index()
-                attendance_status.columns = ['Status', 'Count']
+            if not attendance_data.empty:
+                employee_attendance = attendance_data[attendance_data['Employee Name'] == selected_employee]
+                present_days = len(employee_attendance[employee_attendance['Status'] == 'Present'])
+                leave_days = len(employee_attendance[employee_attendance['Status'] == 'Leave'])
                 
-                fig = px.pie(
-                    attendance_status,
-                    names="Status",
-                    values="Count",
-                    title=f"Attendance Status - {selected_emp}"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Attendance calendar heatmap
-                try:
-                    emp_attendance['date'] = pd.to_datetime(emp_attendance['Date'], dayfirst=True)
-                    emp_attendance['day_of_week'] = emp_attendance['date'].dt.day_name()
-                    emp_attendance['week'] = emp_attendance['date'].dt.isocalendar().week
-                    emp_attendance['year'] = emp_attendance['date'].dt.year
-                    
-                    # Create a pivot table for the heatmap
-                    heatmap_data = emp_attendance.pivot_table(
-                        index='day_of_week',
-                        columns='week',
-                        values='Status',
-                        aggfunc='count',
-                        fill_value=0
-                    )
-                    
-                    # Reorder days of week
-                    days_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                    heatmap_data = heatmap_data.reindex(days_order)
-                    
-                    fig = px.imshow(
-                        heatmap_data,
-                        labels=dict(x="Week", y="Day of Week", color="Attendance"),
-                        title=f"Weekly Attendance Pattern - {selected_emp}",
-                        aspect="auto"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.warning(f"Could not generate attendance heatmap: {str(e)}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Present Days", present_days)
+                with col2:
+                    st.metric("Leave Days", leave_days)
             else:
-                st.warning(f"No attendance data available for {selected_emp}")
+                st.warning("No attendance data available for this employee")
+    
+    with tab3:
+        st.header("Detailed Records")
+        
+        # Sales records
+        st.subheader("Sales Records")
+        if not sales_data.empty:
+            st.dataframe(
+                sales_data,
+                column_config={
+                    "Grand Total": st.column_config.NumberColumn(format="₹%.2f"),
+                    "Invoice Date": st.column_config.DateColumn(format="DD/MM/YYYY")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # Export options
+            csv = sales_data.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "Export Sales Data",
+                csv,
+                "sales_records.csv",
+                "text/csv",
+                key='download-sales-csv'
+            )
+        else:
+            st.warning("No sales data available for the selected period")
+        
+        # Visit records
+        st.subheader("Visit Records")
+        if not visits_data.empty:
+            st.dataframe(
+                visits_data,
+                column_config={
+                    "Visit Date": st.column_config.DateColumn(format="DD/MM/YYYY")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            csv = visits_data.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "Export Visit Data",
+                csv,
+                "visit_records.csv",
+                "text/csv",
+                key='download-visit-csv'
+            )
+        else:
+            st.warning("No visit data available for the selected period")
+        
+        # Attendance records
+        st.subheader("Attendance Records")
+        if not attendance_data.empty:
+            st.dataframe(
+                attendance_data,
+                column_config={
+                    "Date": st.column_config.DateColumn(format="DD/MM/YYYY")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            csv = attendance_data.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "Export Attendance Data",
+                csv,
+                "attendance_records.csv",
+                "text/csv",
+                key='download-attendance-csv'
+            )
+        else:
+            st.warning("No attendance data available for the selected period")
 
-# Run the dashboard
 if __name__ == "__main__":
-    dashboard()
+    main()
