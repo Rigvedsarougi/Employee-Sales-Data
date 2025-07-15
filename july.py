@@ -234,9 +234,13 @@ def main():
         with col4:
             st.metric("Payment Completion", format_percentage(payment_completion))
         
-        col5 = st.columns(3)
+        col5, col6, col7 = st.columns(3)
         with col5:
             st.metric("Total Visits", total_visits)
+        with col6:
+            st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins")
+        with col7:
+            st.metric("Present Today", present_count)
         
         # Sales Trend Chart
         st.subheader("Sales Trend")
