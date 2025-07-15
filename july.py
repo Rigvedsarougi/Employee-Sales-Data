@@ -302,16 +302,6 @@ def main():
             {employee_performance[['Employee Name', 'Total Sales', 'Invoices']].head(5).to_string(index=False)}
             """
             
-            if st.button("📥 Download Overview Report (PDF)"):
-                pdf_file = generate_pdf_report(overview_content, "Business Overview Report")
-                with open(pdf_file, "rb") as f:
-                    st.download_button(
-                        "⬇️ Download Now",
-                        f,
-                        file_name="business_overview_report.pdf",
-                        mime="application/pdf"
-                    )
-                os.remove(pdf_file)
         else:
             st.warning("No performance data available for the selected period")
     
