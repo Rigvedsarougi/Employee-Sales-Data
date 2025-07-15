@@ -86,7 +86,7 @@ def dashboard_page():
                                  value=get_ist_time().date() - timedelta(days=30),
                                  key="dashboard_start_date")
     with col2:
-        end_date = st.date_input("End Date", 
+        end_date = st.date_input("end date", 
                                value=get_ist_time().date(),
                                key="dashboard_end_date")
     
@@ -177,7 +177,7 @@ def sales_analytics_page():
             states = st.multiselect("Filter by State", 
                                   options=sorted(conn.read(worksheet="Sales")['Outlet State'].unique()) 
         with col2:
-            end_date = st.date_input("End Date", 
+            end_date = st.date_input("end date", 
                                    value=get_ist_time().date(),
                                    key="sales_end_date")
             cities = st.multiselect("Filter by City", 
@@ -241,7 +241,7 @@ def visit_analytics_page():
             employee_filter = st.multiselect("Filter by Employee", 
                                            options=sorted(conn.read(worksheet="Visits")['Employee Name'].unique())
         with col2:
-            end_date = st.date_input("End Date", 
+            end_date = st.date_input("end date", 
                                    value=get_ist_time().date(),
                                    key="visit_end_date")
             purpose_filter = st.multiselect("Filter by Purpose", 
@@ -305,7 +305,7 @@ def demo_analytics_page():
             employee_filter = st.multiselect("Filter by Employee", 
                                            options=sorted(conn.read(worksheet="Demos")['Employee Name'].unique())
         with col2:
-            end_date = st.date_input("End Date", 
+            end_date = st.date_input("end date", 
                                    value=get_ist_time().date(),
                                    key="demo_end_date")
             outlet_filter = st.multiselect("Filter by Outlet", 
@@ -369,7 +369,7 @@ def attendance_analytics_page():
             employee_filter = st.multiselect("Filter by Employee", 
                                            options=sorted(conn.read(worksheet="Attendance")['Employee Name'].unique())
         with col2:
-            end_date = st.date_input("End Date", 
+            end_date = st.date_input("end date", 
                                    value=get_ist_time().date(),
                                    key="attendance_end_date")
             status_filter = st.multiselect("Filter by Status", 
@@ -438,7 +438,7 @@ def employee_dashboard_page():
                                  value=get_ist_time().date() - timedelta(days=30),
                                  key="emp_start_date")
     with col2:
-        end_date = st.date_input("End Date", 
+        end_date = st.date_input("end date", 
                                value=get_ist_time().date(),
                                key="emp_end_date")
     
