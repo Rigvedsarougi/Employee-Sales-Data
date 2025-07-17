@@ -290,7 +290,7 @@ def main():
         with col7:
             st.metric("Total Demos", total_demos)
         with col8:
-            st.metric("Avg. Demo Duration", f"{avg_demo_duration:.1f} mins")
+            st.metric(" ", f"{""} mins")
             
         col9, col10, col11, col12 = st.columns(4)
         with col9:
