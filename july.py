@@ -110,6 +110,44 @@ def generate_pdf_report(content, title):
     pdf.output(filename)
     return filename
 
+def get_attendance_counts(attendance_data, start_date, end_date):
+    if attendance_data.empty:
+        return 0, 0
+    
+    # Convert dates to datetime.date for comparison
+    attendance_data['Date'] = pd.to_datetime(attendance_data['Date']).dt.date
+    
+    # Filter by date range
+    filtered_attendance = attendance_data[
+        (attendance_data['Date'] >= start_date) & 
+        (attendance_data['Date'] <= end_date)
+    ]
+    
+    # Get today's date
+    today = datetime.now().date()
+    
+    # Count all present/leave records in date range
+    total_present = len(filtered_attendance[
+        filtered_attendance['Status'].str.strip().str.lower() == 'present'
+    ])
+    total_leave = len(filtered_attendance[
+        filtered_attendance['Status'].str.strip().str.lower() == 'leave'
+    ])
+    
+    # Count today's attendance if today is in range
+    today_present = 0
+    today_leave = 0
+    if start_date <= today <= end_date:
+        today_attendance = filtered_attendance[filtered_attendance['Date'] == today]
+        today_present = len(today_attendance[
+            today_attendance['Status'].str.strip().str.lower() == 'present'
+        ])
+        today_leave = len(today_attendance[
+            today_attendance['Status'].str.strip().str.lower() == 'leave'
+        ])
+    
+    return total_present, total_leave, today_present, today_leave
+
 # Dashboard layout
 def main():
     st.title("📊 Employee Portal Admin Dashboard")
@@ -179,11 +217,11 @@ def main():
             (demo_data['Demo Date'].dt.date >= start_date) & 
             (demo_data['Demo Date'].dt.date <= end_date)
         ]
-    if not attendance_data.empty:
-        attendance_data = attendance_data[
-            (attendance_data['Date'].dt.date >= start_date) & 
-            (attendance_data['Date'].dt.date <= end_date)
-        ]
+    
+    # Get attendance counts (both total and today's)
+    total_present, total_leave, today_present, today_leave = get_attendance_counts(
+        attendance_data, start_date, end_date
+    )
     
     # Employee filter
     all_employees = Person['Employee Name'].unique().tolist()
@@ -234,20 +272,6 @@ def main():
             total_demos = 0
             avg_demo_duration = 0
         
-        if not attendance_data.empty:
-            # Get only today's attendance if today is within the selected date range
-            today = datetime.now().date()
-            if start_date <= today <= end_date:
-                today_attendance = attendance_data[attendance_data['Date'].dt.date == today]
-                present_count = len(today_attendance[today_attendance['Status'] == 'Present'])
-                leave_count = len(today_attendance[today_attendance['Status'] == 'Leave'])
-            else:
-                present_count = 0
-                leave_count = 0
-        else:
-            present_count = 0
-            leave_count = 0
-        
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total Sales", format_currency(total_sales))
@@ -268,11 +292,15 @@ def main():
         with col8:
             st.metric("Avg. Demo Duration", f"{avg_demo_duration:.1f} mins")
             
-        col9, col10 = st.columns(2)
+        col9, col10, col11, col12 = st.columns(4)
         with col9:
-            st.metric("Present Today", present_count)
+            st.metric("Total Present", total_present)
         with col10:
-            st.metric("Leave Today", leave_count)
+            st.metric("Total Leave", total_leave)
+        with col11:
+            st.metric("Present Today", today_present)
+        with col12:
+            st.metric("Leave Today", today_leave)
         
         # Sales Trend Chart
         st.subheader("Sales Trend")
@@ -318,6 +346,15 @@ def main():
                 demo_summary.columns = ['Employee Name', 'Total Demos', 'Avg. Demo Duration']
                 employee_performance = pd.merge(employee_performance, demo_summary, on='Employee Name', how='left')
             
+            # Add attendance data if available
+            if not attendance_data.empty:
+                attendance_summary = attendance_data.groupby('Employee Name').agg({
+                    'Attendance ID': 'count',
+                    'Status': lambda x: (x.str.lower() == 'present').sum()
+                }).reset_index()
+                attendance_summary.columns = ['Employee Name', 'Total Days', 'Present Days']
+                employee_performance = pd.merge(employee_performance, attendance_summary, on='Employee Name', how='left')
+            
             st.dataframe(
                 employee_performance.sort_values('Total Sales', ascending=False),
                 column_config={
@@ -345,12 +382,23 @@ def main():
             - Average Visit Duration: {avg_visit_duration:.1f} mins
             - Total Demos: {total_demos}
             - Average Demo Duration: {avg_demo_duration:.1f} mins
-            - Present Employees Today: {present_count}
+            - Present Employees Today: {today_present}
+            - Total Present in Period: {total_present}
             
             Top Performing Employees:
             {employee_performance[['Employee Name', 'Total Sales', 'Invoices']].head(5).to_string(index=False)}
             """
             
+            if st.button("📥 Download Overview Report (PDF)"):
+                pdf_file = generate_pdf_report(overview_content, "Business Overview Report")
+                with open(pdf_file, "rb") as f:
+                    st.download_button(
+                        "⬇️ Download Now",
+                        f,
+                        file_name="business_overview_report.pdf",
+                        mime="application/pdf"
+                    )
+                os.remove(pdf_file)
         else:
             st.warning("No performance data available for the selected period")
     
@@ -417,40 +465,6 @@ def main():
                     },
                     use_container_width=True
                 )
-                
-                # Generate PDF report for employee performance
-                performance_content = f"""
-                Employee Performance Report
-                ---------------------------
-                Employee: {selected_employee}
-                Employee Code: {employee_details['Employee Code']}
-                Designation: {employee_details['Designation']}
-                Report Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}
-                Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-                
-                Sales Performance:
-                - Total Sales: {format_currency(total_sales)}
-                - Total Invoices: {total_invoices}
-                - Average Sale per Invoice: {format_currency(avg_sale_per_invoice)}
-                - Payment Completion: {format_percentage(payment_completion)}
-                
-                Top Selling Products:
-                {top_products.head(5).to_string()}
-                
-                Sales by Category:
-                {sales_by_category.to_string(index=False)}
-                """
-                
-                if st.button("📥 Download Performance Report (PDF)"):
-                    pdf_file = generate_pdf_report(performance_content, f"Employee Performance Report - {selected_employee}")
-                    with open(pdf_file, "rb") as f:
-                        st.download_button(
-                            "⬇️ Download Now",
-                            f,
-                            file_name=f"employee_performance_{selected_employee}.pdf",
-                            mime="application/pdf"
-                        )
-                    os.remove(pdf_file)
             else:
                 st.warning("No sales data available for this employee")
             
@@ -520,16 +534,89 @@ def main():
             st.subheader("Attendance Record")
             if not attendance_data.empty:
                 employee_attendance = attendance_data[attendance_data['Employee Name'] == selected_employee]
-                present_days = len(employee_attendance[employee_attendance['Status'] == 'Present'])
-                leave_days = len(employee_attendance[employee_attendance['Status'] == 'Leave'])
+                present_days = len(employee_attendance[
+                    employee_attendance['Status'].str.strip().str.lower() == 'present'
+                ])
+                leave_days = len(employee_attendance[
+                    employee_attendance['Status'].str.strip().str.lower() == 'leave'
+                ])
                 
-                col1, col2 = st.columns(2)
+                # Get today's status if today is in range
+                today_status = "Not Recorded"
+                today = datetime.now().date()
+                if start_date <= today <= end_date:
+                    today_record = employee_attendance[
+                        employee_attendance['Date'].dt.date == today
+                    ]
+                    if not today_record.empty:
+                        today_status = today_record.iloc[0]['Status']
+                
+                col1, col2, col3 = st.columns(3)
                 with col1:
                     st.metric("Present Days", present_days)
                 with col2:
                     st.metric("Leave Days", leave_days)
+                with col3:
+                    st.metric("Today's Status", today_status)
+                
+                # Attendance calendar view
+                st.subheader("Attendance Calendar")
+                calendar_data = employee_attendance.copy()
+                calendar_data['Date'] = calendar_data['Date'].dt.date
+                calendar_data['Status'] = calendar_data['Status'].str.capitalize()
+                st.dataframe(
+                    calendar_data[['Date', 'Status', 'Check-in Time']],
+                    column_config={
+                        "Date": st.column_config.DateColumn(format="DD/MM/YYYY"),
+                        "Status": st.column_config.TextColumn(),
+                        "Check-in Time": st.column_config.TimeColumn(format="HH:mm")
+                    },
+                    use_container_width=True,
+                    hide_index=True
+                )
             else:
                 st.warning("No attendance data available for this employee")
+            
+            # Generate PDF report for employee performance
+            if st.button("📥 Download Performance Report (PDF)"):
+                performance_content = f"""
+                Employee Performance Report
+                ---------------------------
+                Employee: {selected_employee}
+                Employee Code: {employee_details['Employee Code']}
+                Designation: {employee_details['Designation']}
+                Report Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}
+                Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                
+                Sales Performance:
+                - Total Sales: {format_currency(total_sales) if not sales_data.empty else 'N/A'}
+                - Total Invoices: {total_invoices if not sales_data.empty else 'N/A'}
+                - Average Sale per Invoice: {format_currency(avg_sale_per_invoice) if not sales_data.empty else 'N/A'}
+                - Payment Completion: {format_percentage(payment_completion) if not sales_data.empty else 'N/A'}
+                
+                Visit Performance:
+                - Total Visits: {total_visits if not visits_data.empty else 'N/A'}
+                - Average Visit Duration: {f"{avg_visit_duration:.1f} mins" if not visits_data.empty else 'N/A'}
+                
+                Demo Performance:
+                - Total Demos: {total_demos if not demo_data.empty else 'N/A'}
+                - Average Demo Duration: {f"{avg_demo_duration:.1f} mins" if not demo_data.empty else 'N/A'}
+                
+                Attendance Record:
+                - Present Days: {present_days if not attendance_data.empty else 'N/A'}
+                - Leave Days: {leave_days if not attendance_data.empty else 'N/A'}
+                - Today's Status: {today_status if not attendance_data.empty else 'N/A'}
+                """
+                
+                pdf_file = generate_pdf_report(performance_content, f"Employee Performance Report - {selected_employee}")
+                with open(pdf_file, "rb") as f:
+                    st.download_button(
+                        "⬇️ Download Now",
+                        f,
+                        file_name=f"employee_performance_{selected_employee}.pdf",
+                        mime="application/pdf"
+                    )
+                os.remove(pdf_file)
     
     with tab3:
         st.header("Detailed Records")
