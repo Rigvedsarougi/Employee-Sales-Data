@@ -280,7 +280,7 @@ def main():
         with col3:
             st.metric("Avg. Sale/Invoice", format_currency(avg_sale_per_invoice))
         with col4:
-            st.metric("Payment Completion", format_percentage(payment_completion))
+            st.metric(" ", f"{""}")
         
         col5, col6, col7, col8 = st.columns(4)
         with col5:
