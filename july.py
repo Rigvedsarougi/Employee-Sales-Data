@@ -286,11 +286,11 @@ def main():
         with col5:
             st.metric("Total Visits", total_visits)
         with col6:
-            st.metric(" ", f"{""}")
-        with col7:
             st.metric("Total Demos", total_demos)
+        with col7:
+            st.metric("Present Today", today_present)
         with col8:
-            st.metric(" ", f"{""}")
+            st.metric("Leave Today", today_leave)
             
         col9, col10, col11, col12 = st.columns(4)
         with col9:
@@ -298,9 +298,9 @@ def main():
         with col10:
             st.metric(" ", f"{""}")
         with col11:
-            st.metric("Present Today", today_present)
+            st.metric(" ", f"{""}")
         with col12:
-            st.metric("Leave Today", today_leave)
+            st.metric(" ", f"{""}")
         
         # Sales Trend Chart
         st.subheader("Sales Trend")
