@@ -286,17 +286,17 @@ def main():
         with col5:
             st.metric("Total Visits", total_visits)
         with col6:
-            st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins")
+            st.metric(" ", f"{""}")
         with col7:
             st.metric("Total Demos", total_demos)
         with col8:
-            st.metric(" ", f"{""} mins")
+            st.metric(" ", f"{""}")
             
         col9, col10, col11, col12 = st.columns(4)
         with col9:
-            st.metric("Total Present", total_present)
+            st.metric(" ", f"{""}")
         with col10:
-            st.metric("Total Leave", total_leave)
+            st.metric(" ", f"{""}")
         with col11:
             st.metric("Present Today", today_present)
         with col12:
@@ -388,17 +388,6 @@ def main():
             Top Performing Employees:
             {employee_performance[['Employee Name', 'Total Sales', 'Invoices']].head(5).to_string(index=False)}
             """
-            
-            if st.button("📥 Download Overview Report (PDF)"):
-                pdf_file = generate_pdf_report(overview_content, "Business Overview Report")
-                with open(pdf_file, "rb") as f:
-                    st.download_button(
-                        "⬇️ Download Now",
-                        f,
-                        file_name="business_overview_report.pdf",
-                        mime="application/pdf"
-                    )
-                os.remove(pdf_file)
         else:
             st.warning("No performance data available for the selected period")
     
