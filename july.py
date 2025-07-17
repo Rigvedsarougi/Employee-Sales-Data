@@ -44,6 +44,13 @@ VISIT_SHEET_COLUMNS = [
     "Visit Selfie Path", "Visit Status", "Remarks"
 ]
 
+DEMO_SHEET_COLUMNS = [
+    "Demo ID", "Employee Name", "Employee Code", "Designation", "Partner Employee",
+    "Partner Employee Code", "Outlet Name", "Outlet Contact", "Outlet Address", "Outlet State",
+    "Outlet City", "Demo Date", "Check-in Time", "Check-out Time", "Check-in Date Time",
+    "Duration (minutes)", "Outlet Review", "Remarks", "Status", "Products", "Quantities"
+]
+
 ATTENDANCE_SHEET_COLUMNS = [
     "Attendance ID", "Employee Name", "Employee Code", "Designation", "Date",
     "Status", "Location Link", "Leave Reason", "Check-in Time", "Check-in Date Time"
@@ -129,6 +136,7 @@ def main():
     with st.spinner("Loading data..."):
         sales_data = load_data("Sales", SALES_SHEET_COLUMNS)
         visits_data = load_data("Visits", VISIT_SHEET_COLUMNS)
+        demo_data = load_data("Demos", DEMO_SHEET_COLUMNS)
         attendance_data = load_data("Attendance", ATTENDANCE_SHEET_COLUMNS)
     
     # Convert date columns
@@ -136,6 +144,8 @@ def main():
         sales_data['Invoice Date'] = pd.to_datetime(sales_data['Invoice Date'], dayfirst=True, errors='coerce')
     if not visits_data.empty:
         visits_data['Visit Date'] = pd.to_datetime(visits_data['Visit Date'], dayfirst=True, errors='coerce')
+    if not demo_data.empty:
+        demo_data['Demo Date'] = pd.to_datetime(demo_data['Demo Date'], dayfirst=True, errors='coerce')
     if not attendance_data.empty:
         attendance_data['Date'] = pd.to_datetime(attendance_data['Date'], dayfirst=True, errors='coerce')
     
@@ -164,6 +174,11 @@ def main():
             (visits_data['Visit Date'].dt.date >= start_date) & 
             (visits_data['Visit Date'].dt.date <= end_date)
         ]
+    if not demo_data.empty:
+        demo_data = demo_data[
+            (demo_data['Demo Date'].dt.date >= start_date) & 
+            (demo_data['Demo Date'].dt.date <= end_date)
+        ]
     if not attendance_data.empty:
         attendance_data = attendance_data[
             (attendance_data['Date'].dt.date >= start_date) & 
@@ -182,6 +197,8 @@ def main():
             sales_data = sales_data[sales_data['Employee Name'] == selected_employee]
         if not visits_data.empty:
             visits_data = visits_data[visits_data['Employee Name'] == selected_employee]
+        if not demo_data.empty:
+            demo_data = demo_data[demo_data['Employee Name'] == selected_employee]
         if not attendance_data.empty:
             attendance_data = attendance_data[attendance_data['Employee Name'] == selected_employee]
     
@@ -209,6 +226,13 @@ def main():
         else:
             total_visits = 0
             avg_visit_duration = 0
+            
+        if not demo_data.empty:
+            total_demos = len(demo_data)
+            avg_demo_duration = demo_data['Duration (minutes)'].mean()
+        else:
+            total_demos = 0
+            avg_demo_duration = 0
         
         if not attendance_data.empty:
             # Get only today's attendance if today is within the selected date range
@@ -234,13 +258,21 @@ def main():
         with col4:
             st.metric("Payment Completion", format_percentage(payment_completion))
         
-        col5, col6, col7 = st.columns(3)
+        col5, col6, col7, col8 = st.columns(4)
         with col5:
             st.metric("Total Visits", total_visits)
         with col6:
             st.metric("Avg. Visit Duration", f"{avg_visit_duration:.1f} mins")
         with col7:
+            st.metric("Total Demos", total_demos)
+        with col8:
+            st.metric("Avg. Demo Duration", f"{avg_demo_duration:.1f} mins")
+            
+        col9, col10 = st.columns(2)
+        with col9:
             st.metric("Present Today", present_count)
+        with col10:
+            st.metric("Leave Today", leave_count)
         
         # Sales Trend Chart
         st.subheader("Sales Trend")
@@ -276,12 +308,22 @@ def main():
                 }).reset_index()
                 visits_summary.columns = ['Employee Name', 'Total Visits', 'Avg. Visit Duration']
                 employee_performance = pd.merge(employee_performance, visits_summary, on='Employee Name', how='left')
+                
+            # Add demo data if available
+            if not demo_data.empty:
+                demo_summary = demo_data.groupby('Employee Name').agg({
+                    'Demo ID': 'count',
+                    'Duration (minutes)': 'mean'
+                }).reset_index()
+                demo_summary.columns = ['Employee Name', 'Total Demos', 'Avg. Demo Duration']
+                employee_performance = pd.merge(employee_performance, demo_summary, on='Employee Name', how='left')
             
             st.dataframe(
                 employee_performance.sort_values('Total Sales', ascending=False),
                 column_config={
                     "Total Sales": st.column_config.NumberColumn(format="₹%.2f"),
-                    "Avg. Visit Duration": st.column_config.NumberColumn(format="%.1f mins")
+                    "Avg. Visit Duration": st.column_config.NumberColumn(format="%.1f mins"),
+                    "Avg. Demo Duration": st.column_config.NumberColumn(format="%.1f mins")
                 },
                 use_container_width=True,
                 hide_index=True
@@ -301,6 +343,8 @@ def main():
             - Payment Completion: {format_percentage(payment_completion)}
             - Total Visits: {total_visits}
             - Average Visit Duration: {avg_visit_duration:.1f} mins
+            - Total Demos: {total_demos}
+            - Average Demo Duration: {avg_demo_duration:.1f} mins
             - Present Employees Today: {present_count}
             
             Top Performing Employees:
@@ -435,6 +479,42 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning("No visit data available for this employee")
+                
+            # Demo performance
+            st.subheader("Demo Performance")
+            if not demo_data.empty:
+                employee_demos = demo_data[demo_data['Employee Name'] == selected_employee]
+                total_demos = len(employee_demos)
+                avg_demo_duration = employee_demos['Duration (minutes)'].mean()
+                demos_by_review = employee_demos['Outlet Review'].value_counts().reset_index()
+                demos_by_review.columns = ['Review', 'Count']
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Total Demos", total_demos)
+                with col2:
+                    st.metric("Avg. Demo Duration", f"{avg_demo_duration:.1f} mins")
+                
+                # Demos by review
+                fig = px.pie(
+                    demos_by_review,
+                    values='Count',
+                    names='Review',
+                    title="Demos by Outlet Review"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Top demo partners
+                st.subheader("Top Demo Partners")
+                demo_partners = employee_demos['Partner Employee'].value_counts().reset_index()
+                demo_partners.columns = ['Partner', 'Count']
+                st.dataframe(
+                    demo_partners,
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.warning("No demo data available for this employee")
             
             # Attendance performance
             st.subheader("Attendance Record")
@@ -502,6 +582,29 @@ def main():
             )
         else:
             st.warning("No visit data available for the selected period")
+            
+        # Demo records
+        st.subheader("Demo Records")
+        if not demo_data.empty:
+            st.dataframe(
+                demo_data,
+                column_config={
+                    "Demo Date": st.column_config.DateColumn(format="DD/MM/YYYY")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            csv = demo_data.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "Export Demo Data",
+                csv,
+                "demo_records.csv",
+                "text/csv",
+                key='download-demo-csv'
+            )
+        else:
+            st.warning("No demo data available for the selected period")
         
         # Attendance records
         st.subheader("Attendance Records")
