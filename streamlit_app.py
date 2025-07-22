@@ -29,7 +29,7 @@ def logout():
     cookies.save()
     st.rerun()
 
-@st.cache_data(ttl=3600)
+@st.cache_resource(ttl=3600)
 def load_employee_data():
     """Load employee data with caching"""
     return Person['Employee Name'].tolist()
@@ -981,7 +981,7 @@ def demo_page():
     with tab2:
         st.subheader("Demo History")
 
-        @st.cache_data(ttl=300)
+        @st.cache_resource(ttl=300)
         def load_demo_data():
             try:
                 df = conn.read(worksheet=DEMO_HISTORY_SHEET, ttl=5)
@@ -1742,7 +1742,7 @@ def sales_page():
     with tab2:
         st.subheader("Your Sales History")
         
-        @st.cache_data(ttl=300)
+        @st.cache_resource(ttl=300)
         def load_sales_data():
             try:
                 sales_data = conn.read(worksheet=SALES_HISTORY_SHEET, ttl=5)
