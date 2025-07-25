@@ -13,7 +13,6 @@ from streamlit_js_eval import streamlit_js_eval
 import time
 from streamlit_cookies_manager import EncryptedCookieManager
 import extra_streamlit_components as stx
-import openpyxl
 
 cookies = EncryptedCookieManager(
     prefix="biolume_",
@@ -387,20 +386,9 @@ REQUEST_TYPES = ["Hotel", "Travel", "Travel & Hotel"]
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 Products = pd.read_csv('Invoice - Products.csv')
+Outlet = pd.read_csv('Invoice - Outlet.csv')
 Person = pd.read_csv('Invoice - Person.csv')
 Distributors = pd.read_csv('Invoice - Distributors.csv')
-
-excel_file = 'Employee Location Tracking.xlsx'
-@st.cache_data(ttl=3600)
-def load_excel_sheet(sheet_name):
-    return pd.read_excel(excel_file, sheet_name=sheet_name)
-
-# Load necessary sheets
-SalesHistory = load_excel_sheet('SalesHistory')
-VisitHistory = load_excel_sheet('VisitHistory')
-DemoHistory = load_excel_sheet('DemoHistory')
-TicketHistory = load_excel_sheet('TicketHistory')
-TravelHistory = load_excel_sheet('TravelHistory')
 
 company_name = "BIOLUME SKIN SCIENCE PRIVATE LIMITED"
 company_address = """Ground Floor Rampal Awana Complex,
@@ -887,13 +875,10 @@ def add_back_button():
     if st.button("← Logout", key="logout_button"):
         logout()
 
-
-
 def demo_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Demo Management")
     selected_employee = st.session_state.employee_name
-    employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
 
     tab1, tab2 = st.tabs(["New Demo", "Demo History"])
 
@@ -905,44 +890,18 @@ def demo_page():
             key="partner_employee"
         )
 
-
-def demo_page():
-    hourly_location_auto_log(conn, st.session_state.employee_name)
-    st.title("Demo Management")
-    selected_employee = st.session_state.employee_name
-    employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
-    
-    # ... [previous code remains the same until outlet selection]
-    
         st.subheader("Outlet Details")
         outlet_option = st.radio("Outlet Selection", ["Enter manually", "Select from list"], key="demo_outlet_option")
-        
         if outlet_option == "Select from list":
-            # Get unique outlets from DemoHistory for this employee
-            employee_outlets = DemoHistory[DemoHistory['Employee Code'] == employee_code]['Outlet Name'].unique()
-            
-            if len(employee_outlets) > 0:
-                selected_outlet = st.selectbox("Select Outlet", employee_outlets, key="demo_outlet_select")
-                
-                # Get outlet details from the most recent demo to this outlet
-                outlet_details = DemoHistory[
-                    (DemoHistory['Employee Code'] == employee_code) & 
-                    (DemoHistory['Outlet Name'] == selected_outlet)
-                ].sort_values('Demo Date', ascending=False).iloc[0]
-                
-                outlet_name = selected_outlet
-                outlet_contact = outlet_details['Outlet Contact']
-                outlet_address = outlet_details['Outlet Address']
-                outlet_state = outlet_details['Outlet State']
-                outlet_city = outlet_details['Outlet City']
-                
-                st.text_input("Contact", value=outlet_contact, disabled=True, key="demo_outlet_contact_display")
-                st.text_input("Address", value=outlet_address, disabled=True, key="demo_outlet_address_display")
-                st.text_input("State", value=outlet_state, disabled=True, key="demo_outlet_state_display")
-                st.text_input("City", value=outlet_city, disabled=True, key="demo_outlet_city_display")
-            else:
-                st.warning("No previous outlets found for your account. Please enter manually.")
-                outlet_option = "Enter manually"  # Fall back to manual entry
+            outlet_names = Outlet['Shop Name'].tolist()
+            selected_outlet = st.selectbox("Select Outlet", outlet_names, key="demo_outlet_select")
+            od = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
+            outlet_name, outlet_contact = selected_outlet, od['Contact']
+            outlet_address, outlet_state, outlet_city = od['Address'], od['State'], od['City']
+            st.text_input("Contact", value=outlet_contact, disabled=True, key="demo_outlet_contact_display")
+            st.text_input("Address", value=outlet_address, disabled=True, key="demo_outlet_address_display")
+            st.text_input("State", value=outlet_state, disabled=True, key="demo_outlet_state_display")
+            st.text_input("City", value=outlet_city, disabled=True, key="demo_outlet_city_display")
         else:
             outlet_name    = st.text_input("Outlet Name", key="demo_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="demo_outlet_contact")
@@ -1609,7 +1568,6 @@ def sales_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Sales Management")
     selected_employee = st.session_state.employee_name
-    employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
     sales_remarks = ""
     tab1, tab2 = st.tabs(["New Sale", "Sales History"])
     
@@ -1728,39 +1686,28 @@ def sales_page():
 
         st.subheader("Outlet Details")
         outlet_option = st.radio("Outlet Selection", ["Enter manually", "Select from list"], key="outlet_option")
-        
         if outlet_option == "Select from list":
-            employee_outlets = SalesHistory[SalesHistory['Employee Code'] == employee_code]['Outlet Name'].unique()
-            
-            if len(employee_outlets) > 0:
-                selected_outlet = st.selectbox("Select Outlet", employee_outlets, key="outlet_select")
-                outlet_details = SalesHistory[
-                    (SalesHistory['Employee Code'] == employee_code) & 
-                    (SalesHistory['Outlet Name'] == selected_outlet)
-                ].sort_values('Invoice Date', ascending=False).iloc[0]
-                
-                customer_name = selected_outlet
-                gst_number = outlet_details.get('GST Number', '')
-                contact_number = outlet_details['Outlet Contact']
-                address = outlet_details['Outlet Address']
-                state = outlet_details['Outlet State']
-                city = outlet_details['Outlet City']
-                
-                st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
-                st.text_input("Contact Number", value=contact_number, disabled=True, key="outlet_contact_display")
-                st.text_input("Address", value=address, disabled=True, key="outlet_address_display")
-                st.text_input("State", value=state, disabled=True, key="outlet_state_display")
-                st.text_input("City", value=city, disabled=True, key="outlet_city_display")
-            else:
-                st.warning("No previous outlets found for your account. Please enter manually.")
-                outlet_option = "Enter manually"
-
+            outlet_names = Outlet['Shop Name'].tolist()
+            chosen_outlet = st.selectbox("Select Outlet", outlet_names, key="outlet_select")
+            od = Outlet[Outlet['Shop Name'] == chosen_outlet].iloc[0]
+            customer_name, gst_number = chosen_outlet, od['GST']
+            contact_number, address = od['Contact'], od['Address']
+            state, city = od['State'], od['City']
+            selected_state = state  # Make sure to set selected_state
+            selected_city = city    # And selected_city
+        
+            st.text_input("GST Number", value=gst_number, disabled=True, key="outlet_gst_display")
+            st.text_input("Contact Number", value=contact_number, disabled=True, key="outlet_contact_display")
+            st.text_input("Address", value=address, disabled=True, key="outlet_address_display")
+            st.text_input("State", value=state, disabled=True, key="outlet_state_display")
+            st.text_input("City", value=city, disabled=True, key="outlet_city_display")
         else:
             customer_name = st.text_input("Outlet Name", key="manual_outlet_name")
             gst_number = st.text_input("GST Number", key="manual_gst_number")
             contact_number = st.text_input("Contact Number", key="manual_contact_number")
             address = st.text_area("Address", key="manual_address")
             
+            # State and city dropdowns
             all_states = get_all_states()
             selected_state = st.selectbox("State", all_states, key="manual_state")
             cities = get_cities_for_state(selected_state)
@@ -2022,7 +1969,7 @@ def visit_page():
     hourly_location_auto_log(conn, st.session_state.employee_name)
     st.title("Visit Management")
     selected_employee = st.session_state.employee_name
-    employee_code = Person[Person['Employee Name'] == selected_employee]['Employee Code'].values[0]
+
     visit_remarks = ""
 
     tab1, tab2 = st.tabs(["New Visit", "Visit History"])
@@ -2032,31 +1979,20 @@ def visit_page():
         outlet_option = st.radio("Outlet Selection", ["Enter manually", "Select from list"], key="visit_outlet_option")
         
         if outlet_option == "Select from list":
-            # Get unique outlets from VisitHistory for this employee
-            employee_outlets = VisitHistory[VisitHistory['Employee Code'] == employee_code]['Outlet Name'].unique()
+            outlet_names = Outlet['Shop Name'].tolist()
+            selected_outlet = st.selectbox("Select Outlet", outlet_names, key="visit_outlet_select")
+            outlet_details = Outlet[Outlet['Shop Name'] == selected_outlet].iloc[0]
             
-            if len(employee_outlets) > 0:
-                selected_outlet = st.selectbox("Select Outlet", employee_outlets, key="visit_outlet_select")
-                
-                # Get outlet details from the most recent visit to this outlet
-                outlet_details = VisitHistory[
-                    (VisitHistory['Employee Code'] == employee_code) & 
-                    (VisitHistory['Outlet Name'] == selected_outlet)
-                ].sort_values('Visit Date', ascending=False).iloc[0]
-                
-                outlet_name = selected_outlet
-                outlet_contact = outlet_details['Outlet Contact']
-                outlet_address = outlet_details['Outlet Address']
-                outlet_state = outlet_details['Outlet State']
-                outlet_city = outlet_details['Outlet City']
-                
-                st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display")
-                st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
-                st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
-                st.text_input("Outlet City", value=outlet_city, disabled=True, key="outlet_city_display")
-            else:
-                st.warning("No previous outlets found for your account. Please enter manually.")
-                outlet_option = "Enter manually"
+            outlet_name = selected_outlet
+            outlet_contact = outlet_details['Contact']
+            outlet_address = outlet_details['Address']
+            outlet_state = outlet_details['State']
+            outlet_city = outlet_details['City']
+            
+            st.text_input("Outlet Contact", value=outlet_contact, disabled=True, key="outlet_contact_display")
+            st.text_input("Outlet Address", value=outlet_address, disabled=True, key="outlet_address_display")
+            st.text_input("Outlet State", value=outlet_state, disabled=True, key="outlet_state_display")
+            st.text_input("Outlet City", value=outlet_city, disabled=True, key="outlet_city_display")
         else:
             outlet_name = st.text_input("Outlet Name", key="visit_outlet_name")
             outlet_contact = st.text_input("Outlet Contact", key="visit_outlet_contact")
